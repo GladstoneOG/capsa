@@ -802,6 +802,9 @@ export const GameTable: React.FC<GameTableProps> = ({
           {/* Cards Played in the Center */}
           <div className="table-center">
             <div className={`table-cards-pool ${!activePlay ? 'empty' : ''}`}>
+              {!activePlay && isFirstPlayOfRound && (
+                <div className="first-play-instruction">Play cards containing 3♦ to start</div>
+              )}
               {(() => {
                 if (!activePlay) return null;
                 const seatedPlayers = getSeatedPlayers();

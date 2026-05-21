@@ -384,7 +384,7 @@ io.on('connection', (socket) => {
   });
 
   // 8. Play Cards
-  socket.on('play-cards', ({ roomCode, cards }) => {
+  socket.on('play-cards', ({ roomCode, cards, comboType: clientComboType }) => {
     const room = rooms.get(roomCode);
     if (!room || room.gameState !== 'playing') return;
 
@@ -412,18 +412,28 @@ io.on('connection', (socket) => {
 
     // Update active play
     room.activePlay = {
-      type: cards.length === 1 ? 'single' : cards.length === 2 ? 'pair' : cards.length === 3 ? 'tris' : 'unknown', // client calculates comboType
+      type: clientComboType || (cards.length === 1 ? 'single' : cards.length === 2 ? 'pair' : cards.length === 3 ? 'tris' : 'unknown'), // client calculates comboType
       cards: cards,
     };
     room.lastPlayerPlayedId = currentPlayer.id;
 
     // Send system play chat message
-    const comboType = cards.length === 1 ? 'Single' : cards.length === 2 ? 'Pair' : cards.length === 3 ? 'Tris' : '5-Card Combination';
+    const comboNames = {
+      single: 'Single',
+      pair: 'Pair',
+      tris: 'Tris',
+      straight: 'Straight',
+      flush: 'Flush',
+      fullhouse: 'Full House',
+      bomber: 'Bomber',
+      straightflush: 'Straight Flush'
+    };
+    const comboTypeName = comboNames[clientComboType] || (cards.length === 1 ? 'Single' : cards.length === 2 ? 'Pair' : cards.length === 3 ? 'Tris' : '5-Card Combination');
     io.to(roomCode).emit('chat-message', {
       id: `sys_${Math.random().toString(36).substr(2, 9)}`,
       senderName: 'System',
       senderId: 'system',
-      text: `${currentPlayer.name} played ${comboType}: ${describeCards(cards)}`,
+      text: `${currentPlayer.name} played ${comboTypeName}: ${describeCards(cards)}`,
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       system: true,
     });

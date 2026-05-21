@@ -843,12 +843,12 @@ input:checked + .slider:before {
   }
 }
 
-.table-cards-pool.empty::after {
-  content: 'Play cards containing 3♦ to start';
+.first-play-instruction {
   font-size: 0.8rem;
-  color: rgba(255,255,255,0.25);
+  color: rgba(255, 255, 255, 0.25);
   font-weight: 600;
   text-align: center;
+  pointer-events: none;
 }
 
 .last-play-info {
@@ -932,8 +932,9 @@ input:checked + .slider:before {
 }
 
 .playing-card.selected.not-turn {
-  box-shadow: 0 10px 20px rgba(139, 92, 246, 0.35), 0 0 0 3px #8b5cf6;
-  border-color: #8b5cf6;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+  border: 2px dashed #94a3b8 !important;
+  opacity: 0.85;
 }
 
 .playing-card.unselectable {

@@ -279,7 +279,8 @@ export default function App() {
   };
 
   const playCardsOnline = (cards: Card[]) => {
-    socketRef.current?.emit('play-cards', { roomCode, cards });
+    const combo = checkCombination(cards);
+    socketRef.current?.emit('play-cards', { roomCode, cards, comboType: combo.type });
   };
 
   const passTurnOnline = () => {
@@ -310,7 +311,8 @@ export default function App() {
         });
 
         if (botPlay && botPlay.length > 0) {
-          socketRef.current?.emit('play-cards', { roomCode: roomState.code, cards: botPlay });
+          const combo = checkCombination(botPlay);
+          socketRef.current?.emit('play-cards', { roomCode: roomState.code, cards: botPlay, comboType: combo.type });
         } else {
           socketRef.current?.emit('pass-turn', { roomCode: roomState.code });
         }
