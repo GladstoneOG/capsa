@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "start": "node server/server.js",
+    "postinstall": "npm install --prefix server",
     "lint": "eslint .",
     "preview": "vite preview"
   },
