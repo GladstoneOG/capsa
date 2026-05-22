@@ -677,9 +677,16 @@ export const UnoTable: React.FC<UnoTableProps> = ({
     }
 
     const numPlayers = players.length;
+    const jumpInPlayerIdx = (rules.jumpIn && discardPile.length > prevDiscardPile.length)
+      ? players.findIndex((p, idx) => {
+          const prevP = prevPlayers[idx];
+          return idx !== prevTurnIdx && !!prevP && p.cards.length < prevP.cards.length;
+        })
+      : -1;
+    const isJumpInTurnChange = jumpInPlayerIdx !== -1;
 
     // 1. Detect Skip Turn (Skip overlay)
-    if (prevTurnIdx !== -1 && turnIndex !== prevTurnIdx) {
+    if (prevTurnIdx !== -1 && turnIndex !== prevTurnIdx && !isJumpInTurnChange) {
       const steps: number[] = [];
       let curr = prevTurnIdx;
       for (let count = 0; count < numPlayers; count++) {
@@ -1084,8 +1091,8 @@ export const UnoTable: React.FC<UnoTableProps> = ({
 
     // 2. Jump-in out of turn validation
     if (rules.jumpIn && !isMyTurn) {
-      // Must match exactly (color & value) and cannot be wild, and not played by us last
-      const isExactMatch = card.color === currentColor && card.value === currentValue && card.color !== 'wild' && lastPlayerPlayedId !== playerId;
+      // Must match exactly (color & value) and cannot be wild
+      const isExactMatch = card.color === currentColor && card.value === currentValue && card.color !== 'wild';
       if (isExactMatch) {
         sfx.playCard();
         onPlayCard(card, undefined, true); // Send as jumpIn = true
@@ -1486,8 +1493,8 @@ export const UnoTable: React.FC<UnoTableProps> = ({
             <div className={`uno-hand-cards-list ${isForcedToDraw ? 'hand-greyed-out' : ''} ${isInitialDealing ? 'dealing-active' : ''}`}>
               {localHand.map((card, index) => {
                 const isPlayable = playableIds.includes(card.id);
-                const isExactMatch = !isMyTurn && rules.jumpIn && card.color === currentColor && card.value === currentValue && card.color !== 'wild' && lastPlayerPlayedId !== playerId;
-                const isCurrentlyPlayable = isMyTurn ? isPlayable : isExactMatch;
+                const isJumpInEligible = !isMyTurn && rules.jumpIn && card.color === currentColor && card.value === currentValue && card.color !== 'wild';
+                const isCurrentlyPlayable = isMyTurn ? isPlayable : isJumpInEligible;
                 const isJustDrawn = drawnCardIds.has(card.id);
                 
                 // Determine if we should play the deal-in animation
@@ -1516,7 +1523,7 @@ export const UnoTable: React.FC<UnoTableProps> = ({
                   <div
                     key={card.id}
                     id={`uno-card-hand-${card.id}`}
-                    className={`uno-my-card-wrapper ${isCurrentlyPlayable ? 'playable' : 'unplayable'} ${isJustDrawn ? 'uno-card-just-drawn' : ''} ${shouldDealIn ? 'uno-card-deal-in' : ''}`}
+                    className={`uno-my-card-wrapper ${isCurrentlyPlayable ? 'playable' : 'unplayable'} ${isJumpInEligible ? 'jump-in-eligible' : ''} ${isJustDrawn ? 'uno-card-just-drawn' : ''} ${shouldDealIn ? 'uno-card-deal-in' : ''}`}
                     style={{
                       transform: `translateX(${translationX}px) translateY(${translationY}px) rotate(${rotation}deg)`,
                       zIndex: index + 10,
@@ -1529,6 +1536,9 @@ export const UnoTable: React.FC<UnoTableProps> = ({
                       card={card}
                       onClick={() => handleCardClick(card)}
                     />
+                    {isJumpInEligible && (
+                      <div className="uno-jump-in-badge">⚡ JUMP-IN</div>
+                    )}
                   </div>
                 );
               })}

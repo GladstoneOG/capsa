@@ -934,10 +934,6 @@ export default function App() {
 
     if (!isMyTurn) {
       if (isJumpIn && rules.jumpIn) {
-        // Enforce consecutive jump-in prevention: cannot jump in if you played the last card
-        if (lastPlayerPlayedId === player.id) {
-          return;
-        }
         // Jump In verification
         if (card.color === currentColor && card.value === currentValue && card.color !== 'wild') {
           ioToSystemChat(`⚡ Jump-in! ${player.name} cut in out of turn!`);

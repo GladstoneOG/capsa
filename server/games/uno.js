@@ -353,10 +353,6 @@ export function playCard(room, socket, { cards, chosenColor, isJumpIn }, io) {
 
   if (!isMyTurn) {
     if (isJumpIn && room.rules.jumpIn) {
-      // Enforce consecutive jump-in prevention: cannot jump in if you played the last card
-      if (room.lastPlayerPlayedId === player.id) {
-        return;
-      }
       // Jump In logic: card played must match top card exactly (color & value)
       const matchesColor = card.color === room.currentColor;
       const matchesValue = card.value === room.currentValue;

@@ -649,6 +649,45 @@
   bottom: 0 !important;
 }
 
+.uno-my-card-wrapper.jump-in-eligible {
+  filter: drop-shadow(0 0 12px rgba(255, 204, 0, 0.9));
+}
+
+.uno-my-card-wrapper.jump-in-eligible .uno-card {
+  box-shadow: 0 0 0 3px var(--uno-yellow), 0 0 22px rgba(255, 204, 0, 0.8);
+  animation: uno-jump-in-card-pulse 0.75s ease-in-out infinite alternate;
+}
+
+.uno-jump-in-badge {
+  position: absolute;
+  left: 50%;
+  top: -24px;
+  transform: translateX(-50%);
+  z-index: 4;
+  padding: 3px 7px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, var(--uno-yellow) 0%, #f97316 100%);
+  border: 1px solid rgba(255, 255, 255, 0.75);
+  color: #111827;
+  font-family: var(--font-title), sans-serif;
+  font-size: 0.58rem;
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+  box-shadow: 0 4px 14px rgba(249, 115, 22, 0.5);
+  pointer-events: none;
+}
+
+@keyframes uno-jump-in-card-pulse {
+  0% {
+    transform: translateY(0);
+  }
+  100% {
+    transform: translateY(-5px);
+  }
+}
+
 .uno-hand-cards-list.hand-greyed-out .uno-my-card-wrapper {
   filter: brightness(0.4) saturate(0.7) !important;
   cursor: not-allowed;
