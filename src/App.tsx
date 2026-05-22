@@ -57,7 +57,7 @@ export default function App() {
   const [isPortrait, setIsPortrait] = useState<boolean>(false);
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
 
-  // Detect mobile landscape and portrait orientation
+  // Detect mobile landscape and portrait orientation, and disable right-click context menu
   useEffect(() => {
     const mobileLandscapeQuery = window.matchMedia('(max-width: 932px) and (max-height: 500px) and (orientation: landscape)');
     const mobilePortraitQuery = window.matchMedia('(max-width: 600px) and (orientation: portrait)');
@@ -70,10 +70,15 @@ export default function App() {
       setIsPortrait(mobilePortraitQuery.matches || (isTouchDevice && window.innerHeight > window.innerWidth && window.innerWidth <= 600));
     };
 
+    const handleContextMenu = (e: MouseEvent) => {
+      e.preventDefault();
+    };
+
     handleChange();
     mobileLandscapeQuery.addEventListener('change', handleChange);
     mobilePortraitQuery.addEventListener('change', handleChange);
     window.addEventListener('resize', handleChange);
+    document.addEventListener('contextmenu', handleContextMenu);
 
     // Fullscreen change listener
     const handleFullscreenChange = () => {
@@ -85,6 +90,7 @@ export default function App() {
       mobileLandscapeQuery.removeEventListener('change', handleChange);
       mobilePortraitQuery.removeEventListener('change', handleChange);
       window.removeEventListener('resize', handleChange);
+      document.removeEventListener('contextmenu', handleContextMenu);
       document.removeEventListener('fullscreenchange', handleFullscreenChange);
     };
   }, []);

@@ -698,23 +698,43 @@ export const GameTable: React.FC<GameTableProps> = ({
 
   return (
     <div className={`game-layout ${isMobile ? 'mobile-game' : ''}`}>
-      {/* Top Header Bar */}
-      <div className="game-top-bar">
-        <div className="game-title-info">
-          <h2>Capsa Banting</h2>
-          {roomCode && <div className="lobby-code-badge" style={{ fontSize: '1rem', padding: '0.2rem 0.6rem' }}>Room: {roomCode}</div>}
-          <div className="game-points-target">Target: {rules.pointsToWin} pts</div>
-        </div>
+      {/* Top Header Bar — hidden on mobile, replaced by floating elements */}
+      {!isMobile && (
+        <div className="game-top-bar">
+          <div className="game-title-info">
+            <h2>Capsa Banting</h2>
+            {roomCode && <div className="lobby-code-badge" style={{ fontSize: '1rem', padding: '0.2rem 0.6rem' }}>Room: {roomCode}</div>}
+            <div className="game-points-target">Target: {rules.pointsToWin} pts</div>
+          </div>
 
-        <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
-          <button className="sound-toggle-btn" onClick={toggleSound} title={soundMuted ? 'Unmute SFX' : 'Mute SFX'}>
-            {soundMuted ? '🔇' : '🔊'}
-          </button>
-          <button className="btn-secondary" style={{ padding: '0.4rem 1rem', fontSize: '0.85rem' }} onClick={onLeaveRoom}>
-            {isMobile ? '✕' : 'Exit Table'}
-          </button>
+          <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+            <button className="sound-toggle-btn" onClick={toggleSound} title={soundMuted ? 'Unmute SFX' : 'Mute SFX'}>
+              {soundMuted ? '🔇' : '🔊'}
+            </button>
+            <button className="btn-secondary" style={{ padding: '0.4rem 1rem', fontSize: '0.85rem' }} onClick={onLeaveRoom}>
+              Exit Table
+            </button>
+          </div>
         </div>
-      </div>
+      )}
+
+      {/* Mobile floating top bar elements */}
+      {isMobile && (
+        <div className="mobile-floating-top">
+          <div className="mobile-top-left">
+            {roomCode && <div className="mobile-room-badge">{roomCode}</div>}
+            <div className="mobile-pts-badge">{rules.pointsToWin}pts</div>
+          </div>
+          <div className="mobile-top-right">
+            <button className="mobile-circle-sm" onClick={toggleSound} title={soundMuted ? 'Unmute' : 'Mute'}>
+              {soundMuted ? '🔇' : '🔊'}
+            </button>
+            <button className="mobile-circle-sm mobile-exit-btn" onClick={onLeaveRoom} title="Exit">
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* 3D Felt Card Table */}
       <div className="table-container">
@@ -913,6 +933,13 @@ export const GameTable: React.FC<GameTableProps> = ({
               </svg>
             </div>
           )}
+
+          {/* Warning Banner if no plays are possible */}
+          {hasNoValidPlays && (
+            <div className="no-plays-warning">
+              {isMobile ? '⚠️ Must Pass!' : '⚠️ No combinations in hand can beat the table. You must Pass!'}
+            </div>
+          )}
         </div>
       </div>
 
@@ -950,66 +977,103 @@ export const GameTable: React.FC<GameTableProps> = ({
           </div>
         </div>
 
-        {/* Organizer Utilities (Sort, shift, combos) */}
-        <div className="hand-utilities-row">
-          <div className="hand-organizer-buttons">
-            <button className="btn-utility" onClick={() => handleSort('rank')} title="Sort by Rank">
-              {isMobile ? '🔤' : 'Sort Rank'}
+        {/* Organizer Utilities — desktop inline, mobile uses floating circles */}
+        {!isMobile && (
+          <div className="hand-utilities-row">
+            <div className="hand-organizer-buttons">
+              <button className="btn-utility" onClick={() => handleSort('rank')} title="Sort by Rank">
+                Sort Rank
+              </button>
+              <button className="btn-utility" onClick={() => handleSort('suit')} title="Sort by Suit">
+                Sort Suit
+              </button>
+              {selectedCardIds.length > 0 && (
+                <button 
+                  className="btn-utility btn-reset-selection" 
+                  onClick={() => setSelectedCardIds([])}
+                  title="Reset Selection"
+                >
+                  Reset Selection
+                </button>
+              )}
+            </div>
+
+            <div className="selected-cards-label">
+              {selectedCards.length > 0 ? (
+                <>
+                  Selected ({selectedCards.length}): <span>{validationMessage}</span>
+                </>
+              ) : (
+                isMyTurn ? "Your turn! Select cards to play." : "Waiting for other players..."
+              )}
+            </div>
+          </div>
+        )}
+
+
+
+        {/* Primary Play Actions — desktop inline */}
+        {!isMobile && (
+          <div className="hand-actions-row">
+            <button
+              className="btn-primary"
+              style={{ minWidth: '120px' }}
+              disabled={!canPlaySelected || hasActionedThisTurn}
+              onClick={handlePlayClick}
+            >
+              Play Hand
             </button>
-            <button className="btn-utility" onClick={() => handleSort('suit')} title="Sort by Suit">
-              {isMobile ? '♠' : 'Sort Suit'}
+            <button
+              className="btn-danger"
+              style={{ minWidth: '120px' }}
+              disabled={!isMyTurn || isFirstPlayOfRound || !activePlay || hasActionedThisTurn}
+              onClick={handlePassClick}
+            >
+              Pass
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Mobile floating circle buttons — Sort/Reset bottom-left, Play/Pass bottom-right */}
+      {isMobile && (
+        <>
+          {/* Bottom-left: Sort & Reset circles */}
+          <div className="mobile-fab-left">
+            <button className="mobile-circle-btn sort-btn" onClick={() => handleSort('rank')} title="Sort by Rank">
+              🔤
+            </button>
+            <button className="mobile-circle-btn sort-btn" onClick={() => handleSort('suit')} title="Sort by Suit">
+              ♠
             </button>
             {selectedCardIds.length > 0 && (
-              <button 
-                className="btn-utility btn-reset-selection" 
-                onClick={() => setSelectedCardIds([])}
-                title="Reset Selection"
-              >
-                {isMobile ? '✕' : 'Reset Selection'}
+              <button className="mobile-circle-btn reset-btn" onClick={() => setSelectedCardIds([])} title="Reset Selection">
+                ✕
               </button>
             )}
           </div>
 
-          <div className="selected-cards-label">
-            {selectedCards.length > 0 ? (
-              <>
-                {isMobile ? '' : `Selected (${selectedCards.length}): `}<span>{validationMessage}</span>
-              </>
-            ) : (
-              isMobile 
-                ? (isMyTurn ? "Your turn!" : "Waiting...")
-                : (isMyTurn ? "Your turn! Select cards to play." : "Waiting for other players...")
-            )}
+          {/* Bottom-right: Play & Pass circles */}
+          <div className="mobile-fab-right">
+            <button
+              className="mobile-circle-btn play-btn"
+              disabled={!canPlaySelected || hasActionedThisTurn}
+              onClick={handlePlayClick}
+              title="Play Hand"
+            >
+              ▶
+            </button>
+            <button
+              className="mobile-circle-btn pass-btn"
+              disabled={!isMyTurn || isFirstPlayOfRound || !activePlay || hasActionedThisTurn}
+              onClick={handlePassClick}
+              title="Pass"
+            >
+              ⏭
+            </button>
           </div>
-        </div>
-
-        {/* Warning Banner if no plays are possible */}
-        {hasNoValidPlays && (
-          <div className="no-plays-warning">
-            ⚠️ No combinations in hand can beat the table. You must Pass!
-          </div>
-        )}
-
-        {/* Primary Play Actions */}
-        <div className="hand-actions-row">
-          <button
-            className="btn-primary"
-            style={{ minWidth: isMobile ? '80px' : '120px' }}
-            disabled={!canPlaySelected || hasActionedThisTurn}
-            onClick={handlePlayClick}
-          >
-            {isMobile ? '▶ Play' : 'Play Hand'}
-          </button>
-          <button
-            className="btn-danger"
-            style={{ minWidth: isMobile ? '80px' : '120px' }}
-            disabled={!isMyTurn || isFirstPlayOfRound || !activePlay || hasActionedThisTurn}
-            onClick={handlePassClick}
-          >
-            {isMobile ? '⏭ Pass' : 'Pass'}
-          </button>
-        </div>
-      </div>
+        </>
+      )}
 
       {/* Scoring / Round Over overlay */}
       {(gameState === 'roundover' || gameState === 'gameover') && (
