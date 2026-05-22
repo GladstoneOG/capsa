@@ -3006,3 +3006,45 @@ input:checked + .slider:before {
   }
 }
 
+/* ==================== Uno Theme Overrides ==================== */
+.theme-uno {
+  --bg-gradient: radial-gradient(circle at top, #450a0a 0%, #022c22 45%, #050b18 100%) !important;
+  background: var(--bg-gradient) !important;
+  
+  --primary: #2563eb !important;
+  --primary-hover: #1d4ed8 !important;
+  --primary-glow: rgba(37, 99, 235, 0.4) !important;
+  
+  --accent-gold: #16a34a !important;
+  --accent-gold-hover: #15803d !important;
+  --accent-gold-glow: rgba(22, 163, 74, 0.3) !important;
+}
+
+.theme-uno .glow-orb-1 {
+  background: radial-gradient(circle, rgba(239, 68, 68, 0.22) 0%, rgba(0,0,0,0) 70%) !important;
+}
+
+.theme-uno .glow-orb-2 {
+  background: radial-gradient(circle, rgba(34, 197, 94, 0.22) 0%, rgba(0,0,0,0) 70%) !important;
+}
+
+.theme-uno .btn-primary {
+  background: linear-gradient(135deg, var(--primary) 0%, #1e40af 100%) !important;
+  box-shadow: 0 4px 15px var(--primary-glow) !important;
+}
+
+.theme-uno .btn-primary:hover {
+  box-shadow: 0 6px 20px rgba(37, 99, 235, 0.6) !important;
+}
+
+.theme-uno .btn-gold {
+  background: linear-gradient(135deg, var(--accent-gold) 0%, #14532d 100%) !important;
+  box-shadow: 0 4px 15px var(--accent-gold-glow) !important;
+  color: #ffffff !important;
+}
+
+.theme-uno .btn-gold:hover {
+  box-shadow: 0 6px 20px rgba(22, 163, 74, 0.5) !important;
+}
+
+

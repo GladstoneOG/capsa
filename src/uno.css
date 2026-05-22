@@ -1,0 +1,1772 @@
+/* Uno Neo-Dark Style Sheet */
+
+:root {
+  --uno-red: #ff3b30;
+  --uno-yellow: #ffcc00;
+  --uno-green: #34c759;
+  --uno-blue: #007aff;
+  --uno-wild: #1a1a1a;
+  
+  --uno-red-glow: rgba(255, 59, 48, 0.4);
+  --uno-yellow-glow: rgba(255, 204, 0, 0.4);
+  --uno-green-glow: rgba(52, 199, 89, 0.4);
+  --uno-blue-glow: rgba(0, 122, 255, 0.4);
+  --uno-wild-glow: rgba(168, 85, 247, 0.5);
+
+  --uno-table-bg: radial-gradient(circle at center, #1e1b4b 0%, #0c0a24 70%, #030008 100%);
+  --uno-table-border: rgba(139, 92, 246, 0.35);
+}
+
+/* ==================== Table Layout ==================== */
+.uno-container {
+  width: 100%;
+  height: 100vh;
+  background: var(--uno-table-bg);
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.uno-table-area {
+  flex: 1;
+  position: relative;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.uno-felt-table {
+  width: 76%;
+  height: 60%;
+  background: radial-gradient(ellipse at center, #1b163e 0%, #0a061c 80%);
+  border: 4px solid var(--uno-table-border);
+  box-shadow: 0 0 40px 10px rgba(139, 92, 246, 0.2), inset 0 0 60px 10px rgba(0, 0, 0, 0.85);
+  border-radius: 200px;
+  position: relative;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+/* Table Glowing Border Matching Current Color */
+.uno-felt-table.glow-red { border-color: var(--uno-red); box-shadow: 0 0 40px 5px var(--uno-red-glow), inset 0 0 60px 10px rgba(0,0,0,0.85); }
+.uno-felt-table.glow-yellow { border-color: var(--uno-yellow); box-shadow: 0 0 40px 5px var(--uno-yellow-glow), inset 0 0 60px 10px rgba(0,0,0,0.85); }
+.uno-felt-table.glow-green { border-color: var(--uno-green); box-shadow: 0 0 40px 5px var(--uno-green-glow), inset 0 0 60px 10px rgba(0,0,0,0.85); }
+.uno-felt-table.glow-blue { border-color: var(--uno-blue); box-shadow: 0 0 40px 5px var(--uno-blue-glow), inset 0 0 60px 10px rgba(0,0,0,0.85); }
+
+/* ==================== Play Direction Indicator & Background Shapes ==================== */
+.uno-direction-container {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: 200px;
+  pointer-events: none;
+  overflow: hidden;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1;
+}
+
+.uno-dir-ring {
+  position: absolute;
+  pointer-events: none;
+  opacity: 0.4;
+  transition: border-color 0.5s ease, opacity 0.5s ease;
+}
+
+/* Outer Ring - Large dashed ellipse matching the table shape */
+.uno-dir-ring.outer {
+  width: 92%;
+  height: 92%;
+  border-radius: 200px;
+  border: 3px dashed rgba(255, 255, 255, 0.5);
+}
+
+.uno-dir-ring.outer.cw { animation: uno-rotate-cw 20s linear infinite; }
+.uno-dir-ring.outer.ccw { animation: uno-rotate-ccw 20s linear infinite; }
+
+/* Middle Ring - Concentric slightly smaller dotted ring */
+.uno-dir-ring.middle {
+  width: 75%;
+  height: 75%;
+  border-radius: 160px;
+  border: 2.5px dotted rgba(255, 255, 255, 0.6);
+}
+.uno-dir-ring.middle.cw { animation: uno-rotate-cw 14s linear infinite; }
+.uno-dir-ring.middle.ccw { animation: uno-rotate-ccw 14s linear infinite; }
+
+/* Inner Ring - Smaller double-line ring */
+.uno-dir-ring.inner {
+  width: 50%;
+  height: 55%;
+  border-radius: 120px;
+  border: 4px double rgba(255, 255, 255, 0.4);
+}
+.uno-dir-ring.inner.cw { animation: uno-rotate-cw 10s linear infinite; }
+.uno-dir-ring.inner.ccw { animation: uno-rotate-ccw 10s linear infinite; }
+
+/* Rotating lines in the background */
+.uno-dir-lines {
+  position: absolute;
+  width: 80%;
+  height: 80%;
+  pointer-events: none;
+  opacity: 0.18;
+}
+.uno-dir-lines.cw { animation: uno-rotate-cw 30s linear infinite; }
+.uno-dir-lines.ccw { animation: uno-rotate-ccw 30s linear infinite; }
+
+.uno-dir-lines .line {
+  position: absolute;
+  background: linear-gradient(90deg, transparent, currentColor, transparent);
+}
+
+.uno-dir-lines .line-1 {
+  top: 50%;
+  left: 0;
+  width: 100%;
+  height: 2px;
+}
+
+.uno-dir-lines .line-2 {
+  top: 0;
+  left: 50%;
+  width: 2px;
+  height: 100%;
+}
+
+.uno-dir-lines .line-3 {
+  top: 0;
+  left: 0;
+  width: 141%;
+  height: 2px;
+  transform-origin: 0 0;
+  transform: rotate(45deg);
+}
+
+.uno-dir-lines .line-4 {
+  top: 0;
+  right: 0;
+  width: 141%;
+  height: 2px;
+  transform-origin: 100% 0;
+  transform: rotate(-45deg);
+}
+
+/* Color thematic glows for the background shapes based on game color */
+.uno-felt-table.glow-red .uno-dir-ring { border-color: rgba(255, 59, 48, 0.7); }
+.uno-felt-table.glow-red .uno-dir-lines { color: rgba(255, 59, 48, 0.7); }
+.uno-felt-table.glow-yellow .uno-dir-ring { border-color: rgba(255, 204, 0, 0.7); }
+.uno-felt-table.glow-yellow .uno-dir-lines { color: rgba(255, 204, 0, 0.7); }
+.uno-felt-table.glow-green .uno-dir-ring { border-color: rgba(52, 199, 89, 0.7); }
+.uno-felt-table.glow-green .uno-dir-lines { color: rgba(52, 199, 89, 0.7); }
+.uno-felt-table.glow-blue .uno-dir-ring { border-color: rgba(0, 122, 255, 0.7); }
+.uno-felt-table.glow-blue .uno-dir-lines { color: rgba(0, 122, 255, 0.7); }
+
+@keyframes uno-rotate-cw {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes uno-rotate-ccw {
+  from { transform: rotate(360deg); }
+  to { transform: rotate(0deg); }
+}
+
+.uno-direction-arrows {
+  position: absolute;
+  top: 15px;
+  left: 50%;
+  transform: translateX(-50%);
+  color: rgba(255,255,255,0.7);
+  font-size: 0.9rem;
+  font-weight: bold;
+  letter-spacing: 0.1em;
+  background: rgba(15, 23, 42, 0.85);
+  padding: 4px 12px;
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  text-transform: uppercase;
+}
+
+/* ==================== Player Seating (up to 8) ==================== */
+.uno-player-seat {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  z-index: 20;
+  transition: all 0.5s ease;
+  width: 140px;
+}
+
+/* Seating layouts around the edge of the viewport / table */
+.uno-player-seat.uno-seat-0 { bottom: 215px; left: 50%; transform: translateX(-50%); width: auto; max-width: 600px; z-index: 30; }
+.uno-player-seat.uno-seat-1 { bottom: 12%; left: 3%; }
+.uno-player-seat.uno-seat-2 { top: 43%; left: 3%; transform: translateY(-50%); }
+.uno-player-seat.uno-seat-3 { top: 12%; left: 10%; }
+.uno-player-seat.uno-seat-4 { top: 15px; left: 50%; transform: translateX(-50%); }
+.uno-player-seat.uno-seat-5 { top: 12%; right: 10%; }
+.uno-player-seat.uno-seat-6 { top: 43%; right: 3%; transform: translateY(-50%); }
+.uno-player-seat.uno-seat-7 { bottom: 12%; right: 3%; }
+
+/* Mobile Adaptations */
+@media (max-width: 768px) {
+  .uno-felt-table { width: 85%; height: 50%; }
+  .uno-player-seat.uno-seat-1 { bottom: 10%; left: 1%; }
+  .uno-player-seat.uno-seat-2 { top: 45%; left: 1%; }
+  .uno-player-seat.uno-seat-3 { top: 12%; left: 2%; }
+  .uno-player-seat.uno-seat-5 { top: 12%; right: 2%; }
+  .uno-player-seat.uno-seat-6 { top: 45%; right: 1%; }
+  .uno-player-seat.uno-seat-7 { bottom: 10%; right: 1%; }
+}
+
+.uno-seat-card {
+  background: rgba(30, 41, 59, 0.7);
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  padding: 8px 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  position: relative;
+  transition: all 0.3s ease;
+  backdrop-filter: blur(12px);
+  min-width: 120px;
+}
+
+.uno-seat-card.active-turn {
+  border-color: #a855f7;
+  box-shadow: 0 0 20px rgba(168, 85, 247, 0.4), 0 8px 24px rgba(0,0,0,0.5);
+  background: rgba(168, 85, 247, 0.15);
+}
+
+.uno-seat-card.passed {
+  opacity: 0.6;
+}
+
+.uno-avatar-wrap {
+  width: 44px;
+  height: 44px;
+  position: relative;
+  border-radius: 50%;
+  background: rgba(15, 23, 42, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(255,255,255,0.15);
+}
+
+.uno-player-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.uno-player-name {
+  font-family: var(--font-title);
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: #fff;
+  white-space: nowrap;
+  max-width: 80px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.uno-player-stats {
+  font-size: 0.7rem;
+  color: rgba(255, 255, 255, 0.6);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.uno-card-count-badge {
+  background: var(--primary);
+  color: white;
+  padding: 1px 6px;
+  border-radius: 8px;
+  font-weight: bold;
+}
+
+/* ==================== Center Cards (Draw & Discard) ==================== */
+.uno-center-decks {
+  display: flex;
+  gap: 30px;
+  align-items: center;
+  position: relative;
+  z-index: 15;
+}
+
+.uno-deck-holder {
+  width: 90px;
+  height: 135px;
+  position: relative;
+  border-radius: 12px;
+  border: 2px dashed rgba(255, 255, 255, 0.2);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background: rgba(15, 23, 42, 0.3);
+}
+
+.uno-draw-pile {
+  cursor: pointer;
+  width: 100%;
+  height: 100%;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.uno-draw-pile:hover {
+  transform: translateY(-4px) scale(1.03);
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+}
+
+.uno-deck-holder.force-draw-active {
+  border-color: var(--uno-yellow);
+  box-shadow: 0 0 25px 8px var(--uno-yellow-glow), inset 0 0 15px rgba(255, 204, 0, 0.4);
+  animation: uno-deck-pulse-gold 1.5s ease-in-out infinite;
+}
+
+@keyframes uno-deck-pulse-gold {
+  0%, 100% {
+    transform: scale(1);
+    box-shadow: 0 0 20px 4px var(--uno-yellow-glow);
+  }
+  50% {
+    transform: scale(1.03);
+    box-shadow: 0 0 35px 12px rgba(255, 204, 0, 0.7);
+  }
+}
+
+.uno-deck-draw-prompt {
+  position: absolute;
+  top: -35px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: linear-gradient(135deg, var(--uno-yellow) 0%, #d97706 100%);
+  color: #000;
+  font-family: var(--font-title), sans-serif;
+  font-weight: 900;
+  font-size: 0.75rem;
+  padding: 4px 10px;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(255, 204, 0, 0.5);
+  z-index: 50;
+  animation: uno-draw-prompt-bounce 0.8s ease-in-out infinite alternate;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+  border: 1.5px solid #fff;
+  pointer-events: none;
+}
+
+@keyframes uno-draw-prompt-bounce {
+  0% {
+    transform: translateX(-50%) translateY(0);
+  }
+  100% {
+    transform: translateX(-50%) translateY(-6px);
+  }
+}
+
+.uno-discard-pile-wrapper {
+  width: 90px;
+  height: 135px;
+  position: relative;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+  border-radius: 12px;
+}
+
+.uno-discard-pile {
+  width: 100%;
+  height: 100%;
+}
+
+/* ==================== Uno Card Design ==================== */
+.uno-card-container {
+  perspective: 1000px;
+  width: 90px;
+  height: 135px;
+  position: relative;
+  display: inline-block;
+  user-select: none;
+}
+
+.uno-card-inner {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transition: transform 0.6s;
+  transform-style: preserve-3d;
+  border-radius: 12px;
+}
+
+.uno-card {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  backface-visibility: hidden;
+  border-radius: 12px;
+  border: 3px solid #fff;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 6px;
+  font-family: var(--font-title);
+  box-sizing: border-box;
+  overflow: hidden;
+  color: #fff;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4);
+  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.uno-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: linear-gradient(135deg, rgba(255,255,255,0.15) 0%, rgba(255,255,255,0) 50%, rgba(0,0,0,0.15) 100%);
+  pointer-events: none;
+}
+
+/* Back face style */
+.uno-card.uno-card-back {
+  background: #111;
+  border-color: #3b82f6; /* Classic blue border for Uno back */
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 0;
+}
+
+.uno-card.uno-card-back .uno-back-oval {
+  width: 80%;
+  height: 80%;
+  border-radius: 50%;
+  background: var(--uno-red);
+  transform: rotate(-25deg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 0 10px rgba(0,0,0,0.4);
+}
+
+.uno-card.uno-card-back .uno-back-text {
+  font-size: 1.4rem;
+  font-weight: 900;
+  color: var(--uno-yellow);
+  font-style: italic;
+  letter-spacing: -0.05em;
+  text-shadow: 2px 2px 0px #000;
+}
+
+/* Card Colors */
+.uno-card.red { background-color: var(--uno-red); }
+.uno-card.yellow { background-color: var(--uno-yellow); color: #111; }
+.uno-card.yellow .uno-card-corner-val { color: #111; }
+.uno-card.green { background-color: var(--uno-green); }
+.uno-card.blue { background-color: var(--uno-blue); }
+.uno-card.wild { background: var(--uno-wild); border-color: rgba(255, 255, 255, 0.8); }
+
+/* Center Emblem Oval */
+.uno-card-oval {
+  width: 86%;
+  height: 72%;
+  border-radius: 50%;
+  background: #fff;
+  transform: rotate(-18deg);
+  margin: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.15);
+  position: relative;
+}
+
+.uno-card.red .uno-card-oval { background: #fff; }
+.uno-card.yellow .uno-card-oval { background: #fff; }
+.uno-card.green .uno-card-oval { background: #fff; }
+.uno-card.blue .uno-card-oval { background: #fff; }
+
+.uno-card.wild .uno-card-oval {
+  background: conic-gradient(
+    var(--uno-red) 0% 25%,
+    var(--uno-blue) 25% 50%,
+    var(--uno-green) 50% 75%,
+    var(--uno-yellow) 75% 100%
+  );
+  transform: rotate(-18deg);
+  border: 1px solid rgba(255,255,255,0.4);
+}
+
+/* Central Badge Value */
+.uno-card-center-val {
+  font-size: 2.2rem;
+  font-weight: 850;
+  transform: rotate(18deg);
+  text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.25);
+}
+
+.uno-card.red .uno-card-center-val { color: var(--uno-red); }
+.uno-card.yellow .uno-card-center-val { color: var(--uno-yellow); text-shadow: 1px 1px 2px rgba(0,0,0,0.15); }
+.uno-card.green .uno-card-center-val { color: var(--uno-green); }
+.uno-card.blue .uno-card-center-val { color: var(--uno-blue); }
+.uno-card.wild .uno-card-center-val {
+  color: #fff;
+  font-size: 1.5rem;
+  text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8);
+  font-weight: 900;
+}
+
+/* Wild card played chosen colors */
+.uno-card.wild.chosen-red { background-color: var(--uno-red); }
+.uno-card.wild.chosen-yellow { background-color: var(--uno-yellow); color: #111; }
+.uno-card.wild.chosen-yellow .uno-card-corner-val { color: #111; }
+.uno-card.wild.chosen-green { background-color: var(--uno-green); }
+.uno-card.wild.chosen-blue { background-color: var(--uno-blue); }
+
+.uno-card.wild.chosen-red .uno-card-oval,
+.uno-card.wild.chosen-yellow .uno-card-oval,
+.uno-card.wild.chosen-green .uno-card-oval,
+.uno-card.wild.chosen-blue .uno-card-oval {
+  background: #fff;
+  border: none;
+}
+
+.uno-card.wild.chosen-red .uno-card-center-val { color: var(--uno-red); text-shadow: none; }
+.uno-card.wild.chosen-yellow .uno-card-center-val { color: var(--uno-yellow); text-shadow: none; }
+.uno-card.wild.chosen-green .uno-card-center-val { color: var(--uno-green); text-shadow: none; }
+.uno-card.wild.chosen-blue .uno-card-center-val { color: var(--uno-blue); text-shadow: none; }
+
+.uno-card-corner-val {
+  font-size: 0.9rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.uno-card-corner-val.bottom-right {
+  align-self: flex-end;
+  transform: rotate(180deg);
+}
+
+/* ==================== Local Player Hand Area ==================== */
+.uno-my-hand-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  max-width: 900px;
+  position: fixed;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 35;
+  padding: 10px 20px 15px 20px;
+  pointer-events: none;
+}
+
+.uno-my-hand-container > * {
+  pointer-events: auto;
+}
+
+.uno-my-turn-indicator {
+  font-family: var(--font-title);
+  font-weight: 800;
+  font-size: 0.75rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--uno-yellow);
+  text-shadow: 0 0 12px rgba(255, 204, 0, 0.5);
+  animation: uno-turn-pulse 1.2s ease-in-out infinite;
+  margin-bottom: 4px;
+}
+
+@keyframes uno-turn-pulse {
+  0%, 100% { opacity: 0.7; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.05); }
+}
+
+.uno-hand-scroll-container {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: flex-end;
+  position: relative;
+  height: 180px;
+  margin-bottom: 10px;
+}
+
+.uno-hand-cards-list {
+  display: flex;
+  position: relative;
+  height: 100%;
+  justify-content: center;
+  align-items: flex-end;
+  width: 100%;
+  padding-bottom: 15px;
+}
+
+/* Fan positioning for cards */
+.uno-my-card-wrapper {
+  position: absolute;
+  bottom: 0;
+  width: 90px;
+  height: 135px;
+  transition: transform 0.2s cubic-bezier(0.18, 0.89, 0.32, 1.28), bottom 0.2s ease, z-index 0.1s ease;
+  cursor: pointer;
+}
+
+.uno-my-card-wrapper.uno-card-deal-in {
+  animation: uno-card-fly-in 0.5s cubic-bezier(0.18, 0.89, 0.32, 1.15) both;
+}
+
+.uno-my-card-wrapper:hover {
+  bottom: 25px !important;
+  z-index: 100 !important;
+}
+
+.uno-my-card-wrapper.selected {
+  bottom: 40px !important;
+  z-index: 99 !important;
+}
+
+.uno-my-card-wrapper.unplayable {
+  filter: brightness(0.4) saturate(0.7);
+  cursor: not-allowed;
+}
+
+.uno-my-card-wrapper.unplayable:hover {
+  bottom: 0 !important;
+}
+
+.uno-hand-cards-list.hand-greyed-out .uno-my-card-wrapper {
+  filter: brightness(0.4) saturate(0.7) !important;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.uno-hand-cards-list.hand-greyed-out .uno-my-card-wrapper:hover {
+  bottom: 0 !important;
+}
+
+/* Disable transitions on newly dealt/drawn cards to prevent post-landing shifts */
+.uno-my-card-wrapper.uno-card-deal-in,
+.uno-my-card-wrapper.uno-card-just-drawn {
+  transition: none !important;
+}
+
+.uno-hand-cards-list.dealing-active .uno-my-card-wrapper {
+  transition: none !important;
+}
+
+/* Keyframe for 7-swap dashing arrows */
+@keyframes uno-dash-slide {
+  to {
+    stroke-dashoffset: -20;
+  }
+}
+
+/* Action Controls */
+.uno-action-controls {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: center;
+  height: 50px;
+  position: relative;
+  z-index: 150;
+}
+
+.uno-btn {
+  background: linear-gradient(135deg, var(--primary) 0%, var(--primary-hover) 100%);
+  color: white;
+  border: none;
+  font-family: var(--font-title);
+  font-weight: 600;
+  font-size: 0.9rem;
+  padding: 10px 24px;
+  border-radius: 24px;
+  cursor: pointer;
+  box-shadow: 0 4px 15px var(--primary-glow);
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.uno-btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px var(--primary-glow);
+  filter: brightness(1.1);
+}
+
+.uno-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.uno-btn.uno-btn-danger {
+  background: linear-gradient(135deg, var(--uno-red) 0%, #cc2b23 100%);
+  box-shadow: 0 4px 15px var(--uno-red-glow);
+}
+
+.uno-btn.uno-btn-danger:hover:not(:disabled) {
+  box-shadow: 0 6px 20px var(--uno-red-glow);
+}
+
+.uno-btn.uno-btn-gold {
+  background: linear-gradient(135deg, var(--accent-gold) 0%, var(--accent-gold-hover) 100%);
+  color: #111;
+  box-shadow: 0 4px 15px var(--accent-gold-glow);
+}
+
+.uno-btn.uno-btn-gold:hover:not(:disabled) {
+  box-shadow: 0 6px 20px var(--accent-gold-glow);
+}
+
+/* ==================== Wild Color Selection Overlay ==================== */
+.uno-overlay-pane {
+  position: absolute;
+  top: 0; left: 0; width: 100%; height: 100%;
+  background: rgba(3, 1, 10, 0.75);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 2000;
+  backdrop-filter: blur(8px);
+}
+
+.uno-modal {
+  background: rgba(30, 41, 59, 0.95);
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.8), 0 0 20px rgba(139, 92, 246, 0.15);
+  border-radius: 24px;
+  padding: 30px;
+  max-width: 420px;
+  width: 90%;
+  text-align: center;
+}
+
+.uno-modal-title {
+  font-size: 1.5rem;
+  margin-bottom: 12px;
+  color: #fff;
+  font-family: var(--font-title);
+}
+
+.uno-modal-desc {
+  font-size: 0.9rem;
+  color: rgba(255, 255, 255, 0.6);
+  margin-bottom: 24px;
+  line-height: 1.5;
+}
+
+/* Color Wheel Selection Layout */
+.uno-color-wheel {
+  width: 220px;
+  height: 220px;
+  border-radius: 50%;
+  position: relative;
+  overflow: hidden;
+  margin: 0 auto;
+  border: 4px solid #fff;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+}
+
+.uno-color-quadrant {
+  position: absolute;
+  width: 50%;
+  height: 50%;
+  cursor: pointer;
+  transition: filter 0.2s, transform 0.2s;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-weight: 800;
+  font-size: 0.8rem;
+  letter-spacing: 0.05em;
+  color: white;
+  text-transform: uppercase;
+}
+
+.uno-color-quadrant.red {
+  top: 0; left: 0; background: var(--uno-red);
+  transform-origin: bottom right;
+}
+.uno-color-quadrant.yellow {
+  top: 0; right: 0; background: var(--uno-yellow);
+  color: #111;
+  transform-origin: bottom left;
+}
+.uno-color-quadrant.blue {
+  bottom: 0; left: 0; background: var(--uno-blue);
+  transform-origin: top right;
+}
+.uno-color-quadrant.green {
+  bottom: 0; right: 0; background: var(--uno-green);
+  transform-origin: top left;
+}
+
+.uno-color-quadrant:hover {
+  filter: brightness(1.2);
+  transform: scale(1.05);
+  z-index: 5;
+}
+
+/* ==================== Seven Swap Targets Selection Overlay ==================== */
+.uno-swap-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 15px;
+  margin-top: 15px;
+}
+
+.uno-swap-player-item {
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  padding: 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  transition: all 0.2s ease;
+}
+
+.uno-swap-player-item:hover {
+  background: rgba(139, 92, 246, 0.15);
+  border-color: var(--primary);
+  transform: translateY(-2px);
+}
+
+.uno-swap-player-name {
+  font-family: var(--font-title);
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: white;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ==================== Miscellaneous Elements ==================== */
+.uno-ready-badge {
+  background: var(--uno-green);
+  color: white;
+  font-size: 0.65rem;
+  padding: 1px 6px;
+  border-radius: 10px;
+  font-weight: bold;
+}
+
+.uno-host-badge {
+  background: var(--accent-gold);
+  color: black;
+  font-size: 0.65rem;
+  padding: 1px 6px;
+  border-radius: 10px;
+  font-weight: bold;
+}
+
+.uno-score-pill {
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.1);
+  font-size: 0.75rem;
+  padding: 2px 8px;
+  border-radius: 12px;
+  color: var(--accent-gold);
+}
+
+.uno-indicator-icon {
+  animation: pulse-glow 1.5s infinite;
+}
+
+@keyframes pulse-glow {
+  0% { opacity: 0.6; box-shadow: 0 0 5px rgba(255,255,255,0.1); }
+  50% { opacity: 1; box-shadow: 0 0 15px rgba(255,255,255,0.3); }
+  100% { opacity: 0.6; box-shadow: 0 0 5px rgba(255,255,255,0.1); }
+}
+
+.uno-call-overlay-container {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 100;
+  pointer-events: none;
+}
+
+.uno-call-overlay-container.pos-above {
+  top: -80px;
+}
+
+.uno-call-overlay-container.pos-below {
+  top: 75px;
+}
+
+.uno-spiky-balloon-wrapper {
+  position: relative;
+  width: 80px;
+  height: 80px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  animation: uno-spiky-pop 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) both;
+  filter: drop-shadow(0 4px 10px rgba(255, 59, 48, 0.6)) drop-shadow(0 0 12px rgba(255, 59, 48, 0.3));
+}
+
+.uno-spiky-balloon-bounce {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  animation: uno-spiky-bounce 0.8s ease-in-out infinite alternate;
+}
+
+.uno-spiky-bubble {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  top: 0;
+  left: 0;
+  animation: uno-spiky-wiggle 2.5s ease-in-out infinite alternate;
+}
+
+.uno-call-text {
+  position: relative;
+  z-index: 2;
+  color: #fff;
+  font-family: var(--font-title), sans-serif;
+  font-size: 1.1rem;
+  font-weight: 900;
+  font-style: italic;
+  letter-spacing: -0.02em;
+  text-transform: uppercase;
+  text-shadow: 2px 2px 0px #000, -1.5px -1.5px 0px #000, 1.5px -1.5px 0px #000, -1.5px 1.5px 0px #000;
+  animation: uno-text-shake 0.4s ease-in-out infinite;
+  display: inline-block;
+}
+
+@keyframes uno-spiky-pop {
+  0% { transform: scale(0); opacity: 0; }
+  70% { transform: scale(1.2); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes uno-spiky-bounce {
+  0% { transform: translateY(0); }
+  100% { transform: translateY(-8px); }
+}
+
+@keyframes uno-spiky-wiggle {
+  0% { transform: rotate(-5deg); }
+  100% { transform: rotate(5deg); }
+}
+
+@keyframes uno-text-shake {
+  0%, 100% { transform: translate(0, 0) scale(1) rotate(0deg); }
+  20% { transform: translate(-1px, 1px) scale(1.05) rotate(-2deg); }
+  40% { transform: translate(1px, -1px) scale(0.95) rotate(2deg); }
+  60% { transform: translate(-1.5px, -1px) scale(1.05) rotate(-1deg); }
+  80% { transform: translate(1px, 1.5px) scale(0.95) rotate(1deg); }
+}
+
+.uno-challenge-btn {
+  position: absolute;
+  top: -30px;
+  right: -5px;
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+  color: white;
+  font-size: 0.65rem;
+  padding: 2px 6px;
+  border-radius: 6px;
+  font-weight: bold;
+  border: none;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(245,158,11,0.4);
+  z-index: 40;
+}
+
+.uno-challenge-btn:hover {
+  transform: scale(1.05);
+}
+
+/* ==================== HUD Header ==================== */
+.uno-hud-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 24px;
+  background: rgba(15, 23, 42, 0.85);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  z-index: 30;
+  height: 60px;
+  box-sizing: border-box;
+}
+
+.uno-hud-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.uno-hud-title {
+  font-size: 1.25rem;
+  font-weight: 850;
+  font-family: var(--font-title);
+  background: linear-gradient(90deg, #ff3b30, #ffcc00, #34c759, #007aff);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.uno-hud-room-badge {
+  background: rgba(168, 85, 247, 0.2);
+  border: 1px solid rgba(168, 85, 247, 0.4);
+  color: #c084fc;
+  font-size: 0.7rem;
+  font-weight: 800;
+  padding: 4px 10px;
+  border-radius: 8px;
+  letter-spacing: 0.05em;
+}
+
+.uno-hud-rules-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+@media (max-width: 768px) {
+  .uno-hud-rules-banner {
+    display: none;
+  }
+}
+
+.uno-hud-rule-item {
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.uno-hud-rule-item.enabled {
+  color: #a855f7;
+  font-weight: 700;
+  background: rgba(168, 85, 247, 0.1);
+  border-color: rgba(168, 85, 247, 0.25);
+}
+
+.uno-hud-exit-btn {
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  color: #fca5a5;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 6px 16px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.uno-hud-exit-btn:hover {
+  background: rgba(239, 68, 68, 0.3);
+  color: #fff;
+  border-color: rgba(239, 68, 68, 0.6);
+  transform: translateY(-1px);
+}
+
+/* Card fan for seat slots (other players) — positioned behind the seat badge */
+.uno-seat-card-fan {
+  position: absolute;
+  bottom: -45px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 54px;
+  width: 120px;
+  pointer-events: none;
+  z-index: -1;
+}
+
+.uno-mini-card-back {
+  position: absolute;
+  width: 36px;
+  height: 54px;
+  background: #111; /* Black card back */
+  border: 1.5px solid #3b82f6; /* Blue border like full-size UNO back */
+  border-radius: 5px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.uno-mini-card-back::after {
+  content: '';
+  position: absolute;
+  width: 24px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--uno-red);
+  transform: rotate(-25deg);
+  opacity: 0.9;
+}
+
+.uno-fan-count-badge {
+  position: absolute;
+  bottom: -8px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(15, 23, 42, 0.9);
+  border: 1.5px solid rgba(255, 255, 255, 0.2);
+  color: #fff;
+  font-size: 0.65rem;
+  font-weight: 800;
+  padding: 1px 6px;
+  border-radius: 8px;
+  z-index: 10;
+  white-space: nowrap;
+}
+
+/* Timer Badge styling */
+.uno-timer-badge {
+  position: absolute;
+  top: -15px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--accent-gold, #ffcc00);
+  color: #000;
+  padding: 2px 6px;
+  border-radius: 6px;
+  font-size: 0.7rem;
+  font-weight: 800;
+  box-shadow: 0 2px 8px rgba(255, 204, 0, 0.4);
+  z-index: 30;
+  animation: pulse-glow 1s infinite alternate;
+}
+
+/* ==================== Modal Overlay Extensions ==================== */
+.uno-btn-secondary {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1.5px solid rgba(255, 255, 255, 0.15);
+  color: rgba(255, 255, 255, 0.85);
+  font-family: var(--font-title);
+  font-weight: 600;
+  font-size: 0.9rem;
+  padding: 10px 24px;
+  border-radius: 24px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.uno-btn-secondary:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.3);
+  color: #fff;
+  transform: translateY(-2px);
+}
+
+.uno-modal-title-glow {
+  font-size: 1.8rem;
+  font-weight: 900;
+  text-align: center;
+  margin-bottom: 15px;
+  background: linear-gradient(135deg, #a855f7 0%, #ec4899 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 2px 8px rgba(168, 85, 247, 0.3));
+}
+
+.uno-modal-winner-card {
+  margin: 20px 0;
+  padding: 16px;
+  background: rgba(15, 23, 42, 0.65);
+  border: 1.5px solid rgba(139, 92, 246, 0.25);
+  border-radius: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  box-shadow: inset 0 0 15px rgba(139, 92, 246, 0.1);
+}
+
+.uno-modal-winner-name {
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: var(--uno-yellow);
+  text-shadow: 0 0 10px rgba(255, 204, 0, 0.25);
+}
+
+.uno-modal-winner-points {
+  font-size: 0.9rem;
+  color: rgba(255, 255, 255, 0.85);
+  font-weight: 600;
+}
+
+.uno-modal-standings {
+  margin-bottom: 24px;
+  max-height: 160px;
+  overflow-y: auto;
+  border: 1.5px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: rgba(15, 23, 42, 0.3);
+}
+
+.uno-modal-standings-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.85rem;
+  padding: 6px 12px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  transition: background 0.2s ease;
+}
+
+.uno-modal-standings-row:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.uno-modal-standings-rank {
+  color: rgba(255, 255, 255, 0.4);
+  font-weight: 700;
+  width: 24px;
+}
+
+.uno-modal-standings-name {
+  text-align: left;
+  flex: 1;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.uno-modal-standings-score {
+  color: #a855f7;
+  font-weight: 800;
+}
+
+.uno-modal-actions {
+  display: flex;
+  gap: 16px;
+  justify-content: center;
+  margin-top: 10px;
+}
+
+.color-swap-gradient {
+  background: linear-gradient(135deg, #c084fc 0%, #f472b6 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* ==================== Stack Penalty Badge ==================== */
+.uno-stack-badge {
+  position: absolute;
+  top: -45px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%);
+  color: white;
+  font-family: var(--font-title);
+  font-size: 1.8rem;
+  font-weight: 900;
+  padding: 6px 18px;
+  border-radius: 16px;
+  border: 3px solid #fff;
+  box-shadow: 0 0 25px rgba(220, 38, 38, 0.6), 0 4px 15px rgba(0, 0, 0, 0.5);
+  z-index: 50;
+  animation: uno-stack-pulse 0.8s ease-in-out infinite alternate;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+}
+
+@keyframes uno-stack-pulse {
+  0% { transform: translateX(-50%) scale(1); box-shadow: 0 0 25px rgba(220, 38, 38, 0.6), 0 4px 15px rgba(0, 0, 0, 0.5); }
+  100% { transform: translateX(-50%) scale(1.1); box-shadow: 0 0 40px rgba(220, 38, 38, 0.8), 0 6px 20px rgba(0, 0, 0, 0.5); }
+}
+
+/* ==================== Active Turn Ping (vanilla CSS replacement) ==================== */
+.uno-turn-ping {
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  border: 2px solid var(--primary, #a855f7);
+  animation: uno-ping-anim 1.5s cubic-bezier(0, 0, 0.2, 1) infinite;
+  pointer-events: none;
+}
+
+@keyframes uno-ping-anim {
+  0% { transform: scale(1); opacity: 1; }
+  75%, 100% { transform: scale(1.5); opacity: 0; }
+}
+
+/* UNO call button pulse */
+.uno-btn-pulse {
+  animation: uno-btn-pulse-anim 1.5s ease-in-out infinite;
+}
+
+@keyframes uno-btn-pulse-anim {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.85; transform: scale(1.04); }
+}
+
+/* ==================== Animations ==================== */
+@keyframes uno-card-fly-in {
+  0% {
+    opacity: 0;
+    transform: translate(0, -200px) scale(0.3) rotate(0deg);
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+/* Card drawn from draw pile — flies from center-top to hand bottom */
+@keyframes uno-draw-fly-in {
+  0% {
+    opacity: 0;
+    transform: translate(0, -350px) scale(0.4) rotate(-15deg);
+  }
+  60% {
+    opacity: 1;
+    transform: translate(0, -40px) scale(1.05) rotate(3deg);
+  }
+  100% {
+    opacity: 1;
+    transform: translate(0, 0) scale(1) rotate(0deg);
+  }
+}
+
+.uno-card-just-drawn {
+  animation: uno-fade-in-delayed 0.7s forwards !important;
+  pointer-events: none;
+}
+
+@keyframes uno-fade-in-delayed {
+  0%, 85% { opacity: 0; }
+  100% { opacity: 1; }
+}
+
+@keyframes uno-discard-fly-in {
+  0% {
+    opacity: 0.4;
+    transform: translateY(120px) scale(1.3);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* Card played — flies upward from hand to discard area */
+@keyframes uno-card-fly-out {
+  0% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-300px) scale(0.5) rotate(15deg);
+  }
+}
+
+/* Penalty card stream animation */
+@keyframes uno-penalty-stream {
+  0% {
+    opacity: 1;
+    transform: translate(0, 0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(var(--stream-x, 200px), var(--stream-y, 300px)) scale(0.3);
+  }
+}
+
+.uno-penalty-card-ghost {
+  position: absolute;
+  width: 40px;
+  height: 60px;
+  background: #111;
+  border: 1.5px solid #3b82f6;
+  border-radius: 6px;
+  z-index: 100;
+  pointer-events: none;
+  animation: uno-penalty-stream 0.8s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+/* ==================== Flying Animations & Skip Overlay ==================== */
+
+.uno-flying-card {
+  position: absolute;
+  pointer-events: none;
+  z-index: 1000;
+  transform: translate(-50%, -50%);
+  width: 90px;
+  height: 135px;
+  animation: unoFly 0.6s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+}
+
+.uno-flying-card.uno-fly-play-local { animation-name: unoFlyPlayLocal; }
+.uno-flying-card.uno-fly-play-other { animation-name: unoFlyPlayOther; }
+.uno-flying-card.uno-fly-draw-local { animation-name: unoFlyDrawLocal; }
+.uno-flying-card.uno-fly-draw-other { animation-name: unoFlyDrawOther; }
+.uno-flying-card.uno-fly-swap { animation-name: unoFlySwap; }
+
+.uno-flying-number {
+  position: absolute;
+  pointer-events: none;
+  z-index: 1000;
+  transform: translate(-50%, -50%);
+}
+
+@keyframes unoFly {
+  0% {
+    transform: translate(-50%, -50%) scale(0.8) rotate(0deg);
+    opacity: 0.5;
+  }
+  15% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.1);
+  }
+  100% {
+    transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) scale(0.9) rotate(calc(360deg + var(--dr)));
+    opacity: 0.8;
+  }
+}
+
+@keyframes unoFlyPlayLocal {
+  0% {
+    transform: translate(-50%, -50%) scale(1.0) rotate(0deg);
+    opacity: 0.8;
+  }
+  15% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.05);
+  }
+  100% {
+    transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) scale(1.0) rotate(calc(360deg + var(--dr)));
+    opacity: 1.0;
+  }
+}
+
+@keyframes unoFlyPlayOther {
+  0% {
+    transform: translate(-50%, -50%) scale(0.4) rotate(0deg);
+    opacity: 0.8;
+  }
+  15% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(0.6);
+  }
+  100% {
+    transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) scale(1.0) rotate(calc(360deg + var(--dr)));
+    opacity: 1.0;
+  }
+}
+
+@keyframes unoFlyDrawLocal {
+  0% {
+    transform: translate(-50%, -50%) scale(1.0) rotate(0deg);
+    opacity: 0.8;
+  }
+  15% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.05);
+  }
+  100% {
+    transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) scale(1.0) rotate(calc(360deg + var(--dr)));
+    opacity: 1.0;
+  }
+}
+
+@keyframes unoFlyDrawOther {
+  0% {
+    transform: translate(-50%, -50%) scale(1.0) rotate(0deg);
+    opacity: 0.8;
+  }
+  15% {
+    opacity: 1;
+    transform: translate(-50% + var(--dx), -50% + var(--dy)) scale(0.85);
+  }
+  100% {
+    transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) scale(0.4) rotate(calc(360deg + var(--dr)));
+    opacity: 1.0;
+  }
+}
+
+@keyframes unoFlySwap {
+  0% {
+    transform: translate(-50%, -50%) scale(0.4) rotate(0deg);
+    opacity: 0.8;
+  }
+  100% {
+    transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) scale(0.4) rotate(calc(360deg + var(--dr)));
+    opacity: 1.0;
+  }
+}
+
+.uno-flying-number {
+  background: linear-gradient(135deg, #ff0055, #ff5500);
+  color: white;
+  padding: 6px 12px;
+  border-radius: 12px;
+  font-weight: bold;
+  font-size: 1.2rem;
+  box-shadow: 0 0 15px rgba(255, 0, 85, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  animation: unoFlyNumber 0.7s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+}
+
+@keyframes unoFlyNumber {
+  0% {
+    transform: translate(-50%, -50%) scale(0.5);
+    opacity: 0;
+  }
+  20% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.3);
+  }
+  100% {
+    transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) scale(1);
+    opacity: 0;
+  }
+}
+
+.uno-skip-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.75);
+  border-radius: inherit;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 100;
+  backdrop-filter: blur(2px);
+  animation: unoSkipFadeIn 0.3s ease forwards;
+}
+
+.uno-skip-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  animation: unoSkipPulse 1s ease-in-out infinite alternate;
+}
+
+.uno-skip-icon {
+  font-size: 2.2rem;
+  margin-bottom: 2px;
+  filter: drop-shadow(0 0 8px #ff3b30);
+}
+
+.uno-skip-text {
+  font-size: 0.8rem;
+  font-weight: 800;
+  letter-spacing: 1px;
+  color: #ff3b30;
+  text-shadow: 0 0 10px rgba(255, 59, 48, 0.8);
+}
+
+@keyframes unoSkipFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes unoSkipPulse {
+  0% { transform: scale(0.9); }
+  100% { transform: scale(1.1); }
+}
+
+/* ==================== Reverse Turn Overlay ==================== */
+.uno-reverse-overlay {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 500;
+  pointer-events: none;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  color: #fff;
+  opacity: 0;
+  animation: uno-reverse-fade 1.2s ease-out forwards;
+}
+
+.uno-reverse-overlay.glow-red { color: var(--uno-red); filter: drop-shadow(0 0 25px var(--uno-red-glow)); }
+.uno-reverse-overlay.glow-yellow { color: var(--uno-yellow); filter: drop-shadow(0 0 25px var(--uno-yellow-glow)); }
+.uno-reverse-overlay.glow-green { color: var(--uno-green); filter: drop-shadow(0 0 25px var(--uno-green-glow)); }
+.uno-reverse-overlay.glow-blue { color: var(--uno-blue); filter: drop-shadow(0 0 25px var(--uno-blue-glow)); }
+.uno-reverse-overlay.glow-wild { color: #a855f7; filter: drop-shadow(0 0 25px var(--uno-wild-glow)); }
+
+.uno-reverse-arrow {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 15px;
+}
+
+.uno-reverse-overlay.cw .uno-reverse-arrow svg {
+  animation: uno-reverse-spin-cw 1.2s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+}
+
+.uno-reverse-overlay.ccw .uno-reverse-arrow svg {
+  transform: scaleX(-1);
+  animation: uno-reverse-spin-ccw 1.2s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+}
+
+.uno-reverse-text {
+  font-family: var(--font-title);
+  font-weight: 900;
+  font-size: 1.8rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  text-shadow: 0 0 10px rgba(0,0,0,0.5);
+  animation: uno-reverse-text-pulse 1.2s ease-out forwards;
+}
+
+@keyframes uno-reverse-fade {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(0.6); }
+  15% { opacity: 1; transform: translate(-50%, -50%) scale(1.1); }
+  30% { opacity: 1; transform: translate(-50%, -50%) scale(1.0); }
+  80% { opacity: 1; transform: translate(-50%, -50%) scale(1.0); }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(0.8); }
+}
+
+@keyframes uno-reverse-spin-cw {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+@keyframes uno-reverse-spin-ccw {
+  0% { transform: scaleX(-1) rotate(0deg); }
+  100% { transform: scaleX(-1) rotate(360deg); }
+}
+
+@keyframes uno-reverse-text-pulse {
+  0% { transform: scale(0.8); }
+  20% { transform: scale(1.1); }
+  100% { transform: scale(1); }
+}
+
+/* ==================== Special Card Overlays ==================== */
+.uno-special-overlay {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 500;
+  pointer-events: none;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  color: #fff;
+  opacity: 0;
+  animation: uno-reverse-fade 1.2s ease-out forwards;
+}
+
+.uno-special-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 15px;
+}
+
+.uno-special-icon {
+  font-size: 5rem;
+  line-height: 1;
+  display: inline-block;
+}
+
+/* Specific overlay colors and shadows */
+.uno-special-overlay.glow-red { color: var(--uno-red); }
+.uno-special-overlay.glow-red .uno-special-icon { filter: drop-shadow(0 0 25px var(--uno-red)); }
+.uno-special-overlay.glow-yellow { color: var(--uno-yellow); }
+.uno-special-overlay.glow-yellow .uno-special-icon { filter: drop-shadow(0 0 25px var(--uno-yellow)); }
+.uno-special-overlay.glow-green { color: var(--uno-green); }
+.uno-special-overlay.glow-green .uno-special-icon { filter: drop-shadow(0 0 25px var(--uno-green)); }
+.uno-special-overlay.glow-blue { color: var(--uno-blue); }
+.uno-special-overlay.glow-blue .uno-special-icon { filter: drop-shadow(0 0 25px var(--uno-blue)); }
+.uno-special-overlay.glow-wild { color: #a855f7; }
+.uno-special-overlay.glow-wild .uno-special-icon { filter: drop-shadow(0 0 25px #a855f7); }
+
+/* Multi-color wildcard burst */
+.uno-special-overlay.wildcard-burst .uno-special-icon {
+  filter: drop-shadow(0 0 30px rgba(168, 85, 247, 0.8));
+  animation: uno-special-spin 3s linear infinite;
+}
+
+.uno-special-text {
+  font-family: var(--font-title);
+  font-weight: 900;
+  font-size: 1.8rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  text-shadow: 0 0 10px rgba(0,0,0,0.5);
+  animation: uno-reverse-text-pulse 1.2s ease-out forwards;
+  white-space: nowrap;
+}
+
+/* Make icons wiggle or spin */
+.uno-special-overlay.skip-overlay .uno-special-icon {
+  animation: uno-special-wiggle-skip 1.2s ease infinite;
+}
+
+.uno-special-overlay.swap-overlay .uno-special-icon {
+  animation: uno-special-pulse-swap 1.2s ease infinite;
+}
+
+.uno-special-overlay.rotate-overlay .uno-special-icon {
+  animation: uno-special-spin-rotate 1.5s linear infinite;
+}
+
+@keyframes uno-special-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes uno-special-spin-rotate {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes uno-special-wiggle-skip {
+  0%, 100% { transform: scale(1) rotate(0deg); }
+  50% { transform: scale(1.1) rotate(15deg); }
+}
+
+@keyframes uno-special-pulse-swap {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.2); }
+}

@@ -2,6 +2,8 @@ import express from 'express';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 import cors from 'cors';
+import * as capsaEngine from './games/capsa.js';
+import * as unoEngine from './games/uno.js';
 
 const app = express();
 app.use(cors());
@@ -94,14 +96,17 @@ io.on('connection', (socket) => {
   console.log(`User connected: ${socket.id}`);
 
   // 1. Create Room
-  socket.on('create-room', ({ playerName, avatar }) => {
+  socket.on('create-room', ({ playerName, avatar, gameType }) => {
     let roomCode = generateRoomCode();
     while (rooms.has(roomCode)) {
       roomCode = generateRoomCode();
     }
 
+    const type = gameType || 'capsa';
+
     const room = {
       code: roomCode,
+      gameType: type,
       players: [
         {
           id: socket.id,
@@ -116,7 +121,15 @@ io.on('connection', (socket) => {
           lastPlay: null,
         },
       ],
-      rules: {
+      rules: type === 'uno' ? {
+        pointsToWin: 250,
+        turnDuration: 30,
+        stacking: true,
+        jumpIn: true,
+        sevenSwap: true,
+        zeroRotate: true,
+        drawTillPlay: false,
+      } : {
         pointsToWin: 15,
         turnDuration: 30, // 30 seconds
         enableBombsSingle: true,
@@ -133,7 +146,7 @@ io.on('connection', (socket) => {
     socket.join(roomCode);
 
     socket.emit('room-created', { roomCode, room });
-    console.log(`Room created: ${roomCode} by ${playerName}`);
+    console.log(`Room created: ${roomCode} (${type}) by ${playerName}`);
   });
 
   // 2. Join Room
@@ -150,8 +163,9 @@ io.on('connection', (socket) => {
       return;
     }
 
-    if (room.players.length >= 4) {
-      socket.emit('join-error', 'Room is full (max 4 players).');
+    const maxPlayers = room.gameType === 'uno' ? 8 : 4;
+    if (room.players.length >= maxPlayers) {
+      socket.emit('join-error', `Room is full (max ${maxPlayers} players).`);
       return;
     }
 
@@ -187,13 +201,16 @@ io.on('connection', (socket) => {
   // 3. Add AI Bot
   socket.on('add-bot', ({ roomCode }) => {
     const room = rooms.get(roomCode);
-    if (!room || room.gameState !== 'lobby' || room.players.length >= 4) return;
+    if (!room || room.gameState !== 'lobby') return;
+
+    const maxPlayers = room.gameType === 'uno' ? 8 : 4;
+    if (room.players.length >= maxPlayers) return;
 
     // Verify requesting player is Host
     const requestingPlayer = room.players.find(p => p.id === socket.id);
     if (!requestingPlayer?.isHost) return;
 
-    const botNames = ['Budi Bot', 'Siti Bot', 'Joko Bot', 'Dewi Bot'];
+    const botNames = ['Budi Bot', 'Siti Bot', 'Joko Bot', 'Dewi Bot', 'Agus Bot', 'Sari Bot', 'Rudi Bot', 'Ani Bot'];
     // Find unused bot name
     const existingNames = room.players.map(p => p.name);
     const botName = botNames.find(n => !existingNames.includes(n)) || `Bot ${room.players.length + 1}`;
@@ -202,6 +219,7 @@ io.on('connection', (socket) => {
       { skinColor: '#FFDBAC', hairStyle: 'spiky', hairColor: '#1A1A1A', expression: 'cool', clothesColor: '#2F855A' },
       { skinColor: '#F1C27D', hairStyle: 'bob', hairColor: '#E5C158', expression: 'smile', clothesColor: '#6B46C1' },
       { skinColor: '#E0AC69', hairStyle: 'short', hairColor: '#B83B1D', expression: 'excited', clothesColor: '#C53030' },
+      { skinColor: '#F1C27D', hairStyle: 'dreads', hairColor: '#4A5568', expression: 'wink', clothesColor: '#3182CE' },
     ];
     const botAvatar = botAvatars[room.players.length % botAvatars.length];
 
@@ -269,68 +287,6 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Helper to start the game round
-  function startRound(room) {
-    room.gameState = 'playing';
-    room.roundNumber += 1;
-    room.activePlay = null;
-    room.lastPlayerPlayedId = null;
-
-    // Deal cards (13 each)
-    const deck = shuffle(createDeck());
-    room.players.forEach((p, idx) => {
-      p.cards = sortCards(deck.slice(idx * 13, (idx + 1) * 13));
-      p.passed = false;
-      p.lastPlay = null;
-      delete p.finishRank;
-      delete p.roundPoints;
-    });
-
-    // Find who has 3 of Diamonds (3♦) to start first
-    let startIdx = 0;
-    room.players.forEach((p, idx) => {
-      const has3D = p.cards.some(c => c.rank === '3' && c.suit === 'D');
-      if (has3D) {
-        startIdx = idx;
-      }
-    });
-
-    room.turnIndex = startIdx;
-    
-    // Broadcast round started. We send individual hands securely so players cannot see other hands
-    room.players.forEach(p => {
-      if (!p.isBot) {
-        const clientSocket = io.sockets.sockets.get(p.id);
-        if (clientSocket) {
-          // Send specific player state with their actual cards, and only card counts for others
-          const sanitizedRoomState = getSanitizedRoomState(room, p.id);
-          clientSocket.emit('game-started', sanitizedRoomState);
-        }
-      }
-    });
-
-    // Send full state to host to coordinate bots
-    const host = room.players.find(p => p.isHost);
-    if (host && !host.isBot) {
-      const hostSocket = io.sockets.sockets.get(host.id);
-      if (hostSocket) {
-        hostSocket.emit('bot-coordinator-sync', room);
-      }
-    }
-  }
-
-  // Sanitize room state: replace other players' cards with just the lengths for privacy
-  function getSanitizedRoomState(room, socketId) {
-    return {
-      ...room,
-      players: room.players.map(p => ({
-        ...p,
-        cards: p.id === socketId ? p.cards : Array(p.cards.length).fill(null), // hide cards unless it's the client's socket
-        actualCardCount: p.cards.length,
-      })),
-    };
-  }
-
   // 7. Start Game
   socket.on('start-game', ({ roomCode }) => {
     const room = rooms.get(roomCode);
@@ -346,176 +302,102 @@ io.on('connection', (socket) => {
       return;
     }
 
-    // Auto-fill empty slots with bots up to 4 players
-    const botNames = ['Budi Bot', 'Siti Bot', 'Joko Bot', 'Dewi Bot'];
-    const botAvatars = [
-      { skinColor: '#FFDBAC', hairStyle: 'spiky', hairColor: '#1A1A1A', expression: 'cool', clothesColor: '#2F855A' },
-      { skinColor: '#F1C27D', hairStyle: 'bob', hairColor: '#E5C158', expression: 'smile', clothesColor: '#6B46C1' },
-      { skinColor: '#E0AC69', hairStyle: 'short', hairColor: '#B83B1D', expression: 'excited', clothesColor: '#C53030' },
-    ];
-    let botsAdded = false;
+    if (room.gameType === 'uno') {
+      if (room.players.length < 2) {
+        socket.emit('start-error', 'Need at least 2 players to start Uno.');
+        return;
+      }
+      unoEngine.startRound(room, io);
+    } else {
+      // Auto-fill empty slots with bots up to 4 players for Capsa Banting
+      const botNames = ['Budi Bot', 'Siti Bot', 'Joko Bot', 'Dewi Bot'];
+      const botAvatars = [
+        { skinColor: '#FFDBAC', hairStyle: 'spiky', hairColor: '#1A1A1A', expression: 'cool', clothesColor: '#2F855A' },
+        { skinColor: '#F1C27D', hairStyle: 'bob', hairColor: '#E5C158', expression: 'smile', clothesColor: '#6B46C1' },
+        { skinColor: '#E0AC69', hairStyle: 'short', hairColor: '#B83B1D', expression: 'excited', clothesColor: '#C53030' },
+      ];
+      let botsAdded = false;
 
-    while (room.players.length < 4) {
-      const existingNames = room.players.map(p => p.name);
-      const botName = botNames.find(n => !existingNames.includes(n)) || `Bot ${room.players.length + 1}`;
-      const botAvatar = botAvatars[room.players.length % botAvatars.length];
-      
-      const bot = {
-        id: `bot_${Math.random().toString(36).substr(2, 9)}`,
-        name: botName,
-        avatar: botAvatar,
-        isHost: false,
-        isReady: true,
-        isBot: true,
-        cards: [],
-        passed: false,
-        score: 0,
-        lastPlay: null,
-      };
-      room.players.push(bot);
-      botsAdded = true;
+      while (room.players.length < 4) {
+        const existingNames = room.players.map(p => p.name);
+        const botName = botNames.find(n => !existingNames.includes(n)) || `Bot ${room.players.length + 1}`;
+        const botAvatar = botAvatars[room.players.length % botAvatars.length];
+        
+        const bot = {
+          id: `bot_${Math.random().toString(36).substr(2, 9)}`,
+          name: botName,
+          avatar: botAvatar,
+          isHost: false,
+          isReady: true,
+          isBot: true,
+          cards: [],
+          passed: false,
+          score: 0,
+          lastPlay: null,
+        };
+        room.players.push(bot);
+        botsAdded = true;
+      }
+
+      if (botsAdded) {
+        io.to(roomCode).emit('room-updated', room);
+      }
+
+      capsaEngine.startRound(room, io);
     }
-
-    if (botsAdded) {
-      io.to(roomCode).emit('room-updated', room);
-    }
-
-    startRound(room);
   });
 
-  // 8. Play Cards
-  socket.on('play-cards', ({ roomCode, cards, comboType: clientComboType }) => {
+  // 8. Play Cards (Unified/Delegated)
+  socket.on('play-cards', ({ roomCode, cards, comboType }) => {
     const room = rooms.get(roomCode);
     if (!room || room.gameState !== 'playing') return;
 
-    const currentPlayer = room.players[room.turnIndex];
-    
-    // Safety check: is it really this player's turn?
-    // In multiplayer, bots are played via the host, so we allow host to play on behalf of bot.
-    const isBotTurn = currentPlayer.isBot;
-    const isAuthorized = currentPlayer.id === socket.id || (isBotTurn && room.players.find(p => p.id === socket.id)?.isHost);
-    
-    if (!isAuthorized) return;
-
-    // Remove played cards from player's hand
-    const playedCardIds = cards.map(c => c.id);
-    const remainingCards = currentPlayer.cards.filter(c => !playedCardIds.includes(c.id));
-    currentPlayer.cards = remainingCards;
-    currentPlayer.lastPlay = cards;
-    currentPlayer.passed = false;
-
-    // Count how many players have already finished
-    const finishedCount = room.players.filter(p => p.finishRank !== undefined).length;
-    if (remainingCards.length === 0) {
-      currentPlayer.finishRank = finishedCount + 1;
-    }
-
-    // Update active play
-    room.activePlay = {
-      type: clientComboType || (cards.length === 1 ? 'single' : cards.length === 2 ? 'pair' : cards.length === 3 ? 'tris' : 'unknown'), // client calculates comboType
-      cards: cards,
-    };
-    room.lastPlayerPlayedId = currentPlayer.id;
-
-    // Send system play chat message
-    const comboNames = {
-      single: 'Single',
-      pair: 'Pair',
-      tris: 'Tris',
-      straight: 'Straight',
-      flush: 'Flush',
-      fullhouse: 'Full House',
-      bomber: 'Bomber',
-      straightflush: 'Straight Flush'
-    };
-    const comboTypeName = comboNames[clientComboType] || (cards.length === 1 ? 'Single' : cards.length === 2 ? 'Pair' : cards.length === 3 ? 'Tris' : '5-Card Combination');
-    io.to(roomCode).emit('chat-message', {
-      id: `sys_${Math.random().toString(36).substr(2, 9)}`,
-      senderName: 'System',
-      senderId: 'system',
-      text: `${currentPlayer.name} played ${comboTypeName}: ${describeCards(cards)}`,
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      system: true,
-    });
-
-    // Check if round should end (when only <= 1 players have cards left)
-    const playersWithCards = room.players.filter(p => p.cards.length > 0);
-    if (playersWithCards.length <= 1) {
-      // Assign the last player the remaining rank
-      room.players.forEach(p => {
-        if (p.cards.length > 0 && p.finishRank === undefined) {
-          p.finishRank = room.players.length;
-        }
-      });
-      handleRoundOver(room);
-      return;
-    }
-
-    // Check if trick is won: all other players with cards have passed
-    const otherPlayersWithCards = room.players.filter(p => p.id !== currentPlayer.id && p.cards.length > 0);
-    const allOthersPassed = otherPlayersWithCards.every(p => p.passed);
-
-    if (allOthersPassed) {
-      if (remainingCards.length === 0) {
-        // Hibah / Gift: Clear active play and pass lead clockwise to next player with cards
-        room.activePlay = null;
-        room.lastPlayerPlayedId = null;
-
-        room.players.forEach(p => {
-          p.passed = false;
-          p.lastPlay = null;
-        });
-
-        let nextIdx = room.turnIndex;
-        let found = false;
-        for (let i = 0; i < room.players.length; i++) {
-          nextIdx = (nextIdx + 1) % room.players.length;
-          if (room.players[nextIdx].cards.length > 0) {
-            found = true;
-            break;
-          }
-        }
-        if (!found) {
-          nextIdx = room.turnIndex;
-        }
-        room.turnIndex = nextIdx;
-
-        const leadPlayerName = room.players[nextIdx].name;
-        io.to(roomCode).emit('chat-message', {
-          id: `sys_${Math.random().toString(36).substr(2, 9)}`,
-          senderName: 'System',
-          senderId: 'system',
-          text: `Trick finished. ${currentPlayer.name} won the trick but has no cards left! Lead goes to ${leadPlayerName} (Hibah).`,
-          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          system: true,
-        });
-      } else {
-        // Trick won by the current player (who still has cards)
-        room.activePlay = null;
-        room.lastPlayerPlayedId = null;
-
-        room.players.forEach(p => {
-          p.passed = false;
-          p.lastPlay = null;
-        });
-
-        // turnIndex remains currentPlayer's index (room.turnIndex)
-
-        io.to(roomCode).emit('chat-message', {
-          id: `sys_${Math.random().toString(36).substr(2, 9)}`,
-          senderName: 'System',
-          senderId: 'system',
-          text: `Trick finished. ${currentPlayer.name} gets the lead!`,
-          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          system: true,
-        });
-      }
+    if (room.gameType === 'uno') {
+      unoEngine.playCard(room, socket, { cards, chosenColor: cards[0]?.color, isJumpIn: false }, io);
     } else {
-      // Advance turn to next active player
-      room.turnIndex = getNextTurnIndex(room.turnIndex, room.players);
+      capsaEngine.playCards(room, socket, { cards, comboType }, io);
     }
+  });
 
-    broadcastGameUpdate(room);
+  // 8.5 Uno specific handlers
+  socket.on('play-card', ({ roomCode, cards, chosenColor, isJumpIn }) => {
+    const room = rooms.get(roomCode);
+    if (!room || room.gameState !== 'playing') return;
+    if (room.gameType === 'uno') {
+      unoEngine.playCard(room, socket, { cards, chosenColor, isJumpIn }, io);
+    }
+  });
+
+  socket.on('draw-card', ({ roomCode }) => {
+    const room = rooms.get(roomCode);
+    if (!room || room.gameState !== 'playing') return;
+    if (room.gameType === 'uno') {
+      unoEngine.drawCard(room, socket, io);
+    }
+  });
+
+  socket.on('uno-call', ({ roomCode }) => {
+    const room = rooms.get(roomCode);
+    if (!room || room.gameState !== 'playing') return;
+    if (room.gameType === 'uno') {
+      unoEngine.unoCall(room, socket, io);
+    }
+  });
+
+  socket.on('uno-challenge', ({ roomCode, targetPlayerId }) => {
+    const room = rooms.get(roomCode);
+    if (!room || room.gameState !== 'playing') return;
+    if (room.gameType === 'uno') {
+      unoEngine.unoChallenge(room, socket, { targetPlayerId }, io);
+    }
+  });
+
+  socket.on('swap-hand', ({ roomCode, targetPlayerId }) => {
+    const room = rooms.get(roomCode);
+    if (!room || room.gameState !== 'playing') return;
+    if (room.gameType === 'uno') {
+      unoEngine.swapHand(room, socket, { targetPlayerId }, io);
+    }
   });
 
   // 9. Pass Turn
@@ -523,140 +405,12 @@ io.on('connection', (socket) => {
     const room = rooms.get(roomCode);
     if (!room || room.gameState !== 'playing') return;
 
-    const currentPlayer = room.players[room.turnIndex];
-    const isBotTurn = currentPlayer.isBot;
-    const isAuthorized = currentPlayer.id === socket.id || (isBotTurn && room.players.find(p => p.id === socket.id)?.isHost);
-
-    if (!isAuthorized) return;
-
-    currentPlayer.passed = true;
-    currentPlayer.lastPlay = null;
-
-    io.to(roomCode).emit('chat-message', {
-      id: `sys_${Math.random().toString(36).substr(2, 9)}`,
-      senderName: 'System',
-      senderId: 'system',
-      text: `${currentPlayer.name} passed.`,
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      system: true,
-    });
-
-    // Check if everyone else has passed
-    const activeCount = getActivePlayerCount(room.players);
-    if (activeCount <= 1) {
-      // Trick over! The last player who played cards wins the trick.
-      const lastPlayerIdx = room.players.findIndex(p => p.id === room.lastPlayerPlayedId);
-      const lastPlayer = room.players[lastPlayerIdx];
-      const lastPlayerName = lastPlayer ? lastPlayer.name : 'Unknown';
-      
-      // Clear table
-      room.activePlay = null;
-      room.lastPlayerPlayedId = null;
-
-      // Reset passed status for everyone who has cards left
-      room.players.forEach(p => {
-        p.passed = false;
-        p.lastPlay = null;
-      });
-
-      // Set turn to trick winner. If trick winner has finished, find the next clockwise player who still has cards
-      let nextIdx = lastPlayerIdx;
-      if (nextIdx === -1 || room.players[nextIdx].cards.length === 0) {
-        let searchIdx = lastPlayerIdx !== -1 ? lastPlayerIdx : room.turnIndex;
-        let found = false;
-        for (let i = 0; i < room.players.length; i++) {
-          searchIdx = (searchIdx + 1) % room.players.length;
-          if (room.players[searchIdx].cards.length > 0) {
-            nextIdx = searchIdx;
-            found = true;
-            break;
-          }
-        }
-        if (!found) {
-          nextIdx = room.turnIndex;
-        }
-      }
-      room.turnIndex = nextIdx;
-
-      const leadPlayerName = room.players[nextIdx].name;
-
-      io.to(roomCode).emit('chat-message', {
-        id: `sys_${Math.random().toString(36).substr(2, 9)}`,
-        senderName: 'System',
-        senderId: 'system',
-        text: lastPlayerIdx !== -1 && room.players[lastPlayerIdx].cards.length === 0
-          ? `Trick finished. ${lastPlayerName} won the trick but has no cards left! Lead goes to ${leadPlayerName}.`
-          : `Trick finished. ${lastPlayerName} gets the lead!`,
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        system: true,
-      });
+    if (room.gameType === 'uno') {
+      unoEngine.passTurn(room, socket, io);
     } else {
-      // Trick continues: advance turn
-      room.turnIndex = getNextTurnIndex(room.turnIndex, room.players);
+      capsaEngine.passTurn(room, socket, io);
     }
-
-    broadcastGameUpdate(room);
   });
-
-  // Broadcast game updates safely to all clients
-  function broadcastGameUpdate(room) {
-    room.players.forEach(p => {
-      if (!p.isBot) {
-        const clientSocket = io.sockets.sockets.get(p.id);
-        if (clientSocket) {
-          clientSocket.emit('game-updated', getSanitizedRoomState(room, p.id));
-        }
-      }
-    });
-
-    // Send full state to host to coordinate bots
-    const host = room.players.find(p => p.isHost);
-    if (host && !host.isBot) {
-      const hostSocket = io.sockets.sockets.get(host.id);
-      if (hostSocket) {
-        hostSocket.emit('bot-coordinator-sync', room);
-      }
-    }
-  }
-
-  // Handle Round Over scoring
-  function handleRoundOver(room) {
-    room.gameState = 'roundover';
-
-    // Find the player who finished first (finishRank === 1)
-    const winner = room.players.find(p => p.finishRank === 1);
-    const winnerName = winner ? winner.name : 'Unknown';
-
-    io.to(room.code).emit('chat-message', {
-      id: `sys_${Math.random().toString(36).substr(2, 9)}`,
-      senderName: 'System',
-      senderId: 'system',
-      text: `🎉 ${winnerName} won the round! 🎉`,
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      system: true,
-    });
-    
-    // Calculate Points based on finishRank
-    // 1st: 4 pts (if 4 players), 3 pts (if 3 players), 2 pts (if 2 players)
-    // 2nd: 3 pts (if 4 players), 2 pts (if 3 players), 1 pt (if 2 players)
-    // and so on.
-    const numPlayers = room.players.length;
-    room.players.forEach(p => {
-      const rank = p.finishRank || numPlayers;
-      const points = numPlayers - rank + 1;
-      p.score += points;
-      p.roundPoints = points; // points earned this round
-    });
-
-    // Check if anyone reached target points
-    const winScore = room.rules.pointsToWin;
-    const gameOver = room.players.some(p => p.score >= winScore);
-    if (gameOver) {
-      room.gameState = 'gameover';
-    }
-
-    io.to(room.code).emit('round-over', room);
-  }
 
   // 10. Restart Game / Next Round
   socket.on('restart-game', ({ roomCode }) => {
@@ -667,14 +421,17 @@ io.on('connection', (socket) => {
     if (host?.id !== socket.id) return;
 
     if (room.gameState === 'gameover') {
-      // Reset scores for completely new game
       room.players.forEach(p => {
         p.score = 0;
         p.roundPoints = 0;
       });
     }
 
-    startRound(room);
+    if (room.gameType === 'uno') {
+      unoEngine.startRound(room, io);
+    } else {
+      capsaEngine.startRound(room, io);
+    }
   });
 
   // 10.5 Send Chat Message

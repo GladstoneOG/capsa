@@ -6,6 +6,9 @@ import { GameTable } from './components/GameTable';
 import { checkCombination, dealCards, getBotPlay, contains3Diamonds } from './utils/gameLogic';
 import type { Card, Combination } from './utils/gameLogic';
 import { sfx } from './utils/audio';
+import { UnoTable } from './components/UnoTable';
+import { getBotPlayDecision, type UnoCard } from './utils/unoLogic';
+import './uno.css';
 
 type Screen = 'menu' | 'lobby' | 'table';
 
@@ -15,13 +18,14 @@ interface Player {
   avatar: AvatarConfig;
   isHost: boolean;
   isBot: boolean;
-  cards: (Card | null)[];
+  cards: any[];
   passed: boolean;
   score: number;
-  lastPlay: Card[] | null;
+  lastPlay: any[] | null;
   roundPoints?: number;
   isReady: boolean;
   finishRank?: number;
+  safeUno?: boolean;
 }
 
 interface ChatMessage {
@@ -36,8 +40,13 @@ interface ChatMessage {
 interface RoomRules {
   pointsToWin: number;
   turnDuration: number;
-  enableBombsSingle: boolean;
-  enableBombsPair: boolean;
+  enableBombsSingle?: boolean;
+  enableBombsPair?: boolean;
+  stacking?: boolean;
+  jumpIn?: boolean;
+  sevenSwap?: boolean;
+  zeroRotate?: boolean;
+  drawTillPlay?: boolean;
 }
 
 const INDONESIAN_NAMES = ['Aris', 'Budi', 'Candra', 'Dewi', 'Eko', 'Fitri', 'Giri', 'Hadi', 'Indra', 'Joko', 'Kartika', 'Laras', 'Mega', 'Nugroho', 'Putri', 'Rian', 'Siti', 'Taufik', 'Utami', 'Wulan'];
@@ -116,7 +125,22 @@ export default function App() {
     turnDuration: 30,
     enableBombsSingle: true,
     enableBombsPair: true,
+    stacking: true,
+    jumpIn: true,
+    sevenSwap: true,
+    zeroRotate: true,
+    drawTillPlay: false,
   });
+  const [gameType, setGameType] = useState<'capsa' | 'uno'>('capsa');
+  const [unoCurrentColor, setUnoCurrentColor] = useState<string>('red');
+  const [unoCurrentValue, setUnoCurrentValue] = useState<string>('0');
+  const [unoPlayDirection, setUnoPlayDirection] = useState<number>(1);
+  const [unoAccumulatedDrawCount, setUnoAccumulatedDrawCount] = useState<number>(0);
+  const [unoSevenSwappingPlayerId, setUnoSevenSwappingPlayerId] = useState<string | null>(null);
+  const [unoLastSevenSwap, setUnoLastSevenSwap] = useState<{ requesterId: string; targetId: string } | null>(null);
+  const [unoDiscardPile, setUnoDiscardPile] = useState<UnoCard[]>([]);
+  const [unoDrawPile, setUnoDrawPile] = useState<UnoCard[]>([]);
+  const botDrawnRef = useRef<Record<string, boolean>>({});
 
   // Chat State
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
@@ -143,12 +167,60 @@ export default function App() {
   // Refs
   const socketRef = useRef<Socket | null>(null);
   const botTimerRef = useRef<any>(null);
-  const stateRef = useRef({ players, turnIndex, activePlay, lastPlayerPlayedId, gameState, rules });
+  const stateRef = useRef({
+    players,
+    turnIndex,
+    activePlay,
+    lastPlayerPlayedId,
+    gameState,
+    rules,
+    gameType,
+    unoCurrentColor,
+    unoCurrentValue,
+    unoPlayDirection,
+    unoAccumulatedDrawCount,
+    unoSevenSwappingPlayerId,
+    unoLastSevenSwap,
+    unoDiscardPile,
+    unoDrawPile
+  });
 
   // Update state ref for bot loop
   useEffect(() => {
-    stateRef.current = { players, turnIndex, activePlay, lastPlayerPlayedId, gameState, rules };
-  }, [players, turnIndex, activePlay, lastPlayerPlayedId, gameState, rules]);
+    stateRef.current = {
+      players,
+      turnIndex,
+      activePlay,
+      lastPlayerPlayedId,
+      gameState,
+      rules,
+      gameType,
+      unoCurrentColor,
+      unoCurrentValue,
+      unoPlayDirection,
+      unoAccumulatedDrawCount,
+      unoSevenSwappingPlayerId,
+      unoLastSevenSwap,
+      unoDiscardPile,
+      unoDrawPile
+    };
+  }, [
+    players,
+    turnIndex,
+    activePlay,
+    lastPlayerPlayedId,
+    gameState,
+    rules,
+    gameType,
+    unoCurrentColor,
+    unoCurrentValue,
+    unoPlayDirection,
+    unoAccumulatedDrawCount,
+    unoSevenSwappingPlayerId,
+    unoLastSevenSwap,
+    unoDiscardPile,
+    unoDrawPile
+  ]);
 
   // Set random player name on mount
   useEffect(() => {
@@ -206,6 +278,16 @@ export default function App() {
       setPlayers(room.players);
       setRules(room.rules);
       setGameState(room.gameState);
+      setGameType(room.gameType || 'capsa');
+      if (room.gameType === 'uno') {
+        setUnoCurrentColor(room.currentColor || 'red');
+        setUnoCurrentValue(room.currentValue || '0');
+        setUnoPlayDirection(room.playDirection || 1);
+        setUnoAccumulatedDrawCount(room.accumulatedDrawCount || 0);
+        setUnoSevenSwappingPlayerId(room.sevenSwappingPlayerId || null);
+        setUnoLastSevenSwap(room.lastSevenSwap || null);
+        setUnoDiscardPile(room.discardPile || []);
+      }
       setScreen('lobby');
       setErrorMsg('');
     });
@@ -214,6 +296,7 @@ export default function App() {
       setPlayers(room.players);
       setRules(room.rules);
       setGameState(room.gameState);
+      setGameType(room.gameType || 'capsa');
     });
 
     socket.on('join-error', (msg) => {
@@ -233,6 +316,16 @@ export default function App() {
       setLastPlayerPlayedId(room.lastPlayerPlayedId);
       setRules(room.rules);
       setGameState(room.gameState);
+      setGameType(room.gameType || 'capsa');
+      if (room.gameType === 'uno') {
+        setUnoCurrentColor(room.currentColor);
+        setUnoCurrentValue(room.currentValue);
+        setUnoPlayDirection(room.playDirection);
+        setUnoAccumulatedDrawCount(room.accumulatedDrawCount);
+        setUnoSevenSwappingPlayerId(room.sevenSwappingPlayerId);
+        setUnoLastSevenSwap(room.lastSevenSwap || null);
+        setUnoDiscardPile(room.discardPile || []);
+      }
       setScreen('table');
     });
 
@@ -242,11 +335,31 @@ export default function App() {
       setActivePlay(room.activePlay);
       setLastPlayerPlayedId(room.lastPlayerPlayedId);
       setGameState(room.gameState);
+      setGameType(room.gameType || 'capsa');
+      if (room.gameType === 'uno') {
+        setUnoCurrentColor(room.currentColor);
+        setUnoCurrentValue(room.currentValue);
+        setUnoPlayDirection(room.playDirection);
+        setUnoAccumulatedDrawCount(room.accumulatedDrawCount);
+        setUnoSevenSwappingPlayerId(room.sevenSwappingPlayerId);
+        setUnoLastSevenSwap(room.lastSevenSwap || null);
+        setUnoDiscardPile(room.discardPile || []);
+      }
     });
 
     socket.on('round-over', (room) => {
       setPlayers(room.players);
       setGameState(room.gameState);
+      setGameType(room.gameType || 'capsa');
+      if (room.gameType === 'uno') {
+        setUnoCurrentColor(room.currentColor);
+        setUnoCurrentValue(room.currentValue);
+        setUnoPlayDirection(room.playDirection);
+        setUnoAccumulatedDrawCount(room.accumulatedDrawCount);
+        setUnoSevenSwappingPlayerId(room.sevenSwappingPlayerId);
+        setUnoLastSevenSwap(room.lastSevenSwap || null);
+        setUnoDiscardPile(room.discardPile || []);
+      }
     });
 
     socket.on('game-aborted', (msg) => {
@@ -284,7 +397,7 @@ export default function App() {
     setUnreadChatCount(0);
     setIsSinglePlayer(false);
     initSocket();
-    socketRef.current?.emit('create-room', { playerName, avatar });
+    socketRef.current?.emit('create-room', { playerName, avatar, gameType });
   };
 
   const joinOnlineRoom = () => {
@@ -351,24 +464,99 @@ export default function App() {
     if (rGameSt !== 'playing') return;
 
     const currentPlayer = rPlayers[rTurnIdx];
-    if (currentPlayer && currentPlayer.isBot) {
-      botTimerRef.current = setTimeout(() => {
-        // Run bot logic on the host client
-        const hand = currentPlayer.cards.filter((c: any) => c !== null);
-        const prevPlay = roomState.activePlay;
-        const isFirstPlay = rPlayers.every((p: any) => p.cards.length === 13) && !prevPlay;
-        const botPlay = getBotPlay(hand, prevPlay, isFirstPlay, {
-          enableBombsSingle: roomState.rules.enableBombsSingle,
-          enableBombsPair: roomState.rules.enableBombsPair,
-        });
+    if (!currentPlayer) return;
 
-        if (botPlay && botPlay.length > 0) {
-          const combo = checkCombination(botPlay);
-          socketRef.current?.emit('play-cards', { roomCode: roomState.code, cards: botPlay, comboType: combo.type });
+    // Special swap target selection phase (not advanced to turnIndex yet)
+    if (roomState.gameType === 'uno' && roomState.sevenSwappingPlayerId) {
+      const activeSwappingPlayer = rPlayers.find((p: any) => p.id === roomState.sevenSwappingPlayerId);
+      if (activeSwappingPlayer && activeSwappingPlayer.isBot) {
+        // Run swap targeting logic if host
+        const isHost = rPlayers.find((p: any) => p.id === socketRef.current?.id)?.isHost;
+        if (isHost) {
+          botTimerRef.current = setTimeout(() => {
+            const opponents = rPlayers.filter((p: any) => p.id !== activeSwappingPlayer.id);
+            opponents.sort((a: any, b: any) => a.cards.length - b.cards.length);
+            const target = opponents[0];
+            if (target) {
+              socketRef.current?.emit('swap-hand', { roomCode: roomState.code, targetPlayerId: target.id });
+            }
+          }, 1500);
+        }
+      }
+      return;
+    }
+
+    if (currentPlayer.isBot) {
+      botTimerRef.current = setTimeout(() => {
+        if (roomState.gameType === 'uno') {
+          const hand = currentPlayer.cards.filter((c: any) => c !== null);
+          const decision = getBotPlayDecision(
+            hand,
+            roomState.currentColor,
+            roomState.currentValue,
+            roomState.accumulatedDrawCount || 0,
+            roomState.rules.stacking || false
+          );
+
+          if (decision.action === 'play') {
+            socketRef.current?.emit('play-card', {
+              roomCode: roomState.code,
+              cards: [decision.card],
+              chosenColor: decision.chosenColor,
+              isJumpIn: false
+            });
+
+            // Bot Uno Call chance
+            if (currentPlayer.cards.length <= 2 && !currentPlayer.safeUno) {
+              if (Math.random() < 0.8) {
+                socketRef.current?.emit('uno-call', { roomCode: roomState.code });
+              }
+            }
+          } else {
+            // Check if already drawn
+            if (!botDrawnRef.current[currentPlayer.id]) {
+              botDrawnRef.current[currentPlayer.id] = true;
+              socketRef.current?.emit('draw-card', { roomCode: roomState.code });
+            } else {
+              botDrawnRef.current[currentPlayer.id] = false;
+              socketRef.current?.emit('pass-turn', { roomCode: roomState.code });
+            }
+          }
         } else {
-          socketRef.current?.emit('pass-turn', { roomCode: roomState.code });
+          // Capsa logic
+          const hand = currentPlayer.cards.filter((c: any) => c !== null);
+          const prevPlay = roomState.activePlay;
+          const isFirstPlay = rPlayers.every((p: any) => p.cards.length === 13) && !prevPlay;
+          const botPlay = getBotPlay(hand, prevPlay, isFirstPlay, {
+            enableBombsSingle: roomState.rules.enableBombsSingle,
+            enableBombsPair: roomState.rules.enableBombsPair,
+          });
+
+          if (botPlay && botPlay.length > 0) {
+            const combo = checkCombination(botPlay);
+            socketRef.current?.emit('play-cards', { roomCode: roomState.code, cards: botPlay, comboType: combo.type });
+          } else {
+            socketRef.current?.emit('pass-turn', { roomCode: roomState.code });
+          }
         }
       }, 1500); // 1.5s delay for realistic bot play
+    }
+
+    // Bot catching vulnerable players down to 1 card
+    if (roomState.gameType === 'uno') {
+      const host = rPlayers.find((p: any) => p.isHost);
+      const isHost = host?.id === socketRef.current?.id;
+      if (isHost) {
+        const vulnerable = rPlayers.find((p: any) => p.cards.length === 1 && !p.safeUno);
+        if (vulnerable) {
+          // Find if there is a bot that will challenge them
+          const bots = rPlayers.filter((p: any) => p.isBot && p.id !== vulnerable.id);
+          if (bots.length > 0 && Math.random() < 0.70) {
+            // 70% chance a bot spots them and challenges
+            socketRef.current?.emit('uno-challenge', { roomCode: roomState.code, targetPlayerId: vulnerable.id });
+          }
+        }
+      }
     }
   };
 
@@ -454,6 +642,7 @@ export default function App() {
   };
 
   // ==================== Local Singleplayer Engine ====================
+  // ==================== Local Singleplayer Engine ====================
   const startSinglePlayerLobby = () => {
     setIsSinglePlayer(true);
     setRoomCode('LOCAL');
@@ -461,6 +650,19 @@ export default function App() {
     setChatMessages([]);
     setIsChatOpen(false);
     setUnreadChatCount(0);
+
+    // Set initial target points for local lobby
+    if (gameType === 'uno') {
+      setRules(prev => ({
+        ...prev,
+        pointsToWin: 250,
+      }));
+    } else {
+      setRules(prev => ({
+        ...prev,
+        pointsToWin: 15,
+      }));
+    }
 
     // Generate local players (1 user + 3 bots)
     const localUser: Player = {
@@ -520,7 +722,617 @@ export default function App() {
     setScreen('lobby');
   };
 
+  // ==================== Local Uno Engine ====================
+  const createLocalUnoDeck = (): UnoCard[] => {
+    const colors: Array<'red' | 'yellow' | 'green' | 'blue'> = ['red', 'yellow', 'green', 'blue'];
+    const values = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'skip', 'reverse', 'draw2'];
+    const deck: UnoCard[] = [];
+
+    for (const color of colors) {
+      // One '0' card per color
+      deck.push({ id: `uno_${color}_0`, color, value: '0' });
+
+      // Two of '1'-'9', skip, reverse, draw2
+      for (let i = 1; i < values.length; i++) {
+        const val = values[i];
+        deck.push({ id: `uno_${color}_${val}_a`, color, value: val });
+        deck.push({ id: `uno_${color}_${val}_b`, color, value: val });
+      }
+    }
+
+    // 4 Wilds and 4 Wild Draw Fours (+4)
+    for (let i = 0; i < 4; i++) {
+      deck.push({ id: `uno_wild_${i}`, color: 'wild', value: 'wild' });
+      deck.push({ id: `uno_wild4_${i}`, color: 'wild', value: 'wild4' });
+    }
+
+    return deck;
+  };
+
+  const shuffleLocalUnoDeck = (deck: UnoCard[]): UnoCard[] => {
+    const copy = [...deck];
+    for (let i = copy.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [copy[i], copy[j]] = [copy[j], copy[i]];
+    }
+    return copy;
+  };
+
+  const startSinglePlayerUnoGame = () => {
+    sfx.playDeal();
+
+    let currentPlayers = [...players];
+    const botNames = ['Budi Bot', 'Siti Bot', 'Joko Bot', 'Dewi Bot', 'Aris Bot', 'Dewo Bot', 'Fitri Bot'];
+    const botAvatars = [
+      { skinColor: '#FFDBAC', hairStyle: 'spiky', hairColor: '#1A1A1A', expression: 'cool', clothesColor: '#2F855A' },
+      { skinColor: '#F1C27D', hairStyle: 'bob', hairColor: '#E5C158', expression: 'smile', clothesColor: '#6B46C1' },
+      { skinColor: '#E0AC69', hairStyle: 'short', hairColor: '#B83B1D', expression: 'excited', clothesColor: '#C53030' },
+    ] as AvatarConfig[];
+
+    // Ensure at least 2 players
+    if (currentPlayers.length < 2) {
+      const existingNames = currentPlayers.map((p) => p.name);
+      const botName = botNames.find((n) => !existingNames.includes(n)) || `Bot ${currentPlayers.length + 1}`;
+      const botAvatar = botAvatars[currentPlayers.length % botAvatars.length];
+      currentPlayers.push({
+        id: `bot_${Math.random()}`,
+        name: botName,
+        avatar: botAvatar,
+        isHost: false,
+        isReady: true,
+        isBot: true,
+        cards: [],
+        passed: false,
+        score: 0,
+        lastPlay: null,
+      });
+    }
+
+    let deck = shuffleLocalUnoDeck(createLocalUnoDeck());
+
+    // Deal 7 cards to each player
+    const updatedPlayers = currentPlayers.map((p) => ({
+      ...p,
+      cards: deck.splice(0, 7),
+      passed: false,
+      lastPlay: null,
+      safeUno: false,
+      roundPoints: 0,
+      finishRank: undefined,
+    }));
+
+    let startingCard = deck.pop()!;
+    while (startingCard.value === 'wild4') {
+      deck.push(startingCard);
+      deck = shuffleLocalUnoDeck(deck);
+      startingCard = deck.pop()!;
+    }
+
+    const initialDiscardPile = [startingCard];
+    let initialColor = startingCard.color;
+    if (startingCard.color === 'wild') {
+      initialColor = ['red', 'yellow', 'green', 'blue'][Math.floor(Math.random() * 4)] as any;
+    }
+
+    setUnoDiscardPile(initialDiscardPile);
+    setUnoDrawPile(deck);
+    setUnoCurrentColor(initialColor);
+    setUnoCurrentValue(startingCard.value);
+    setUnoPlayDirection(1);
+    setUnoAccumulatedDrawCount(0);
+    setUnoSevenSwappingPlayerId(null);
+    setUnoLastSevenSwap(null);
+    setPlayers(updatedPlayers);
+    setGameState('playing');
+    setScreen('table');
+
+    // Starting messages
+    const cardNames: Record<string, string> = {
+      skip: 'Skip',
+      reverse: 'Reverse',
+      draw2: 'Draw Two (+2)',
+      wild: 'Wild',
+      wild4: 'Wild Draw Four (+4)'
+    };
+    const startCardDesc = startingCard.color === 'wild'
+      ? `Wild (Chosen Color: ${initialColor.toUpperCase()})`
+      : `${startingCard.color.toUpperCase()} ${cardNames[startingCard.value] || startingCard.value}`;
+
+    const systemMsgs = [
+      {
+        id: `sys_${Math.random()}`,
+        senderName: 'System',
+        senderId: 'system',
+        text: `Game started! Starting card is ${startCardDesc}.`,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        system: true,
+      }
+    ];
+    setChatMessages(systemMsgs);
+
+    // Apply starting card actions
+    let initialTurn = 0;
+    let initialPlayDir = 1;
+
+    if (startingCard.value === 'reverse') {
+      initialPlayDir = -1;
+      setUnoPlayDirection(-1);
+      if (updatedPlayers.length === 2) {
+        initialTurn = (initialTurn + initialPlayDir + updatedPlayers.length) % updatedPlayers.length;
+      }
+    } else if (startingCard.value === 'skip') {
+      initialTurn = (initialTurn + initialPlayDir + updatedPlayers.length) % updatedPlayers.length;
+    } else if (startingCard.value === 'draw2') {
+      if (rules.stacking) {
+        setUnoAccumulatedDrawCount(2);
+      } else {
+        const firstPlayer = updatedPlayers[0];
+        firstPlayer.cards.push(...deck.splice(0, 2));
+        systemMsgs.push({
+          id: `sys_${Math.random()}`,
+          senderName: 'System',
+          senderId: 'system',
+          text: `${firstPlayer.name} drew 2 cards from starting Draw Two and turn is skipped.`,
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          system: true,
+        });
+        initialTurn = (initialTurn + initialPlayDir + updatedPlayers.length) % updatedPlayers.length;
+      }
+    }
+
+    setTurnIndex(initialTurn);
+  };
+
+  const refillDrawPile = (discardPile: UnoCard[]): UnoCard[] => {
+    const copy = [...discardPile];
+    const topCard = copy.pop()!;
+    const shuffled = shuffleLocalUnoDeck(copy);
+    setUnoDiscardPile([topCard]);
+    return shuffled;
+  };
+
+  const playCardUnoSingle = (card: UnoCard, chosenColor?: string, isJumpIn?: boolean) => {
+    const {
+      players: currentPlayers,
+      turnIndex: currentTurnIdx,
+      unoPlayDirection: currentPlayDir,
+      unoCurrentColor: currentColor,
+      unoCurrentValue: currentValue,
+      unoAccumulatedDrawCount: currentAccumulated,
+      unoDiscardPile: currentDiscardPile,
+      unoDrawPile: currentDrawPile,
+    } = stateRef.current;
+
+    const player = currentPlayers.find((p) => p.cards.some((c) => c && c.id === card.id));
+    if (!player) return;
+
+    const playerIdx = currentPlayers.indexOf(player);
+    const isMyTurn = currentTurnIdx === playerIdx;
+
+    if (!isMyTurn) {
+      if (isJumpIn && rules.jumpIn) {
+        // Jump In verification
+        if (card.color === currentColor && card.value === currentValue && card.color !== 'wild') {
+          ioToSystemChat(`⚡ Jump-in! ${player.name} cut in out of turn!`);
+        } else {
+          return;
+        }
+      } else {
+        return;
+      }
+    }
+
+    const updatedPlayers = currentPlayers.map((p, idx) => {
+      if (idx === playerIdx) {
+        return {
+          ...p,
+          cards: p.cards.filter((c) => c && c.id !== card.id),
+          lastPlay: [card],
+        };
+      }
+      return p;
+    });
+
+    const activePlayer = updatedPlayers[playerIdx];
+    const nextDiscardPile = [...currentDiscardPile, card];
+    setUnoDiscardPile(nextDiscardPile);
+
+    const nextColor = card.color === 'wild' ? (chosenColor || 'red') : card.color;
+    const nextValue = card.value;
+    setUnoCurrentColor(nextColor);
+    setUnoCurrentValue(nextValue);
+
+    const cardNames: Record<string, string> = {
+      skip: 'Skip',
+      reverse: 'Reverse',
+      draw2: 'Draw Two (+2)',
+      wild: 'Wild',
+      wild4: 'Wild Draw Four (+4)'
+    };
+    const cardDesc = card.color === 'wild'
+      ? `${cardNames[card.value]} (Chosen Color: ${nextColor.toUpperCase()})`
+      : `${card.color.toUpperCase()} ${cardNames[card.value] || card.value}`;
+
+    ioToSystemChat(`${activePlayer.name} played ${cardDesc}.`);
+
+    if (activePlayer.cards.length === 0) {
+      setPlayers(updatedPlayers);
+      setTimeout(() => handleRoundOverUnoSingle(updatedPlayers), 200);
+      return;
+    }
+
+    if (card.value === '7' && rules.sevenSwap) {
+      setPlayers(updatedPlayers);
+      setUnoSevenSwappingPlayerId(activePlayer.id);
+      return;
+    }
+
+    let nextPlayDir = currentPlayDir;
+    let nextAccumulated = currentAccumulated;
+    let turnsToAdvance = 1;
+
+    if (card.value === '0' && rules.zeroRotate) {
+      const numPlayers = updatedPlayers.length;
+      const originalHands = updatedPlayers.map((p) => [...p.cards]);
+      const rotatedPlayers = updatedPlayers.map((p, idx) => {
+        const sourceIdx = (idx - currentPlayDir + numPlayers) % numPlayers;
+        return {
+          ...p,
+          cards: originalHands[sourceIdx],
+          safeUno: false,
+        };
+      });
+      updatedPlayers.splice(0, updatedPlayers.length, ...rotatedPlayers);
+      ioToSystemChat(`🔄 Hands rotated ${currentPlayDir === 1 ? 'clockwise' : 'counter-clockwise'}!`);
+    }
+
+    if (card.value === 'reverse') {
+      nextPlayDir = currentPlayDir * -1;
+      setUnoPlayDirection(nextPlayDir);
+      if (updatedPlayers.length === 2) {
+        turnsToAdvance = 0;
+      }
+    } else if (card.value === 'skip') {
+      turnsToAdvance = 2;
+    } else if (card.value === 'draw2') {
+      if (rules.stacking) {
+        nextAccumulated += 2;
+        setUnoAccumulatedDrawCount(nextAccumulated);
+        turnsToAdvance = 1;
+      } else {
+        const nextIdx = (playerIdx + currentPlayDir + updatedPlayers.length) % updatedPlayers.length;
+        const targetPlayer = updatedPlayers[nextIdx];
+        let pile = [...currentDrawPile];
+        if (pile.length < 2) {
+          pile = refillDrawPile(nextDiscardPile);
+        }
+        targetPlayer.cards.push(...pile.splice(0, 2));
+        targetPlayer.safeUno = false;
+        setUnoDrawPile(pile);
+        ioToSystemChat(`${targetPlayer.name} drew 2 cards and turn is skipped.`);
+        turnsToAdvance = 2;
+      }
+    } else if (card.value === 'wild4') {
+      if (rules.stacking) {
+        nextAccumulated += 4;
+        setUnoAccumulatedDrawCount(nextAccumulated);
+        turnsToAdvance = 1;
+      } else {
+        const nextIdx = (playerIdx + currentPlayDir + updatedPlayers.length) % updatedPlayers.length;
+        const targetPlayer = updatedPlayers[nextIdx];
+        let pile = [...currentDrawPile];
+        if (pile.length < 4) {
+          pile = refillDrawPile(nextDiscardPile);
+        }
+        targetPlayer.cards.push(...pile.splice(0, 4));
+        targetPlayer.safeUno = false;
+        setUnoDrawPile(pile);
+        ioToSystemChat(`${targetPlayer.name} drew 4 cards and turn is skipped.`);
+        turnsToAdvance = 2;
+      }
+    }
+
+    let nextTurn = playerIdx;
+    if (turnsToAdvance > 0) {
+      for (let i = 0; i < turnsToAdvance; i++) {
+        nextTurn = (nextTurn + nextPlayDir + updatedPlayers.length) % updatedPlayers.length;
+      }
+    }
+
+    setPlayers(updatedPlayers);
+    setTurnIndex(nextTurn);
+  };
+
+  const drawCardUnoSingle = () => {
+    const {
+      players: currentPlayers,
+      turnIndex: currentTurnIdx,
+      unoPlayDirection: currentPlayDir,
+      unoAccumulatedDrawCount: currentAccumulated,
+      unoDiscardPile: currentDiscardPile,
+      unoDrawPile: currentDrawPile,
+    } = stateRef.current;
+
+    const currentPlayer = currentPlayers[currentTurnIdx];
+    if (!currentPlayer) return;
+
+    let pile = [...currentDrawPile];
+    if (pile.length < 5) {
+      pile = refillDrawPile(currentDiscardPile);
+    }
+
+    if (currentAccumulated > 0) {
+      const drawn = pile.splice(0, currentAccumulated);
+      const updatedPlayers = currentPlayers.map((p, idx) => {
+        if (idx === currentTurnIdx) {
+          return {
+            ...p,
+            cards: [...p.cards, ...drawn],
+            safeUno: false,
+          };
+        }
+        return p;
+      });
+
+      setPlayers(updatedPlayers);
+      setUnoDrawPile(pile);
+      setUnoAccumulatedDrawCount(0);
+      ioToSystemChat(`${currentPlayer.name} drew ${currentAccumulated} cards (stack penalty) and turn is skipped.`);
+
+      const nextTurn = (currentTurnIdx + currentPlayDir + currentPlayers.length) % currentPlayers.length;
+      setTurnIndex(nextTurn);
+      return;
+    }
+
+    if (rules.drawTillPlay) {
+      let drawnCards: UnoCard[] = [];
+      let foundPlayable = false;
+
+      while (!foundPlayable && pile.length > 0) {
+        const card = pile.pop()!;
+        drawnCards.push(card);
+
+        const matchesColor = card.color === 'wild' || card.color === stateRef.current.unoCurrentColor;
+        const matchesValue = card.value === stateRef.current.unoCurrentValue;
+        if (matchesColor || matchesValue) {
+          foundPlayable = true;
+        }
+
+        if (pile.length === 0) {
+          pile = refillDrawPile(stateRef.current.unoDiscardPile);
+        }
+      }
+
+      const updatedPlayers = currentPlayers.map((p, idx) => {
+        if (idx === currentTurnIdx) {
+          return {
+            ...p,
+            cards: [...p.cards, ...drawnCards],
+            safeUno: false,
+          };
+        }
+        return p;
+      });
+
+      setPlayers(updatedPlayers);
+      setUnoDrawPile(pile);
+      ioToSystemChat(`${currentPlayer.name} drew ${drawnCards.length} card(s) until finding a play.`);
+    } else {
+      const card = pile.pop()!;
+      const updatedPlayers = currentPlayers.map((p, idx) => {
+        if (idx === currentTurnIdx) {
+          return {
+            ...p,
+            cards: [...p.cards, card],
+            safeUno: false,
+          };
+        }
+        return p;
+      });
+
+      setPlayers(updatedPlayers);
+      setUnoDrawPile(pile);
+      ioToSystemChat(`${currentPlayer.name} drew a card.`);
+
+      // Auto-advance turn if drawn card is NOT playable (no manual pass needed in Uno)
+      const drawnCard = card;
+      const matchesColor = drawnCard.color === 'wild' || drawnCard.color === stateRef.current.unoCurrentColor;
+      const matchesValue = drawnCard.value === stateRef.current.unoCurrentValue;
+      if (!matchesColor && !matchesValue) {
+        const nextTurn = (currentTurnIdx + currentPlayDir + currentPlayers.length) % currentPlayers.length;
+        setTurnIndex(nextTurn);
+      }
+      // If the card IS playable, leave the turn on the player so they can choose to play it
+    }
+  };
+
+  const passTurnUnoSingle = () => {
+    const {
+      players: currentPlayers,
+      turnIndex: currentTurnIdx,
+      unoPlayDirection: currentPlayDir,
+    } = stateRef.current;
+
+    const currentPlayer = currentPlayers[currentTurnIdx];
+    if (!currentPlayer) return;
+
+    ioToSystemChat(`${currentPlayer.name} passed.`);
+    const nextTurn = (currentTurnIdx + currentPlayDir + currentPlayers.length) % currentPlayers.length;
+    setTurnIndex(nextTurn);
+  };
+
+  const unoCallUnoSingle = () => {
+    const { players: currentPlayers } = stateRef.current;
+    const updated = currentPlayers.map((p) => {
+      if (p.id === 'local_user' && p.cards.length <= 2) {
+        return { ...p, safeUno: true };
+      }
+      return p;
+    });
+
+    const localP = currentPlayers.find(p => p.id === 'local_user');
+    if (localP && localP.cards.length <= 2) {
+      setPlayers(updated);
+      ioToSystemChat(`📣 UNO! ${localP.name} is down to their last card!`);
+    }
+  };
+
+  const unoChallengeUnoSingle = (targetPlayerId: string) => {
+    const { players: currentPlayers, unoDiscardPile: currentDiscardPile, unoDrawPile: currentDrawPile } = stateRef.current;
+    const target = currentPlayers.find((p) => p.id === targetPlayerId);
+    if (!target) return;
+
+    if (target.cards.length === 1 && !target.safeUno) {
+      let pile = [...currentDrawPile];
+      if (pile.length < 2) {
+        pile = refillDrawPile(currentDiscardPile);
+      }
+
+      const drawn = pile.splice(0, 2);
+      const updated = currentPlayers.map((p) => {
+        if (p.id === targetPlayerId) {
+          return {
+            ...p,
+            cards: [...p.cards, ...drawn],
+            safeUno: true,
+          };
+        }
+        return p;
+      });
+
+      setPlayers(updated);
+      setUnoDrawPile(pile);
+      ioToSystemChat(`👮 Caught! Penalty: ${target.name} drew 2 cards for not calling UNO!`);
+    }
+  };
+
+  const swapHandUnoSingle = (targetPlayerId: string) => {
+    const {
+      players: currentPlayers,
+      unoSevenSwappingPlayerId: swappingPlayerId,
+      unoPlayDirection: currentPlayDir,
+    } = stateRef.current;
+
+    if (!swappingPlayerId) return;
+
+    const requester = currentPlayers.find((p) => p.id === swappingPlayerId);
+    const target = currentPlayers.find((p) => p.id === targetPlayerId);
+    if (!requester || !target) return;
+
+    const tempCards = [...requester.cards];
+    const requesterIdx = currentPlayers.indexOf(requester);
+    const targetIdx = currentPlayers.indexOf(target);
+
+    const updated = currentPlayers.map((p, idx) => {
+      if (idx === requesterIdx) {
+        return {
+          ...p,
+          cards: [...target.cards],
+          safeUno: false,
+        };
+      }
+      if (idx === targetIdx) {
+        return {
+          ...p,
+          cards: tempCards,
+          safeUno: false,
+        };
+      }
+      return p;
+    });
+
+    setPlayers(updated);
+    setUnoSevenSwappingPlayerId(null);
+    setUnoLastSevenSwap({
+      requesterId: swappingPlayerId,
+      targetId: targetPlayerId,
+    });
+
+    ioToSystemChat(`🤝 ${requester.name} swapped hands with ${target.name}!`);
+
+    const nextTurn = (requesterIdx + currentPlayDir + currentPlayers.length) % currentPlayers.length;
+    setTurnIndex(nextTurn);
+  };
+
+  const handleRoundOverUnoSingle = (finalPlayers: Player[]) => {
+    setGameState('roundover');
+
+    const winner = finalPlayers.find((p) => p.cards.length === 0);
+    const winnerName = winner ? winner.name : 'Unknown';
+
+    ioToSystemChat(`🎉 ${winnerName} won the round! 🎉`);
+
+    let roundPoints = 0;
+    finalPlayers.forEach((p) => {
+      if (winner && p.id !== winner.id) {
+        let handPoints = 0;
+        p.cards.forEach((c) => {
+          if (c) {
+            if (c.color === 'wild') {
+              handPoints += 50;
+            } else if (['skip', 'reverse', 'draw2'].includes(c.value)) {
+              handPoints += 20;
+            } else {
+              const val = parseInt(c.value, 10);
+              handPoints += isNaN(val) ? 0 : val;
+            }
+          }
+        });
+        roundPoints += handPoints;
+      }
+    });
+
+    const scoredPlayers = finalPlayers.map((p) => {
+      if (winner && p.id === winner.id) {
+        return {
+          ...p,
+          score: p.score + roundPoints,
+          roundPoints: roundPoints,
+        };
+      }
+      return {
+        ...p,
+        roundPoints: 0,
+      };
+    });
+
+    setPlayers(scoredPlayers);
+
+    const targetPoints = rules.pointsToWin || 250;
+    const someoneWon = scoredPlayers.some((p) => p.score >= targetPoints);
+    if (someoneWon) {
+      setGameState('gameover');
+    }
+  };
+
+  const restartSinglePlayerUnoGameRound = () => {
+    if (gameState === 'gameover') {
+      const reset = players.map((p) => ({ ...p, score: 0, roundPoints: 0 }));
+      setPlayers(reset);
+    }
+    setGameState('lobby');
+    setTimeout(() => {
+      startSinglePlayerUnoGame();
+    }, 100);
+  };
+
+  const ioToSystemChat = (text: string) => {
+    const sysMsg: ChatMessage = {
+      id: `sys_${Math.random()}`,
+      senderName: 'System',
+      senderId: 'system',
+      text,
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      system: true,
+    };
+    setChatMessages((prev) => [...prev, sysMsg]);
+  };
+
   const startSinglePlayerGame = () => {
+    if (gameType === 'uno') {
+      startSinglePlayerUnoGame();
+      return;
+    }
     sfx.playDeal();
 
     // Auto-fill empty slots with bots up to 4 players
@@ -589,6 +1401,11 @@ export default function App() {
   };
 
   // Singleplayer Turn Controller
+  // Reset bot drawn tracking on every turn change to prevent stale state
+  useEffect(() => {
+    botDrawnRef.current = {};
+  }, [turnIndex]);
+
   useEffect(() => {
     if (!isSinglePlayer || gameState !== 'playing') return;
 
@@ -600,10 +1417,31 @@ export default function App() {
 
       botTimerRef.current = setTimeout(() => {
         // Retrieve the absolute freshest state from the ref
-        const { players: latestPlayers, turnIndex: latestTurnIndex, activePlay: latestActivePlay, gameState: latestGameState, rules: latestRules } = stateRef.current;
+        const {
+          players: latestPlayers,
+          turnIndex: latestTurnIndex,
+          gameState: latestGameState,
+          rules: latestRules,
+          gameType: latestGameType,
+          unoCurrentColor: currentColor,
+          unoCurrentValue: currentValue,
+          unoAccumulatedDrawCount: accumulatedDraw,
+          unoSevenSwappingPlayerId: swappingPlayerId
+        } = stateRef.current;
 
         // Validation guard: Verify game state is still playing
         if (latestGameState !== 'playing') return;
+
+        // Special case: 7 swap target selection
+        if (latestGameType === 'uno' && swappingPlayerId === targetBotId) {
+          const opponents = latestPlayers.filter((p) => p.id !== targetBotId);
+          opponents.sort((a, b) => a.cards.length - b.cards.length);
+          const target = opponents[0];
+          if (target) {
+            swapHandUnoSingle(target.id);
+          }
+          return;
+        }
 
         // Validation guard: Verify it is still this bot's turn
         const activePlayer = latestPlayers[latestTurnIndex];
@@ -612,22 +1450,112 @@ export default function App() {
           return;
         }
 
-        const hand = activePlayer.cards.filter((c): c is Card => c !== null);
+        if (latestGameType === 'uno') {
+          const hand = activePlayer.cards.filter((c): c is UnoCard => c !== null);
 
-        // Is it the very first play of the game?
-        const isFirstPlay = latestPlayers.every(p => p.cards.length === 13) && !latestActivePlay;
+          // Stacking / Normal Play decision
+          const decision = getBotPlayDecision(
+            hand,
+            currentColor,
+            currentValue,
+            accumulatedDraw || 0,
+            latestRules.stacking || false
+          );
 
-        const play = getBotPlay(hand, latestActivePlay, isFirstPlay, {
-          enableBombsSingle: latestRules.enableBombsSingle,
-          enableBombsPair: latestRules.enableBombsPair,
-        });
+          if (decision.action === 'play') {
+            playCardUnoSingle(decision.card, decision.chosenColor);
 
-        if (play && play.length > 0) {
-          playCardsSingle(activePlayer.id, play);
+            // Bot calling Uno
+            if (activePlayer.cards.length <= 2 && !activePlayer.safeUno) {
+              if (Math.random() < 0.8) {
+                setPlayers(prev => prev.map(pl => {
+                  if (pl.id === targetBotId) {
+                    return { ...pl, safeUno: true };
+                  }
+                  return pl;
+                }));
+                const unoMsg: ChatMessage = {
+                  id: `sys_${Math.random()}`,
+                  senderName: 'System',
+                  senderId: 'system',
+                  text: `📣 UNO! ${activePlayer.name} is down to their last card!`,
+                  timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                  system: true,
+                };
+                setChatMessages((prevMsgs) => [...prevMsgs, unoMsg]);
+              }
+            }
+          } else {
+            // Bot needs to draw
+            if (!botDrawnRef.current[targetBotId]) {
+              botDrawnRef.current[targetBotId] = true;
+              drawCardUnoSingle();
+              // Schedule a follow-up check: after drawing, try to play the new card or auto-pass
+              setTimeout(() => {
+                const { players: freshP, turnIndex: freshTurn, gameState: freshGS } = stateRef.current;
+                if (freshGS !== 'playing') return;
+                const freshBot = freshP[freshTurn];
+                if (!freshBot || freshBot.id !== targetBotId) return;
+                // Bot still has the turn (drawn card was playable), try to play it
+                const freshHand = freshBot.cards.filter((c: any) => c !== null);
+                const newDecision = getBotPlayDecision(
+                  freshHand,
+                  stateRef.current.unoCurrentColor,
+                  stateRef.current.unoCurrentValue,
+                  stateRef.current.unoAccumulatedDrawCount || 0,
+                  stateRef.current.rules.stacking || false
+                );
+                if (newDecision.action === 'play') {
+                  playCardUnoSingle(newDecision.card, newDecision.chosenColor);
+                } else {
+                  // Still can't play, pass
+                  passTurnUnoSingle();
+                }
+                botDrawnRef.current[targetBotId] = false;
+              }, 800);
+            } else {
+              botDrawnRef.current[targetBotId] = false;
+              passTurnUnoSingle();
+            }
+          }
         } else {
-          passTurnSingle(activePlayer.id);
+          // Capsa Logic
+          const hand = activePlayer.cards.filter((c): c is Card => c !== null);
+          // Is it the very first play of the game?
+          const isFirstPlay = latestPlayers.every(p => p.cards.length === 13) && !stateRef.current.activePlay;
+
+          const play = getBotPlay(hand, stateRef.current.activePlay, isFirstPlay, {
+            enableBombsSingle: latestRules.enableBombsSingle,
+            enableBombsPair: latestRules.enableBombsPair,
+          });
+
+          if (play && play.length > 0) {
+            playCardsSingle(activePlayer.id, play);
+          } else {
+            passTurnSingle(activePlayer.id);
+          }
         }
       }, 1500); // 1.5 seconds delay for natural thinking feel
+    }
+
+    // Bot catching vulnerable players down to 1 card
+    if (gameType === 'uno') {
+      const vulnerable = players.find(p => p.cards.length === 1 && !p.safeUno);
+      if (vulnerable) {
+        // Find if there is a bot that will challenge them
+        const bots = players.filter(p => p.isBot && p.id !== vulnerable.id);
+        if (bots.length > 0 && Math.random() < 0.70) {
+          // 70% chance a bot spots them and challenges
+          setTimeout(() => {
+            // Re-check vulnerability
+            const { players: freshPlayers } = stateRef.current;
+            const freshVulnerable = freshPlayers.find(p => p.id === vulnerable.id && p.cards.length === 1 && !p.safeUno);
+            if (freshVulnerable) {
+              unoChallengeUnoSingle(freshVulnerable.id);
+            }
+          }, 1000 + Math.random() * 1000);
+        }
+      }
     }
 
     // Cleanup function ensures any pending bot timer is canceled when turn/game changes
@@ -636,7 +1564,7 @@ export default function App() {
         clearTimeout(botTimerRef.current);
       }
     };
-  }, [turnIndex, gameState, isSinglePlayer, activePlay]);
+  }, [turnIndex, gameState, isSinglePlayer, activePlay, unoCurrentColor, unoCurrentValue, unoSevenSwappingPlayerId]);
 
   function playCardsSingle(pId: string, cards: Card[]) {
     const { players: currentPlayers, turnIndex: currentTurnIndex } = stateRef.current;
@@ -964,7 +1892,7 @@ export default function App() {
 
   // ==================== Render Screen Switching ====================
   return (
-    <div style={{ position: 'relative', minHeight: '100vh', overflow: 'hidden' }}>
+    <div className={`app-container theme-${gameType}`} style={{ position: 'relative', minHeight: '100vh', overflow: 'hidden' }}>
       {/* Portrait Orientation Lock Overlay */}
       {isPortrait && (
         <div className="portrait-lock-overlay">
@@ -978,7 +1906,7 @@ export default function App() {
               </svg>
             </div>
             <h2 style={{ fontSize: '1.4rem', fontWeight: 700, marginBottom: '0.5rem' }}>Rotate Your Device</h2>
-            <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>Please switch to landscape mode to play Capsa Banting</p>
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>Please switch to landscape mode to play</p>
           </div>
         </div>
       )}
@@ -990,12 +1918,60 @@ export default function App() {
         <div className="menu-container">
           <div className="glass-panel menu-panel">
             <div className="menu-title-section">
-              <h1 className="menu-title">Capsa Banting</h1>
+              <h1 className="menu-title" style={{ transition: 'all 0.3s' }}>
+                Sarang Judi
+              </h1>
               <p className="menu-subtitle">Bikinan Johan tanpa AI</p>
             </div>
 
+            {/* Game Selection Toggle */}
+            <div className="game-select-group" style={{ display: 'flex', gap: '1rem', width: '100%', marginBottom: '1.25rem' }}>
+              <button 
+                type="button"
+                className={`btn-game-type ${gameType === 'capsa' ? 'active' : ''}`}
+                style={{
+                  flex: 1,
+                  padding: '0.75rem',
+                  borderRadius: '12px',
+                  border: gameType === 'capsa' ? '2px solid var(--accent-gold)' : '1px solid rgba(255,255,255,0.1)',
+                  background: gameType === 'capsa' ? 'var(--accent-gold-glow)' : 'rgba(0,0,0,0.2)',
+                  color: gameType === 'capsa' ? 'var(--accent-gold)' : 'var(--text-muted)',
+                  fontWeight: 'bold',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                }}
+                onClick={() => {
+                  setGameType('capsa');
+                  setRules(prev => ({ ...prev, pointsToWin: 15 }));
+                }}
+              >
+                ♠️ Capsa Banting
+              </button>
+              <button 
+                type="button"
+                className={`btn-game-type ${gameType === 'uno' ? 'active' : ''}`}
+                style={{
+                  flex: 1,
+                  padding: '0.75rem',
+                  borderRadius: '12px',
+                  border: gameType === 'uno' ? '2px solid var(--primary)' : '1px solid rgba(255,255,255,0.1)',
+                  background: gameType === 'uno' ? 'var(--primary-glow)' : 'rgba(0,0,0,0.2)',
+                  color: gameType === 'uno' ? 'var(--primary)' : 'var(--text-muted)',
+                  fontWeight: 'bold',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                }}
+                onClick={() => {
+                  setGameType('uno');
+                  setRules(prev => ({ ...prev, pointsToWin: 250 }));
+                }}
+              >
+                🌈 Uno Multiverse
+              </button>
+            </div>
+
             {errorMsg && (
-              <div style={{ background: 'rgba(244,63,94,0.15)', border: '1px solid var(--accent-red)', padding: '0.75rem', borderRadius: '10px', fontSize: '0.85rem', color: '#fda4af', textAlign: 'center' }}>
+              <div style={{ background: 'rgba(244,63,94,0.15)', border: '1px solid var(--accent-red)', padding: '0.75rem', borderRadius: '10px', fontSize: '0.85rem', color: '#fda4af', textAlign: 'center', width: '100%', marginBottom: '1rem' }}>
                 ⚠️ {errorMsg}
               </div>
             )}
@@ -1070,11 +2046,18 @@ export default function App() {
         <div className="lobby-container">
           <div className="lobby-header">
             <div>
-              <h2 style={{ fontSize: '2rem', background: 'linear-gradient(to right, #a78bfa, #fbbf24)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
-                Game Lobby
+              <h2 style={{
+                fontSize: '2rem',
+                background: gameType === 'uno' 
+                  ? 'linear-gradient(to right, #60a5fa, #4ade80)' 
+                  : 'linear-gradient(to right, #a78bfa, #fbbf24)', 
+                WebkitBackgroundClip: 'text',
+                WebkitTextFillColor: 'transparent'
+              }}>
+                {gameType === 'uno' ? 'UNO' : 'Capsa Banting'}
               </h2>
               <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginTop: '0.2rem' }}>
-                {isSinglePlayer ? 'Offline Practice Arena' : 'Invite friends to play!'}
+                {gameType === 'uno' ? 'house rules' : 'gacor kang'}
               </p>
             </div>
 
@@ -1095,7 +2078,7 @@ export default function App() {
           {/* Left panel: Seats & Players */}
           <div className="glass-panel" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
             <h3 style={{ fontSize: '1.25rem', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '0.5rem' }}>
-              Players ({players.length}/4)
+              Players ({players.length}/{gameType === 'uno' ? 8 : 4})
             </h3>
 
             <div className="lobby-players-grid">
@@ -1139,7 +2122,7 @@ export default function App() {
               })}
 
               {/* Empty seats visualizer */}
-              {Array.from({ length: 4 - players.length }).map((_, i) => (
+              {Array.from({ length: (gameType === 'uno' ? 8 : 4) - players.length }).map((_, i) => (
                 <div key={i} className="lobby-player-card" style={{ border: '1px dashed rgba(255,255,255,0.1)', background: 'none', justifyContent: 'center' }}>
                   <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Empty Seat</span>
                 </div>
@@ -1179,7 +2162,6 @@ export default function App() {
             </div>
           </div>
 
-          {/* Right panel: Lobby Host Rules & Settings */}
           <div className="glass-panel settings-panel">
             <h3 style={{ fontSize: '1.25rem', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '0.5rem' }}>
               Table Rules & Settings
@@ -1198,10 +2180,20 @@ export default function App() {
                     if (!isSinglePlayer) updateRulesOnline(updated);
                   }}
                 >
-                  <option value={10}>10 Points</option>
-                  <option value={15}>15 Points</option>
-                  <option value={20}>20 Points</option>
-                  <option value={30}>30 Points</option>
+                  {gameType === 'uno' ? (
+                    <>
+                      <option value={100}>100 Points</option>
+                      <option value={250}>250 Points</option>
+                      <option value={500}>500 Points</option>
+                    </>
+                  ) : (
+                    <>
+                      <option value={10}>10 Points</option>
+                      <option value={15}>15 Points</option>
+                      <option value={20}>20 Points</option>
+                      <option value={30}>30 Points</option>
+                    </>
+                  )}
                 </select>
               ) : (
                 <span style={{ fontWeight: 'bold' }}>{rules.pointsToWin} pts</span>
@@ -1231,57 +2223,171 @@ export default function App() {
               )}
             </div>
 
-            {/* Bombing Single 2 Toggle */}
-            <div className="settings-row">
-              <label>Slam Single 2 with Bombs</label>
-              {players.find(pl => isSinglePlayer ? pl.id === 'local_user' : pl.id === socketId)?.isHost ? (
-                <label className="switch">
-                  <input
-                    type="checkbox"
-                    checked={rules.enableBombsSingle}
-                    onChange={(e) => {
-                      const updated = { ...rules, enableBombsSingle: e.target.checked };
-                      setRules(updated);
-                      if (!isSinglePlayer) updateRulesOnline(updated);
-                    }}
-                  />
-                  <span className="slider" />
-                </label>
-              ) : (
-                <span style={{ fontWeight: 'bold' }}>{rules.enableBombsSingle ? 'Enabled' : 'Disabled'}</span>
-              )}
-            </div>
+            {/* Game-specific rules settings */}
+            {gameType === 'capsa' ? (
+              <>
+                {/* Bombing Single 2 Toggle */}
+                <div className="settings-row">
+                  <label>Slam Single 2 with Bombs</label>
+                  {players.find(pl => isSinglePlayer ? pl.id === 'local_user' : pl.id === socketId)?.isHost ? (
+                    <label className="switch">
+                      <input
+                        type="checkbox"
+                        checked={rules.enableBombsSingle}
+                        onChange={(e) => {
+                          const updated = { ...rules, enableBombsSingle: e.target.checked };
+                          setRules(updated);
+                          if (!isSinglePlayer) updateRulesOnline(updated);
+                        }}
+                      />
+                      <span className="slider" />
+                    </label>
+                  ) : (
+                    <span style={{ fontWeight: 'bold' }}>{rules.enableBombsSingle ? 'Enabled' : 'Disabled'}</span>
+                  )}
+                </div>
 
-            {/* Bombing Pair of 2s Toggle */}
-            <div className="settings-row">
-              <label>Slam Pair 2s with Bombs</label>
-              {players.find(pl => isSinglePlayer ? pl.id === 'local_user' : pl.id === socketId)?.isHost ? (
-                <label className="switch">
-                  <input
-                    type="checkbox"
-                    checked={rules.enableBombsPair}
-                    onChange={(e) => {
-                      const updated = { ...rules, enableBombsPair: e.target.checked };
-                      setRules(updated);
-                      if (!isSinglePlayer) updateRulesOnline(updated);
-                    }}
-                  />
-                  <span className="slider" />
-                </label>
-              ) : (
-                <span style={{ fontWeight: 'bold' }}>{rules.enableBombsPair ? 'Enabled' : 'Disabled'}</span>
-              )}
-            </div>
+                {/* Bombing Pair of 2s Toggle */}
+                <div className="settings-row">
+                  <label>Slam Pair 2s with Bombs</label>
+                  {players.find(pl => isSinglePlayer ? pl.id === 'local_user' : pl.id === socketId)?.isHost ? (
+                    <label className="switch">
+                      <input
+                        type="checkbox"
+                        checked={rules.enableBombsPair}
+                        onChange={(e) => {
+                          const updated = { ...rules, enableBombsPair: e.target.checked };
+                          setRules(updated);
+                          if (!isSinglePlayer) updateRulesOnline(updated);
+                        }}
+                      />
+                      <span className="slider" />
+                    </label>
+                  ) : (
+                    <span style={{ fontWeight: 'bold' }}>{rules.enableBombsPair ? 'Enabled' : 'Disabled'}</span>
+                  )}
+                </div>
+              </>
+            ) : (
+              <>
+                {/* Uno Stacking Toggle */}
+                <div className="settings-row">
+                  <label>+2 and +4 Stacking</label>
+                  {players.find(pl => isSinglePlayer ? pl.id === 'local_user' : pl.id === socketId)?.isHost ? (
+                    <label className="switch">
+                      <input
+                        type="checkbox"
+                        checked={rules.stacking}
+                        onChange={(e) => {
+                          const updated = { ...rules, stacking: e.target.checked };
+                          setRules(updated);
+                          if (!isSinglePlayer) updateRulesOnline(updated);
+                        }}
+                      />
+                      <span className="slider" />
+                    </label>
+                  ) : (
+                    <span style={{ fontWeight: 'bold' }}>{rules.stacking ? 'Enabled' : 'Disabled'}</span>
+                  )}
+                </div>
+
+                {/* Uno Jump-In Toggle */}
+                <div className="settings-row">
+                  <label>Jump-In Rules</label>
+                  {players.find(pl => isSinglePlayer ? pl.id === 'local_user' : pl.id === socketId)?.isHost ? (
+                    <label className="switch">
+                      <input
+                        type="checkbox"
+                        checked={rules.jumpIn}
+                        onChange={(e) => {
+                          const updated = { ...rules, jumpIn: e.target.checked };
+                          setRules(updated);
+                          if (!isSinglePlayer) updateRulesOnline(updated);
+                        }}
+                      />
+                      <span className="slider" />
+                    </label>
+                  ) : (
+                    <span style={{ fontWeight: 'bold' }}>{rules.jumpIn ? 'Enabled' : 'Disabled'}</span>
+                  )}
+                </div>
+
+                {/* Uno 7-Swap Toggle */}
+                <div className="settings-row">
+                  <label>7-Swap Rules</label>
+                  {players.find(pl => isSinglePlayer ? pl.id === 'local_user' : pl.id === socketId)?.isHost ? (
+                    <label className="switch">
+                      <input
+                        type="checkbox"
+                        checked={rules.sevenSwap}
+                        onChange={(e) => {
+                          const updated = { ...rules, sevenSwap: e.target.checked };
+                          setRules(updated);
+                          if (!isSinglePlayer) updateRulesOnline(updated);
+                        }}
+                      />
+                      <span className="slider" />
+                    </label>
+                  ) : (
+                    <span style={{ fontWeight: 'bold' }}>{rules.sevenSwap ? 'Enabled' : 'Disabled'}</span>
+                  )}
+                </div>
+
+                {/* Uno 0-Rotate Toggle */}
+                <div className="settings-row">
+                  <label>0-Rotate Rules</label>
+                  {players.find(pl => isSinglePlayer ? pl.id === 'local_user' : pl.id === socketId)?.isHost ? (
+                    <label className="switch">
+                      <input
+                        type="checkbox"
+                        checked={rules.zeroRotate}
+                        onChange={(e) => {
+                          const updated = { ...rules, zeroRotate: e.target.checked };
+                          setRules(updated);
+                          if (!isSinglePlayer) updateRulesOnline(updated);
+                        }}
+                      />
+                      <span className="slider" />
+                    </label>
+                  ) : (
+                    <span style={{ fontWeight: 'bold' }}>{rules.zeroRotate ? 'Enabled' : 'Disabled'}</span>
+                  )}
+                </div>
+
+                {/* Uno Draw Till Play Toggle */}
+                <div className="settings-row">
+                  <label>Draw Till Play Rules</label>
+                  {players.find(pl => isSinglePlayer ? pl.id === 'local_user' : pl.id === socketId)?.isHost ? (
+                    <label className="switch">
+                      <input
+                        type="checkbox"
+                        checked={rules.drawTillPlay}
+                        onChange={(e) => {
+                          const updated = { ...rules, drawTillPlay: e.target.checked };
+                          setRules(updated);
+                          if (!isSinglePlayer) updateRulesOnline(updated);
+                        }}
+                      />
+                      <span className="slider" />
+                    </label>
+                  ) : (
+                    <span style={{ fontWeight: 'bold' }}>{rules.drawTillPlay ? 'Enabled' : 'Disabled'}</span>
+                  )}
+                </div>
+              </>
+            )}
 
             {/* Seat fill with bot buttons (only for host) */}
-            {players.find(pl => isSinglePlayer ? pl.id === 'local_user' : pl.id === socketId)?.isHost && players.length < 4 && (
+            {players.find(pl => isSinglePlayer ? pl.id === 'local_user' : pl.id === socketId)?.isHost && players.length < (gameType === 'uno' ? 8 : 4) && (
               <div style={{ marginTop: 'auto', paddingTop: '1rem', display: 'flex', flexDirection: 'column' }}>
                 <button
                   className="btn-primary"
                   style={{ background: 'linear-gradient(135deg, #1d72b8 0%, #1e40af 100%)', boxShadow: 'none' }}
                   onClick={() => {
                     if (isSinglePlayer) {
-                      const botNames = ['Budi Bot', 'Siti Bot', 'Joko Bot', 'Dewi Bot'];
+                      const botNames = gameType === 'uno'
+                        ? ['Budi Bot', 'Siti Bot', 'Joko Bot', 'Dewi Bot', 'Aris Bot', 'Dewo Bot', 'Fitri Bot', 'Mega Bot']
+                        : ['Budi Bot', 'Siti Bot', 'Joko Bot', 'Dewi Bot'];
                       const existing = players.map((p) => p.name);
                       const botName = botNames.find((n) => !existing.includes(n)) || `Bot ${players.length + 1}`;
 
@@ -1320,7 +2426,7 @@ export default function App() {
         </div>
       )}
 
-      {screen === 'table' && (
+      {screen === 'table' && gameType === 'capsa' && (
         <GameTable
           playerId={isSinglePlayer ? 'local_user' : socketId}
           players={players}
@@ -1337,6 +2443,42 @@ export default function App() {
           roomCode={roomCode}
           isHost={players.find(pl => isSinglePlayer ? pl.id === 'local_user' : pl.id === socketId)?.isHost || false}
           isMobile={isMobileLandscape}
+        />
+      )}
+
+      {screen === 'table' && gameType === 'uno' && (
+        <UnoTable
+          playerId={isSinglePlayer ? 'local_user' : socketId}
+          players={players}
+          turnIndex={turnIndex}
+          currentColor={unoCurrentColor}
+          currentValue={unoCurrentValue}
+          playDirection={unoPlayDirection}
+          accumulatedDrawCount={unoAccumulatedDrawCount}
+          sevenSwappingPlayerId={unoSevenSwappingPlayerId}
+          lastSevenSwap={unoLastSevenSwap}
+          discardPile={unoDiscardPile}
+          gameState={gameState}
+          rules={{
+            pointsToWin: rules.pointsToWin,
+            turnDuration: rules.turnDuration,
+            stacking: !!rules.stacking,
+            jumpIn: !!rules.jumpIn,
+            sevenSwap: !!rules.sevenSwap,
+            zeroRotate: !!rules.zeroRotate,
+            drawTillPlay: !!rules.drawTillPlay,
+          }}
+          roomCode={roomCode}
+          isHost={players.find(pl => isSinglePlayer ? pl.id === 'local_user' : pl.id === socketId)?.isHost || false}
+          isSinglePlayer={isSinglePlayer}
+          onPlayCard={isSinglePlayer ? (card, chosenColor, isJumpIn) => playCardUnoSingle(card, chosenColor, isJumpIn) : (card, chosenColor, isJumpIn) => socketRef.current?.emit('play-card', { roomCode, cards: [card], chosenColor, isJumpIn })}
+          onDrawCard={isSinglePlayer ? drawCardUnoSingle : () => socketRef.current?.emit('draw-card', { roomCode })}
+          onPass={isSinglePlayer ? passTurnUnoSingle : () => socketRef.current?.emit('pass-turn', { roomCode })}
+          onUnoCall={isSinglePlayer ? unoCallUnoSingle : () => socketRef.current?.emit('uno-call', { roomCode })}
+          onUnoChallenge={isSinglePlayer ? (targetId) => unoChallengeUnoSingle(targetId) : (targetId) => socketRef.current?.emit('uno-challenge', { roomCode, targetPlayerId: targetId })}
+          onSwapHand={isSinglePlayer ? (targetId) => swapHandUnoSingle(targetId) : (targetId) => socketRef.current?.emit('swap-hand', { roomCode, targetPlayerId: targetId })}
+          onRestartGame={isSinglePlayer ? restartSinglePlayerUnoGameRound : restartOnlineGame}
+          onLeaveRoom={leaveRoom}
         />
       )}
 
