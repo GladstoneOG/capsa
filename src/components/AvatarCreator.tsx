@@ -31,7 +31,6 @@ export const HAIR_COLORS = [
   { name: 'Gold Blonde', value: '#E5C158' },
   { name: 'Sunset Red', value: '#B83B1D' },
   { name: 'Electric Blue', value: '#1D72B8' },
-  { name: 'Cyber Pink', value: '#B81D80' },
 ];
 
 export const EXPRESSIONS: { name: string; value: AvatarConfig['expression'] }[] = [
@@ -48,7 +47,6 @@ export const CLOTHES_COLORS = [
   { name: 'Crimson', value: '#C53030' },
   { name: 'Emerald', value: '#2F855A' },
   { name: 'Gold Amber', value: '#D69E2E' },
-  { name: 'Neon Coral', value: '#ED64A6' },
 ];
 
 export const DEFAULT_AVATAR: AvatarConfig = {
@@ -172,7 +170,7 @@ export const AvatarSVG: React.FC<AvatarSVGProps> = ({ config, size = 80, classNa
       {/* Hair Styles */}
       {hairStyle === 'short' && (
         <path
-          d="M 28,38 C 28,20 40,16 50,16 C 60,16 72,20 72,38 C 72,38 75,32 71,28 C 67,24 61,22 50,22 C 39,22 33,24 29,28 C 25,32 28,38 28,38 Z"
+          d="M 28,38 C 28,20 40,16 50,16 C 60,16 72,20 72,38 C 68,32 60,26 50,26 C 40,26 32,32 28,38 Z"
           fill={hairColor}
         />
       )}
@@ -279,23 +277,22 @@ export const AvatarCreator: React.FC<AvatarCreatorProps> = ({ config, onChange }
           </select>
         </div>
 
-        {config.hairStyle !== 'bald' && (
-          <div className="control-group">
-            <label>Hair Color</label>
-            <div className="color-options">
-              {HAIR_COLORS.map((c) => (
-                <button
-                  key={c.name}
-                  type="button"
-                  className={`color-dot ${config.hairColor === c.value ? 'selected' : ''}`}
-                  style={{ backgroundColor: c.value }}
-                  title={c.name}
-                  onClick={() => updateProp('hairColor', c.value)}
-                />
-              ))}
-            </div>
+        <div className={`control-group ${config.hairStyle === 'bald' ? 'disabled' : ''}`}>
+          <label>Hair Color</label>
+          <div className="color-options">
+            {HAIR_COLORS.map((c) => (
+              <button
+                key={c.name}
+                type="button"
+                className={`color-dot ${config.hairColor === c.value ? 'selected' : ''}`}
+                style={{ backgroundColor: c.value }}
+                title={c.name}
+                disabled={config.hairStyle === 'bald'}
+                onClick={() => updateProp('hairColor', c.value)}
+              />
+            ))}
           </div>
-        )}
+        </div>
 
         <div className="control-group">
           <label>Expression</label>

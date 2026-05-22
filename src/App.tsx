@@ -50,6 +50,7 @@ export default function App() {
   const [customServerVisible, setCustomServerVisible] = useState<boolean>(false);
   const [roomCodeInput, setRoomCodeInput] = useState<string>('');
   const [errorMsg, setErrorMsg] = useState<string>('');
+  const [copiedCode, setCopiedCode] = useState<boolean>(false);
 
   // Game State
   const [isSinglePlayer, setIsSinglePlayer] = useState<boolean>(false);
@@ -900,6 +901,16 @@ export default function App() {
     setScreen('menu');
   };
 
+  const handleCopyRoomCode = () => {
+    if (!roomCode) return;
+    navigator.clipboard.writeText(roomCode).then(() => {
+      setCopiedCode(true);
+      setTimeout(() => setCopiedCode(false), 1500);
+    }).catch(err => {
+      console.error('Failed to copy room code: ', err);
+    });
+  };
+
   // ==================== Render Screen Switching ====================
   return (
     <div style={{ position: 'relative', minHeight: '100vh', overflow: 'hidden' }}>
@@ -1001,6 +1012,14 @@ export default function App() {
             <div className="lobby-code-display">
               <span style={{ fontSize: '0.9rem', fontWeight: 'bold', color: 'var(--text-muted)' }}>ROOM CODE:</span>
               <div className="lobby-code-badge">{roomCode}</div>
+              <button
+                type="button"
+                className={`btn-copy-code ${copiedCode ? 'copied' : ''}`}
+                onClick={handleCopyRoomCode}
+                title="Copy Room Code"
+              >
+                {copiedCode ? '✓ Copied' : '📋 Copy'}
+              </button>
             </div>
           </div>
 
