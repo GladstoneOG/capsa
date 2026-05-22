@@ -585,7 +585,7 @@ export default function App() {
         clearTimeout(botTimerRef.current);
       }
     };
-  }, [turnIndex, gameState, isSinglePlayer]);
+  }, [turnIndex, gameState, isSinglePlayer, activePlay]);
 
   function playCardsSingle(pId: string, cards: Card[]) {
     const { players: currentPlayers, turnIndex: currentTurnIndex } = stateRef.current;
