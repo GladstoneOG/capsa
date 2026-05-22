@@ -2519,7 +2519,7 @@ input:checked + .slider:before {
 
   /* === PLAYER HAND â€” with padding for FABs on sides === */
   .hand-controls-container {
-    padding: 0.1rem 3.5rem;
+    padding: 0.1rem 9.5rem 0.1rem 12.5rem;
     gap: 0;
     border-top: none;
     background: rgba(15, 23, 42, 0.85);
@@ -2693,10 +2693,10 @@ input:checked + .slider:before {
     font-size: 0.65rem;
   }
 
-  /* Chat button â€” above Play/Pass FABs */
+  /* Chat button — above Play/Pass FABs */
   .floating-chat-btn {
-    bottom: 110px;
-    right: 8px;
+    bottom: 60px;
+    right: 12px;
     width: 34px;
     height: 34px;
     font-size: 0.95rem;
@@ -2796,76 +2796,79 @@ input:checked + .slider:before {
 .mobile-fab-left,
 .mobile-fab-right {
   position: fixed;
-  bottom: 8px;
+  bottom: 12px;
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   gap: 6px;
   z-index: 50;
 }
 
 .mobile-fab-left {
-  left: 8px;
+  left: 12px;
 }
 
 .mobile-fab-right {
-  right: 8px;
+  right: 12px;
 }
 
-.mobile-circle-btn {
-  width: 44px;
-  height: 44px;
-  border-radius: 50%;
+.mobile-action-btn {
+  height: 38px;
+  padding: 0 12px;
+  min-width: 52px;
+  border-radius: 8px;
   border: 1.5px solid rgba(255, 255, 255, 0.15);
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  font-size: 1.1rem;
+  font-size: 0.72rem;
+  font-weight: 700;
   transition: all 0.15s ease;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  color: var(--text-primary);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
 }
 
-.mobile-circle-btn:active:not(:disabled) {
-  transform: scale(0.9);
+.mobile-action-btn:active:not(:disabled) {
+  transform: scale(0.95);
 }
 
-.mobile-circle-btn:disabled {
+.mobile-action-btn:disabled {
   opacity: 0.35;
   cursor: not-allowed;
   box-shadow: none;
 }
 
-.mobile-circle-btn.sort-btn {
+.mobile-action-btn.sort-btn {
   background: rgba(30, 41, 59, 0.85);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
   color: var(--text-primary);
 }
 
-.mobile-circle-btn.sort-btn:active:not(:disabled) {
+.mobile-action-btn.sort-btn:active:not(:disabled) {
   background: rgba(139, 92, 246, 0.3);
 }
 
-.mobile-circle-btn.reset-btn {
-  background: rgba(244, 63, 94, 0.2);
-  border-color: rgba(244, 63, 94, 0.3);
-  color: #f87171;
-  font-size: 0.9rem;
-  font-weight: 700;
+.mobile-action-btn.reset-btn {
+  background: rgba(244, 63, 94, 0.25);
+  border-color: rgba(244, 63, 94, 0.4);
+  color: #fda4af;
 }
 
-.mobile-circle-btn.play-btn {
+.mobile-action-btn.play-btn {
   background: linear-gradient(135deg, var(--primary) 0%, #6d28d9 100%);
   color: #fff;
   border-color: rgba(255, 255, 255, 0.2);
-  box-shadow: 0 4px 15px var(--primary-glow);
+  box-shadow: 0 4px 12px var(--primary-glow);
 }
 
-.mobile-circle-btn.pass-btn {
+.mobile-action-btn.pass-btn {
   background: linear-gradient(135deg, var(--accent-red) 0%, #be123c 100%);
   color: #fff;
   border-color: rgba(255, 255, 255, 0.2);
-  box-shadow: 0 4px 15px rgba(244, 63, 94, 0.3);
+  box-shadow: 0 4px 12px rgba(244, 63, 94, 0.3);
 }
 
 /* ==================== Small phone landscape ==================== */
@@ -2934,14 +2937,20 @@ input:checked + .slider:before {
   .seat-2 { top: -10px; }
   .seat-3 { right: -4px; }
 
-  .mobile-circle-btn {
-    width: 38px;
-    height: 38px;
-    font-size: 0.95rem;
+  .mobile-action-btn {
+    height: 32px;
+    padding: 0 8px;
+    min-width: 48px;
+    font-size: 0.65rem;
   }
 
   .hand-controls-container {
-    padding: 0.1rem 2.8rem;
+    padding: 0.1rem 8.5rem 0.1rem 11rem;
+  }
+
+  .floating-chat-btn {
+    bottom: 50px;
+    right: 12px;
   }
 
   .previous-plays-panel,

@@ -1035,41 +1035,41 @@ export const GameTable: React.FC<GameTableProps> = ({
         )}
       </div>
 
-      {/* Mobile floating circle buttons — Sort/Reset bottom-left, Play/Pass bottom-right */}
+      {/* Mobile action buttons — Sort/Reset bottom-left, Play/Pass bottom-right */}
       {isMobile && (
         <>
-          {/* Bottom-left: Sort & Reset circles */}
+          {/* Bottom-left: Sort & Reset buttons */}
           <div className="mobile-fab-left">
-            <button className="mobile-circle-btn sort-btn" onClick={() => handleSort('rank')} title="Sort by Rank">
-              🔤
+            <button className="mobile-action-btn sort-btn" onClick={() => handleSort('rank')} title="Sort by Rank">
+              Rank
             </button>
-            <button className="mobile-circle-btn sort-btn" onClick={() => handleSort('suit')} title="Sort by Suit">
-              ♠
+            <button className="mobile-action-btn sort-btn" onClick={() => handleSort('suit')} title="Sort by Suit">
+              Suit
             </button>
             {selectedCardIds.length > 0 && (
-              <button className="mobile-circle-btn reset-btn" onClick={() => setSelectedCardIds([])} title="Reset Selection">
-                ✕
+              <button className="mobile-action-btn reset-btn" onClick={() => setSelectedCardIds([])} title="Reset Selection">
+                Reset
               </button>
             )}
           </div>
 
-          {/* Bottom-right: Play & Pass circles */}
+          {/* Bottom-right: Play & Pass buttons */}
           <div className="mobile-fab-right">
             <button
-              className="mobile-circle-btn play-btn"
+              className="mobile-action-btn play-btn"
               disabled={!canPlaySelected || hasActionedThisTurn}
               onClick={handlePlayClick}
               title="Play Hand"
             >
-              ▶
+              Play
             </button>
             <button
-              className="mobile-circle-btn pass-btn"
+              className="mobile-action-btn pass-btn"
               disabled={!isMyTurn || isFirstPlayOfRound || !activePlay || hasActionedThisTurn}
               onClick={handlePassClick}
               title="Pass"
             >
-              ⏭
+              Pass
             </button>
           </div>
         </>
