@@ -9,6 +9,7 @@ import { sfx } from './utils/audio';
 import { UnoTable } from './components/UnoTable';
 import { getBotPlayDecision, type UnoCard } from './utils/unoLogic';
 import './uno.css';
+import { Confetti } from './components/Confetti';
 
 type Screen = 'menu' | 'lobby' | 'table';
 
@@ -129,7 +130,7 @@ export default function App() {
     jumpIn: true,
     sevenSwap: true,
     zeroRotate: true,
-    drawTillPlay: false,
+    drawTillPlay: true,
   });
   const [gameType, setGameType] = useState<'capsa' | 'uno'>('capsa');
   const [unoCurrentColor, setUnoCurrentColor] = useState<string>('red');
@@ -138,6 +139,8 @@ export default function App() {
   const [unoAccumulatedDrawCount, setUnoAccumulatedDrawCount] = useState<number>(0);
   const [unoSevenSwappingPlayerId, setUnoSevenSwappingPlayerId] = useState<string | null>(null);
   const [unoLastSevenSwap, setUnoLastSevenSwap] = useState<{ requesterId: string; targetId: string } | null>(null);
+  const [lastUnoChallenge, setLastUnoChallenge] = useState<{ challengerId: string; targetPlayerId: string; timestamp: number } | null>(null);
+  const [showConfetti, setShowConfetti] = useState<boolean>(false);
   const [unoDiscardPile, setUnoDiscardPile] = useState<UnoCard[]>([]);
   const [unoDrawPile, setUnoDrawPile] = useState<UnoCard[]>([]);
   const botDrawnRef = useRef<Record<string, boolean>>({});
@@ -243,6 +246,16 @@ export default function App() {
       if (socketRef.current) socketRef.current.disconnect();
     };
   }, []);
+
+  // Trigger win sounds and confetti on round/game end
+  useEffect(() => {
+    if (gameState === 'roundover' || gameState === 'gameover') {
+      sfx.playWin();
+      setShowConfetti(true);
+    } else {
+      setShowConfetti(false);
+    }
+  }, [gameState]);
 
   // ==================== Socket.io Handlers ====================
   const initSocket = () => {
@@ -379,6 +392,14 @@ export default function App() {
       if (!isChatOpenRef.current) {
         setUnreadChatCount(prev => prev + 1);
       }
+    });
+
+    socket.on('uno-challenge-success', ({ challengerId, targetPlayerId }) => {
+      setLastUnoChallenge({
+        challengerId,
+        targetPlayerId,
+        timestamp: Date.now()
+      });
     });
 
     // Host bot coordinator listener
@@ -822,6 +843,8 @@ export default function App() {
     setUnoAccumulatedDrawCount(0);
     setUnoSevenSwappingPlayerId(null);
     setUnoLastSevenSwap(null);
+    setLastUnoChallenge(null);
+    setLastPlayerPlayedId(null);
     setPlayers(updatedPlayers);
     setGameState('playing');
     setScreen('table');
@@ -911,6 +934,10 @@ export default function App() {
 
     if (!isMyTurn) {
       if (isJumpIn && rules.jumpIn) {
+        // Enforce consecutive jump-in prevention: cannot jump in if you played the last card
+        if (lastPlayerPlayedId === player.id) {
+          return;
+        }
         // Jump In verification
         if (card.color === currentColor && card.value === currentValue && card.color !== 'wild') {
           ioToSystemChat(`⚡ Jump-in! ${player.name} cut in out of turn!`);
@@ -936,6 +963,7 @@ export default function App() {
     const activePlayer = updatedPlayers[playerIdx];
     const nextDiscardPile = [...currentDiscardPile, card];
     setUnoDiscardPile(nextDiscardPile);
+    setLastPlayerPlayedId(player.id);
 
     const nextColor = card.color === 'wild' ? (chosenColor || 'red') : card.color;
     const nextValue = card.value;
@@ -1177,7 +1205,7 @@ export default function App() {
     }
   };
 
-  const unoChallengeUnoSingle = (targetPlayerId: string) => {
+  const unoChallengeUnoSingle = (targetPlayerId: string, challengerId: string = 'local_user') => {
     const { players: currentPlayers, unoDiscardPile: currentDiscardPile, unoDrawPile: currentDrawPile } = stateRef.current;
     const target = currentPlayers.find((p) => p.id === targetPlayerId);
     if (!target) return;
@@ -1202,7 +1230,14 @@ export default function App() {
 
       setPlayers(updated);
       setUnoDrawPile(pile);
-      ioToSystemChat(`👮 Caught! Penalty: ${target.name} drew 2 cards for not calling UNO!`);
+      setLastUnoChallenge({
+        challengerId,
+        targetPlayerId,
+        timestamp: Date.now()
+      });
+      const challengerName = challengerId === 'local_user' ? 'local_user' : (currentPlayers.find(p => p.id === challengerId)?.name || 'Bot');
+      const textChallengerName = challengerName === 'local_user' ? 'You' : challengerName;
+      ioToSystemChat(`👮 Caught! ${textChallengerName} caught ${target.name} not calling UNO! Penalty: drew 2 cards.`);
     }
   };
 
@@ -1546,12 +1581,13 @@ export default function App() {
         const bots = players.filter(p => p.isBot && p.id !== vulnerable.id);
         if (bots.length > 0 && Math.random() < 0.70) {
           // 70% chance a bot spots them and challenges
+          const randomBot = bots[Math.floor(Math.random() * bots.length)];
           setTimeout(() => {
             // Re-check vulnerability
             const { players: freshPlayers } = stateRef.current;
             const freshVulnerable = freshPlayers.find(p => p.id === vulnerable.id && p.cards.length === 1 && !p.safeUno);
             if (freshVulnerable) {
-              unoChallengeUnoSingle(freshVulnerable.id);
+              unoChallengeUnoSingle(freshVulnerable.id, randomBot.id);
             }
           }, 1000 + Math.random() * 1000);
         }
@@ -2457,6 +2493,9 @@ export default function App() {
           accumulatedDrawCount={unoAccumulatedDrawCount}
           sevenSwappingPlayerId={unoSevenSwappingPlayerId}
           lastSevenSwap={unoLastSevenSwap}
+          lastUnoChallenge={lastUnoChallenge}
+          lastPlayerPlayedId={lastPlayerPlayedId}
+          onClearUnoChallenge={() => setLastUnoChallenge(null)}
           discardPile={unoDiscardPile}
           gameState={gameState}
           rules={{
@@ -2475,7 +2514,7 @@ export default function App() {
           onDrawCard={isSinglePlayer ? drawCardUnoSingle : () => socketRef.current?.emit('draw-card', { roomCode })}
           onPass={isSinglePlayer ? passTurnUnoSingle : () => socketRef.current?.emit('pass-turn', { roomCode })}
           onUnoCall={isSinglePlayer ? unoCallUnoSingle : () => socketRef.current?.emit('uno-call', { roomCode })}
-          onUnoChallenge={isSinglePlayer ? (targetId) => unoChallengeUnoSingle(targetId) : (targetId) => socketRef.current?.emit('uno-challenge', { roomCode, targetPlayerId: targetId })}
+          onUnoChallenge={isSinglePlayer ? (targetId) => unoChallengeUnoSingle(targetId, 'local_user') : (targetId) => socketRef.current?.emit('uno-challenge', { roomCode, targetPlayerId: targetId })}
           onSwapHand={isSinglePlayer ? (targetId) => swapHandUnoSingle(targetId) : (targetId) => socketRef.current?.emit('swap-hand', { roomCode, targetPlayerId: targetId })}
           onRestartGame={isSinglePlayer ? restartSinglePlayerUnoGameRound : restartOnlineGame}
           onLeaveRoom={leaveRoom}
@@ -2550,6 +2589,9 @@ export default function App() {
           {isFullscreen ? '⊡' : '⛶'}
         </button>
       )}
+
+      {/* Celebratory Game-End Confetti */}
+      <Confetti active={showConfetti} />
     </div>
   );
 }

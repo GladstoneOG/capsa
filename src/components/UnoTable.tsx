@@ -28,6 +28,9 @@ interface UnoTableProps {
   accumulatedDrawCount: number;
   sevenSwappingPlayerId: string | null;
   lastSevenSwap?: { requesterId: string; targetId: string } | null;
+  lastUnoChallenge?: { challengerId: string; targetPlayerId: string; timestamp: number } | null;
+  lastPlayerPlayedId: string | null;
+  onClearUnoChallenge?: () => void;
   discardPile: UnoCard[];
   gameState: 'lobby' | 'playing' | 'roundover' | 'gameover';
   rules: {
@@ -158,6 +161,9 @@ export const UnoTable: React.FC<UnoTableProps> = ({
   accumulatedDrawCount,
   sevenSwappingPlayerId,
   lastSevenSwap,
+  lastUnoChallenge,
+  lastPlayerPlayedId,
+  onClearUnoChallenge,
   discardPile,
   gameState,
   rules,
@@ -188,6 +194,18 @@ export const UnoTable: React.FC<UnoTableProps> = ({
   const [showWildAnim, setShowWildAnim] = useState<boolean>(false);
   const [swapSeats, setSwapSeats] = useState<{ seat1: number; seat2: number } | null>(null);
   const [swapCoords, setSwapCoords] = useState<{ x1: number; y1: number; x2: number; y2: number } | null>(null);
+  const [activeTurnCoords, setActiveTurnCoords] = useState<{ x: number; y: number; rotation: number } | null>(null);
+  const [resizeToggle, setResizeToggle] = useState<number>(0);
+  const [skipTargetCoords, setSkipTargetCoords] = useState<{ x: number; y: number } | null>(null);
+  const [skipSourceCoords, setSkipSourceCoords] = useState<{ x: number; y: number } | null>(null);
+  const [caughtSourceCoords, setCaughtSourceCoords] = useState<{ x: number; y: number } | null>(null);
+  const [caughtTargetCoords, setCaughtTargetCoords] = useState<{ x: number; y: number } | null>(null);
+  const [showCaughtAnim, setShowCaughtAnim] = useState<boolean>(false);
+  const [jumpInSourceCoords, setJumpInSourceCoords] = useState<{ x: number; y: number } | null>(null);
+  const [showJumpInAnim, setShowJumpInAnim] = useState<boolean>(false);
+  const caughtTimerRef = useRef<any>(null);
+  const jumpInTimerRef = useRef<any>(null);
+  const lastProcessedChallengeRef = useRef<number>(-1);
 
   const tableAreaRef = useRef<HTMLDivElement>(null);
 
@@ -264,6 +282,13 @@ export const UnoTable: React.FC<UnoTableProps> = ({
         return;
       }
 
+      // Play card rustling sound for card deals, draws, and swaps
+      if (type === 'card') {
+        if (isInitialDealing || animClass.includes('draw') || animClass.includes('swap')) {
+          sfx.playRustle();
+        }
+      }
+
       const id = `anim_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
       setFlyingAnims(prev => [
         ...prev,
@@ -289,13 +314,15 @@ export const UnoTable: React.FC<UnoTableProps> = ({
         }
       }, 700);
     }, delay);
-  }, [getElementCoords]);
+  }, [getElementCoords, isInitialDealing]);
 
   // Clean up timers on unmount
   useEffect(() => {
     return () => {
       console.log('UnoTable: unmount cleanup effect called');
       if (skipTimerRef.current) clearTimeout(skipTimerRef.current);
+      if (caughtTimerRef.current) clearTimeout(caughtTimerRef.current);
+      if (jumpInTimerRef.current) clearTimeout(jumpInTimerRef.current);
       clearDealingTimeouts();
     };
   }, [clearDealingTimeouts]);
@@ -303,6 +330,65 @@ export const UnoTable: React.FC<UnoTableProps> = ({
   // Local player references
   const localIdx = useMemo(() => players.findIndex(p => p.id === playerId), [players, playerId]);
   const isMyTurn = turnIndex === localIdx && localIdx !== -1;
+
+  // Trigger CATCH animation when lastUnoChallenge updates
+  useEffect(() => {
+    if (!lastUnoChallenge) return;
+    if (lastUnoChallenge.timestamp === lastProcessedChallengeRef.current) return;
+    lastProcessedChallengeRef.current = lastUnoChallenge.timestamp;
+
+    if (onClearUnoChallenge) {
+      onClearUnoChallenge();
+    }
+
+    // Find players
+    const challengerIdx = players.findIndex(p => p.id === lastUnoChallenge.challengerId);
+    const targetIdx = players.findIndex(p => p.id === lastUnoChallenge.targetPlayerId);
+
+    if (challengerIdx === -1 || targetIdx === -1) return;
+
+    const numPlayers = players.length;
+    const challengerSeat = getUnoSeatClass(challengerIdx, localIdx, numPlayers);
+    const targetSeat = getUnoSeatClass(targetIdx, localIdx, numPlayers);
+
+    // Play synthesized caught sound
+    sfx.playCaught();
+
+    setTimeout(() => {
+      if (!tableAreaRef.current) return;
+      const parentRect = tableAreaRef.current.getBoundingClientRect();
+      const centerX = parentRect.width / 2;
+      const centerY = parentRect.height / 2;
+
+      let sourceCoords = getElementCoords(`.uno-player-seat.uno-seat-${challengerSeat} .uno-avatar-wrap`);
+      if (!sourceCoords) {
+        sourceCoords = getElementCoords(`.uno-player-seat.uno-seat-${challengerSeat}`);
+      }
+      let targetCoords = getElementCoords(`.uno-player-seat.uno-seat-${targetSeat} .uno-avatar-wrap`);
+      if (!targetCoords) {
+        targetCoords = getElementCoords(`.uno-player-seat.uno-seat-${targetSeat}`);
+      }
+
+      if (sourceCoords && targetCoords) {
+        setCaughtSourceCoords({
+          x: sourceCoords.x - centerX,
+          y: sourceCoords.y - centerY
+        });
+        setCaughtTargetCoords({
+          x: targetCoords.x - centerX,
+          y: targetCoords.y - centerY
+        });
+        setShowCaughtAnim(true);
+
+        if (caughtTimerRef.current) clearTimeout(caughtTimerRef.current);
+        caughtTimerRef.current = setTimeout(() => {
+          setShowCaughtAnim(false);
+          setCaughtSourceCoords(null);
+          setCaughtTargetCoords(null);
+        }, 1500); // 1.5s animation duration
+      }
+    }, 50);
+  }, [lastUnoChallenge, players, localIdx, getElementCoords, onClearUnoChallenge]);
 
   // Turn Timer Countdown logic
   useEffect(() => {
@@ -333,6 +419,59 @@ export const UnoTable: React.FC<UnoTableProps> = ({
       if (timerRef.current) clearInterval(timerRef.current);
     };
   }, [turnIndex, gameState, isMyTurn, rules.turnDuration, onPass]);
+
+  // Resize event listener to update coordinate measurements when viewport changes
+  useEffect(() => {
+    const handleResize = () => setResizeToggle(prev => prev + 1);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  // Calculate coordinates and rotation pointing to the active seat's avatar
+  useEffect(() => {
+    if (gameState !== 'playing' || localIdx === -1 || !tableAreaRef.current) {
+      setActiveTurnCoords(null);
+      return;
+    }
+
+    const seatNum = getUnoSeatClass(turnIndex, localIdx, players.length);
+
+    const updateCoords = () => {
+      if (!tableAreaRef.current) return;
+      const parentRect = tableAreaRef.current.getBoundingClientRect();
+      const centerX = parentRect.width / 2;
+      const centerY = parentRect.height / 2;
+
+      let avatarCoords = getElementCoords(`.uno-player-seat.uno-seat-${seatNum} .uno-avatar-wrap`);
+      if (!avatarCoords) {
+        avatarCoords = getElementCoords(`.uno-player-seat.uno-seat-${seatNum}`);
+      }
+
+      if (avatarCoords) {
+        const dx = centerX - avatarCoords.x;
+        const dy = centerY - avatarCoords.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        const offset = 65; // Offset 65px inward from avatar center
+
+        if (dist > 0) {
+          const ux = dx / dist;
+          const uy = dy / dist;
+          const arrowX = avatarCoords.x + ux * offset;
+          const arrowY = avatarCoords.y + uy * offset;
+          const angleRad = Math.atan2(avatarCoords.y - arrowY, avatarCoords.x - arrowX);
+          const angleDeg = (angleRad * 180) / Math.PI;
+          const rotation = angleDeg + 90;
+
+          setActiveTurnCoords({ x: arrowX, y: arrowY, rotation });
+        }
+      }
+    };
+
+    updateCoords();
+    // Schedule a small delay to allow DOM positions to settle
+    const timer = setTimeout(updateCoords, 100);
+    return () => clearTimeout(timer);
+  }, [turnIndex, gameState, players, localIdx, resizeToggle, getElementCoords]);
 
   const localPlayer = localIdx !== -1 ? players[localIdx] : null;
   const localHand = useMemo(() => {
@@ -370,6 +509,8 @@ export const UnoTable: React.FC<UnoTableProps> = ({
     prevHandLenRef.current = currentLen;
   }, [localHand]);
 
+
+
   // State Change Detector for Animations and Skips
   const prevPlayersRef = useRef<Player[]>([]);
   const prevDiscardPileRef = useRef<UnoCard[]>([]);
@@ -389,9 +530,13 @@ export const UnoTable: React.FC<UnoTableProps> = ({
       setRevealedCardCounts({});
       setShowStartingDiscard(false);
       setShowSkipAnim(false);
+      setSkipTargetCoords(null);
+      setSkipSourceCoords(null);
       setShowSevenSwapAnim(false);
       setShowZeroRotateAnim(false);
       setShowWildAnim(false);
+      setShowJumpInAnim(false);
+      setJumpInSourceCoords(null);
       setSwapSeats(null);
       setSwapCoords(null);
 
@@ -557,6 +702,38 @@ export const UnoTable: React.FC<UnoTableProps> = ({
         skipTimerRef.current = setTimeout(() => {
           setSkippedSeats(new Set());
         }, 1500);
+
+        // Measure coordinates of the source (who played skip) and skipped player's seats relative to table center
+        const sourceSeat = getUnoSeatClass(prevTurnIdx, localIdx, numPlayers);
+        const targetSeat = getUnoSeatClass(skippedIndices[0], localIdx, numPlayers);
+        setTimeout(() => {
+          if (!tableAreaRef.current) return;
+          const parentRect = tableAreaRef.current.getBoundingClientRect();
+          const centerX = parentRect.width / 2;
+          const centerY = parentRect.height / 2;
+          
+          let sourceCoords = getElementCoords(`.uno-player-seat.uno-seat-${sourceSeat} .uno-avatar-wrap`);
+          if (!sourceCoords) {
+            sourceCoords = getElementCoords(`.uno-player-seat.uno-seat-${sourceSeat}`);
+          }
+          let targetCoords = getElementCoords(`.uno-player-seat.uno-seat-${targetSeat} .uno-avatar-wrap`);
+          if (!targetCoords) {
+            targetCoords = getElementCoords(`.uno-player-seat.uno-seat-${targetSeat}`);
+          }
+
+          if (sourceCoords) {
+            setSkipSourceCoords({
+              x: sourceCoords.x - centerX,
+              y: sourceCoords.y - centerY
+            });
+          }
+          if (targetCoords) {
+            setSkipTargetCoords({
+              x: targetCoords.x - centerX,
+              y: targetCoords.y - centerY
+            });
+          }
+        }, 50);
       }
     }
 
@@ -578,10 +755,14 @@ export const UnoTable: React.FC<UnoTableProps> = ({
     if (finishedSevenSwap) {
       let seat1 = -1;
       let seat2 = -1;
+      let reqId = '';
+      let tgtId = '';
 
       if (lastSevenSwap) {
-        const idx1 = players.findIndex(p => p.id === lastSevenSwap.requesterId);
-        const idx2 = players.findIndex(p => p.id === lastSevenSwap.targetId);
+        reqId = lastSevenSwap.requesterId;
+        tgtId = lastSevenSwap.targetId;
+        const idx1 = players.findIndex(p => p.id === reqId);
+        const idx2 = players.findIndex(p => p.id === tgtId);
         if (idx1 !== -1 && idx2 !== -1) {
           seat1 = getUnoSeatClass(idx1, localIdx, numPlayers);
           seat2 = getUnoSeatClass(idx2, localIdx, numPlayers);
@@ -602,22 +783,75 @@ export const UnoTable: React.FC<UnoTableProps> = ({
         if (changedPlayers.length >= 2) {
           seat1 = getUnoSeatClass(changedPlayers[0], localIdx, numPlayers);
           seat2 = getUnoSeatClass(changedPlayers[1], localIdx, numPlayers);
+          reqId = players[changedPlayers[0]].id;
+          tgtId = players[changedPlayers[1]].id;
         }
       }
 
       if (seat1 !== -1 && seat2 !== -1) {
         setSwapSeats({ seat1, seat2 });
-        setShowSevenSwapAnim(true);
+        // NOTE: Remove setShowSevenSwapAnim(true) here to fix double trigger,
+        // since the 7-swap overlay is already shown when the 7 card is played.
+        
         setTimeout(() => {
-          setShowSevenSwapAnim(false);
           setSwapSeats(null);
         }, 1200);
 
-        const fromSel = seat1 === 0 ? '.uno-hand-cards-list' : `.uno-seat-${seat1} .uno-seat-card-fan`;
-        const toSel = seat2 === 0 ? '.uno-hand-cards-list' : `.uno-seat-${seat2} .uno-seat-card-fan`;
-        for (let i = 0; i < 4; i++) {
-          addFlyingAnim(fromSel, toSel, 'card', 'uno-fly-swap', undefined, i * 120);
-          addFlyingAnim(toSel, fromSel, 'card', 'uno-fly-swap', undefined, i * 120);
+        const isLocalInvolved = (seat1 === 0 || seat2 === 0);
+        if (isLocalInvolved) {
+          // Hide new cards in local hand to prevent duplicate rendering
+          const newCardIds = new Set<string>();
+          localHand.forEach(c => {
+            newCardIds.add(c.id);
+            handAnimatedIdsRef.current.add(c.id);
+          });
+          setDrawnCardIds(newCardIds);
+          setTimeout(() => {
+            setDrawnCardIds(new Set());
+          }, 700);
+        }
+
+        if (isLocalInvolved) {
+          const otherSeat = seat1 === 0 ? seat2 : seat1;
+
+          // 1. Cards flying from other player to local hand (incoming)
+          localHand.forEach((card, i) => {
+            const delay = i * 60;
+            const fromSel = `.uno-seat-${otherSeat}`;
+            const toSel = `#uno-card-hand-${card.id}`;
+            const total = localHand.length;
+            const spreadAngle = Math.min(45, (total - 1) * 3);
+            const angleStep = total > 1 ? spreadAngle / (total - 1) : 0;
+            const targetRot = i * angleStep - spreadAngle / 2;
+
+            addFlyingAnim(fromSel, toSel, 'card', 'uno-fly-swap-to-local', undefined, delay, card, targetRot);
+          });
+
+          // 2. Cards flying from local hand to other player (outgoing)
+          const prevLocalPlayer = prevPlayers.find(p => p.id === playerId);
+          const prevLocalCards = prevLocalPlayer ? prevLocalPlayer.cards.filter((c): c is UnoCard => c !== null) : [];
+
+          prevLocalCards.forEach((card, i) => {
+            const delay = i * 60;
+            const fromSel = '.uno-hand-cards-list';
+            const toSel = `.uno-seat-${otherSeat}`;
+            addFlyingAnim(fromSel, toSel, 'card', 'uno-fly-swap-from-local', undefined, delay, card, 0);
+          });
+        } else {
+          // If local player not involved, just fly generic cards between the two seats
+          const fromSel = `.uno-seat-${seat1} .uno-seat-card-fan`;
+          const toSel = `.uno-seat-${seat2} .uno-seat-card-fan`;
+          
+          const seat1Player = players.find(p => getUnoSeatClass(players.indexOf(p), localIdx, numPlayers) === seat1);
+          const seat2Player = players.find(p => getUnoSeatClass(players.indexOf(p), localIdx, numPlayers) === seat2);
+          const count1 = seat1Player ? seat1Player.cards.length : 4;
+          const count2 = seat2Player ? seat2Player.cards.length : 4;
+          
+          const maxAnimCount = Math.max(count1, count2, 4);
+          for (let i = 0; i < maxAnimCount; i++) {
+            addFlyingAnim(fromSel, toSel, 'card', 'uno-fly-swap', undefined, i * 80);
+            addFlyingAnim(toSel, fromSel, 'card', 'uno-fly-swap', undefined, i * 80);
+          }
         }
       }
     } else if (isZeroPlayed) {
@@ -640,14 +874,55 @@ export const UnoTable: React.FC<UnoTableProps> = ({
         setShowZeroRotateAnim(false);
       }, 1200);
 
-      // 2. Flying cards swap animation
+      // Hide new cards in local hand to prevent duplicate rendering
+      const newCardIds = new Set<string>();
+      localHand.forEach(c => {
+        newCardIds.add(c.id);
+        handAnimatedIdsRef.current.add(c.id);
+      });
+      setDrawnCardIds(newCardIds);
+      setTimeout(() => {
+        setDrawnCardIds(new Set());
+      }, 700);
+
+      // 2. Flying cards rotate animation
       players.forEach((_, idx) => {
         const fromSeat = getUnoSeatClass(idx, localIdx, numPlayers);
         const toSeat = getUnoSeatClass((idx + playDirection + numPlayers) % numPlayers, localIdx, numPlayers);
-        const fromSel = fromSeat === 0 ? '.uno-hand-cards-list' : `.uno-seat-${fromSeat} .uno-seat-card-fan`;
-        const toSel = toSeat === 0 ? '.uno-hand-cards-list' : `.uno-seat-${toSeat} .uno-seat-card-fan`;
-        for (let i = 0; i < 3; i++) {
-          addFlyingAnim(fromSel, toSel, 'card', 'uno-fly-swap', undefined, 200 + i * 120);
+
+        if (fromSeat === 0) {
+          // Cards flying out of local hand to toSeat
+          const prevLocalPlayer = prevPlayers[localIdx];
+          const prevLocalCards = prevLocalPlayer ? prevLocalPlayer.cards.filter((c): c is UnoCard => c !== null) : [];
+          
+          prevLocalCards.forEach((card, i) => {
+            const delay = 200 + i * 60;
+            const fromSel = '.uno-hand-cards-list';
+            const toSel = `.uno-seat-${toSeat}`;
+            addFlyingAnim(fromSel, toSel, 'card', 'uno-fly-swap-from-local', undefined, delay, card, 0);
+          });
+        } else if (toSeat === 0) {
+          // Cards flying into local hand from fromSeat
+          localHand.forEach((card, i) => {
+            const delay = 200 + i * 60;
+            const fromSel = `.uno-seat-${fromSeat}`;
+            const toSel = `#uno-card-hand-${card.id}`;
+            const total = localHand.length;
+            const spreadAngle = Math.min(45, (total - 1) * 3);
+            const angleStep = total > 1 ? spreadAngle / (total - 1) : 0;
+            const targetRot = i * angleStep - spreadAngle / 2;
+
+            addFlyingAnim(fromSel, toSel, 'card', 'uno-fly-swap-to-local', undefined, delay, card, targetRot);
+          });
+        } else {
+          // Other players' seats rotation: fly generic card backs
+          const fromSel = `.uno-seat-${fromSeat} .uno-seat-card-fan`;
+          const toSel = `.uno-seat-${toSeat} .uno-seat-card-fan`;
+          const fromPlayer = players[idx];
+          const count = fromPlayer ? fromPlayer.cards.length : 3;
+          for (let i = 0; i < Math.min(count, 4); i++) {
+            addFlyingAnim(fromSel, toSel, 'card', 'uno-fly-swap', undefined, 200 + i * 80);
+          }
         }
       });
     } else {
@@ -666,6 +941,34 @@ export const UnoTable: React.FC<UnoTableProps> = ({
             const targetRot = getCardOffsets(topDiscardCard.id).angle;
             addFlyingAnim(fromSelector, '.uno-discard-pile-target', 'card', animClass, undefined, 0, topDiscardCard, targetRot);
 
+            if (rules.jumpIn && prevTurnIdx !== -1 && idx !== prevTurnIdx) {
+              sfx.playJumpIn();
+              setTimeout(() => {
+                if (!tableAreaRef.current) return;
+                const parentRect = tableAreaRef.current.getBoundingClientRect();
+                const centerX = parentRect.width / 2;
+                const centerY = parentRect.height / 2;
+                let sourceCoords = getElementCoords(`.uno-player-seat.uno-seat-${seatNum} .uno-avatar-wrap`);
+                if (!sourceCoords) {
+                  sourceCoords = getElementCoords(`.uno-player-seat.uno-seat-${seatNum}`);
+                }
+
+                if (sourceCoords) {
+                  setJumpInSourceCoords({
+                    x: sourceCoords.x - centerX,
+                    y: sourceCoords.y - centerY,
+                  });
+                  setShowJumpInAnim(true);
+
+                  if (jumpInTimerRef.current) clearTimeout(jumpInTimerRef.current);
+                  jumpInTimerRef.current = setTimeout(() => {
+                    setShowJumpInAnim(false);
+                    setJumpInSourceCoords(null);
+                  }, 1100);
+                }
+              }, 50);
+            }
+
             if (topDiscardCard) {
               const val = topDiscardCard.value;
               if (val === 'reverse') {
@@ -678,6 +981,8 @@ export const UnoTable: React.FC<UnoTableProps> = ({
                 setShowSkipAnim(true);
                 setTimeout(() => {
                   setShowSkipAnim(false);
+                  setSkipTargetCoords(null);
+                  setSkipSourceCoords(null);
                 }, 1200);
               } else if (val === '7') {
                 setShowSevenSwapAnim(true);
@@ -748,7 +1053,7 @@ export const UnoTable: React.FC<UnoTableProps> = ({
     prevSevenSwappingPlayerIdRef.current = sevenSwappingPlayerId;
     prevLastSevenSwapRef.current = lastSevenSwap;
     prevGameStateRef.current = gameState;
-  }, [players, discardPile, turnIndex, playDirection, sevenSwappingPlayerId, lastSevenSwap, gameState, localIdx, rules.zeroRotate, addFlyingAnim, clearDealingTimeouts, localHand, isInitialDealing]);
+  }, [players, discardPile, turnIndex, playDirection, sevenSwappingPlayerId, lastSevenSwap, gameState, localIdx, rules.zeroRotate, rules.jumpIn, addFlyingAnim, clearDealingTimeouts, localHand, isInitialDealing, getElementCoords]);
 
   // Check if a card is playable
   const playableIds = useMemo(() => {
@@ -779,8 +1084,8 @@ export const UnoTable: React.FC<UnoTableProps> = ({
 
     // 2. Jump-in out of turn validation
     if (rules.jumpIn && !isMyTurn) {
-      // Must match exactly (color & value) and cannot be wild
-      const isExactMatch = card.color === currentColor && card.value === currentValue && card.color !== 'wild';
+      // Must match exactly (color & value) and cannot be wild, and not played by us last
+      const isExactMatch = card.color === currentColor && card.value === currentValue && card.color !== 'wild' && lastPlayerPlayedId !== playerId;
       if (isExactMatch) {
         sfx.playCard();
         onPlayCard(card, undefined, true); // Send as jumpIn = true
@@ -802,9 +1107,26 @@ export const UnoTable: React.FC<UnoTableProps> = ({
   // Sound cues for state changes
   useEffect(() => {
     if (gameState === 'playing' && discardPile.length > 0) {
-      sfx.playCard();
+      const topCard = discardPile[discardPile.length - 1];
+      if (topCard) {
+        if (topCard.value === 'skip') {
+          sfx.playSkip();
+        } else if (topCard.value === 'reverse') {
+          sfx.playReverse();
+        } else if (topCard.value === 'draw2' || topCard.value === 'wild4') {
+          sfx.playDraw();
+        } else if (topCard.value === '7' && rules.sevenSwap) {
+          sfx.playSwap();
+        } else if (topCard.value === '0' && rules.zeroRotate) {
+          sfx.playRotate();
+        } else {
+          sfx.playCard();
+        }
+      } else {
+        sfx.playCard();
+      }
     }
-  }, [discardPile.length, gameState]);
+  }, [discardPile.length, gameState, rules.sevenSwap, rules.zeroRotate]);
 
 
   // Helper to compute stable rotations and offsets for discard pile stacking
@@ -876,6 +1198,22 @@ export const UnoTable: React.FC<UnoTableProps> = ({
 
       {/* Main Table Arena */}
       <div className="uno-table-area" ref={tableAreaRef}>
+        {/* Dynamic Flying Turn Arrow */}
+        {gameState === 'playing' && activeTurnCoords && (
+          <div
+            className={`uno-flying-turn-arrow glow-${currentColor}`}
+            style={{
+              left: `${activeTurnCoords.x}px`,
+              top: `${activeTurnCoords.y}px`,
+              transform: `translate(-50%, -50%) rotate(${activeTurnCoords.rotation}deg)`,
+              transition: 'left 0.4s ease, top 0.4s ease, transform 0.4s ease'
+            }}
+          >
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M12 4L12 20M12 4L6 10M12 4L18 10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </div>
+        )}
         {/* Seating Arrangement (2-8 Players) */}
         {players.map((player, pIdx) => {
           const seatNum = getUnoSeatClass(pIdx, localIdx, players.length);
@@ -883,8 +1221,6 @@ export const UnoTable: React.FC<UnoTableProps> = ({
           const cardsCount = isInitialDealing
             ? (revealedCardCounts[player.id] || 0)
             : player.cards.length;
-          
-          // Other players challenge triggers: down to 1 card & forgotten UNO call
           const showChallenge = player.id !== playerId && cardsCount === 1 && !player.safeUno && gameState === 'playing';
 
           return (
@@ -892,16 +1228,6 @@ export const UnoTable: React.FC<UnoTableProps> = ({
               {/* If it's seat 0 and it's my turn, show the YOUR TURN indicator above the avatar box */}
               {seatNum === 0 && isTurn && (
                 <div className="uno-my-turn-indicator">⚡ YOUR TURN ⚡</div>
-              )}
-
-              {/* Challenge button */}
-              {showChallenge && (
-                <button
-                  className="uno-challenge-btn"
-                  onClick={() => onUnoChallenge(player.id)}
-                >
-                  👮 CATCH!
-                </button>
               )}
 
               {/* Uno Call banner */}
@@ -933,6 +1259,15 @@ export const UnoTable: React.FC<UnoTableProps> = ({
                     </div>
                   </div>
                 )}
+                {showChallenge && (
+                  <button
+                    className="uno-challenge-btn"
+                    onClick={() => onUnoChallenge(player.id)}
+                    title={`Catch ${player.name}`}
+                  >
+                    CATCH!
+                  </button>
+                )}
                 <div className="uno-avatar-wrap">
                   <AvatarSVG config={player.avatar} size={36} />
                   {isTurn && (
@@ -956,7 +1291,16 @@ export const UnoTable: React.FC<UnoTableProps> = ({
 
               {/* Show card fan behind the seat badge for other players */}
               {player.id !== playerId && (
-                <div className="uno-seat-card-fan">
+                <div 
+                  className="uno-seat-card-fan"
+                  style={{
+                    opacity: (
+                      (showSevenSwapAnim && swapSeats && (seatNum === swapSeats.seat1 || seatNum === swapSeats.seat2)) ||
+                      showZeroRotateAnim
+                    ) ? 0 : 1,
+                    transition: 'opacity 0.2s ease'
+                  }}
+                >
                   {cardsCount > 0 && (() => {
                     const maxCards = Math.min(7, cardsCount);
                     const mid = (maxCards - 1) / 2;
@@ -1142,6 +1486,8 @@ export const UnoTable: React.FC<UnoTableProps> = ({
             <div className={`uno-hand-cards-list ${isForcedToDraw ? 'hand-greyed-out' : ''} ${isInitialDealing ? 'dealing-active' : ''}`}>
               {localHand.map((card, index) => {
                 const isPlayable = playableIds.includes(card.id);
+                const isExactMatch = !isMyTurn && rules.jumpIn && card.color === currentColor && card.value === currentValue && card.color !== 'wild' && lastPlayerPlayedId !== playerId;
+                const isCurrentlyPlayable = isMyTurn ? isPlayable : isExactMatch;
                 const isJustDrawn = drawnCardIds.has(card.id);
                 
                 // Determine if we should play the deal-in animation
@@ -1170,7 +1516,7 @@ export const UnoTable: React.FC<UnoTableProps> = ({
                   <div
                     key={card.id}
                     id={`uno-card-hand-${card.id}`}
-                    className={`uno-my-card-wrapper ${isMyTurn && isPlayable ? 'playable' : 'unplayable'} ${isJustDrawn ? 'uno-card-just-drawn' : ''} ${shouldDealIn ? 'uno-card-deal-in' : ''}`}
+                    className={`uno-my-card-wrapper ${isCurrentlyPlayable ? 'playable' : 'unplayable'} ${isJustDrawn ? 'uno-card-just-drawn' : ''} ${shouldDealIn ? 'uno-card-deal-in' : ''}`}
                     style={{
                       transform: `translateX(${translationX}px) translateY(${translationY}px) rotate(${rotation}deg)`,
                       zIndex: index + 10,
@@ -1345,10 +1691,52 @@ export const UnoTable: React.FC<UnoTableProps> = ({
 
       {/* 5. Skip Play Animation Overlay */}
       {showSkipAnim && (
-        <div className={`uno-special-overlay skip-overlay glow-${currentColor}`}>
+        <div 
+          className={`uno-special-overlay skip-overlay glow-${currentColor}`}
+          style={{
+            ['--source-x' as any]: skipSourceCoords ? `${skipSourceCoords.x}px` : '0px',
+            ['--source-y' as any]: skipSourceCoords ? `${skipSourceCoords.y}px` : '0px',
+            ['--target-x' as any]: skipTargetCoords ? `${skipTargetCoords.x}px` : '0px',
+            ['--target-y' as any]: skipTargetCoords ? `${skipTargetCoords.y}px` : '0px'
+          }}
+        >
           <div className="uno-special-content">
             <span className="uno-special-icon">🚫</span>
             <div className="uno-special-text">SKIPPED!</div>
+          </div>
+        </div>
+      )}
+
+      {/* 5.5. Caught Play Animation Overlay */}
+      {showCaughtAnim && (
+        <div 
+          className="uno-special-overlay caught-overlay"
+          style={{
+            ['--source-x' as any]: caughtSourceCoords ? `${caughtSourceCoords.x}px` : '0px',
+            ['--source-y' as any]: caughtSourceCoords ? `${caughtSourceCoords.y}px` : '0px',
+            ['--target-x' as any]: caughtTargetCoords ? `${caughtTargetCoords.x}px` : '0px',
+            ['--target-y' as any]: caughtTargetCoords ? `${caughtTargetCoords.y}px` : '0px'
+          }}
+        >
+          <div className="uno-special-content">
+            <span className="uno-special-icon">👮</span>
+            <div className="uno-special-text">CAUGHT!</div>
+          </div>
+        </div>
+      )}
+
+      {/* 5.6. Jump-In Animation Overlay */}
+      {showJumpInAnim && (
+        <div 
+          className={`uno-special-overlay jump-in-overlay glow-${currentColor}`}
+          style={{
+            ['--source-x' as any]: jumpInSourceCoords ? `${jumpInSourceCoords.x}px` : '0px',
+            ['--source-y' as any]: jumpInSourceCoords ? `${jumpInSourceCoords.y}px` : '0px',
+          }}
+        >
+          <div className="uno-special-content">
+            <span className="uno-special-icon">⚡</span>
+            <div className="uno-special-text">JUMP-IN!</div>
           </div>
         </div>
       )}

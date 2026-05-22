@@ -78,6 +78,7 @@ export function startRound(room, io) {
   room.accumulatedDrawCount = 0;
   room.sevenSwappingPlayerId = null;
   room.lastSevenSwap = null;
+  room.lastPlayerPlayedId = null;
 
   let deck = shuffle(createUnoDeck());
 
@@ -336,7 +337,13 @@ export function drawCard(room, socket, io) {
 
 export function playCard(room, socket, { cards, chosenColor, isJumpIn }, io) {
   const card = cards[0];
-  const player = room.players.find(p => p.id === socket.id || (p.isBot && room.players.find(pl => pl.id === socket.id)?.isHost));
+  const currentPlayer = room.players[room.turnIndex];
+  let player;
+  if (currentPlayer && currentPlayer.isBot && room.players.find(p => p.id === socket.id)?.isHost && !isJumpIn) {
+    player = currentPlayer;
+  } else {
+    player = room.players.find(p => p.id === socket.id);
+  }
   if (!player) return;
 
   const playerIdx = room.players.indexOf(player);
@@ -346,6 +353,10 @@ export function playCard(room, socket, { cards, chosenColor, isJumpIn }, io) {
 
   if (!isMyTurn) {
     if (isJumpIn && room.rules.jumpIn) {
+      // Enforce consecutive jump-in prevention: cannot jump in if you played the last card
+      if (room.lastPlayerPlayedId === player.id) {
+        return;
+      }
       // Jump In logic: card played must match top card exactly (color & value)
       const matchesColor = card.color === room.currentColor;
       const matchesValue = card.value === room.currentValue;
@@ -370,6 +381,7 @@ export function playCard(room, socket, { cards, chosenColor, isJumpIn }, io) {
   // Remove card from player hand
   player.cards = player.cards.filter(c => c.id !== card.id);
   player.lastPlay = [card];
+  room.lastPlayerPlayedId = player.id;
   
   // Put to discard pile
   room.discardPile.push(card);
@@ -542,7 +554,13 @@ export function passTurn(room, socket, io) {
 }
 
 export function swapHand(room, socket, { targetPlayerId }, io) {
-  const requestingPlayer = room.players.find(p => p.id === socket.id || (p.isBot && room.players.find(pl => pl.id === socket.id)?.isHost));
+  const swappingPlayer = room.players.find(p => p.id === room.sevenSwappingPlayerId);
+  let requestingPlayer;
+  if (swappingPlayer && swappingPlayer.isBot && room.players.find(p => p.id === socket.id)?.isHost) {
+    requestingPlayer = swappingPlayer;
+  } else {
+    requestingPlayer = room.players.find(p => p.id === socket.id);
+  }
   if (!requestingPlayer || room.sevenSwappingPlayerId !== requestingPlayer.id) return;
 
   const targetPlayer = room.players.find(p => p.id === targetPlayerId);
@@ -576,7 +594,13 @@ export function swapHand(room, socket, { targetPlayerId }, io) {
 }
 
 export function unoCall(room, socket, io) {
-  const player = room.players.find(p => p.id === socket.id || (p.isBot && room.players.find(pl => pl.id === socket.id)?.isHost));
+  const currentPlayer = room.players[room.turnIndex];
+  let player;
+  if (currentPlayer && currentPlayer.isBot && room.players.find(p => p.id === socket.id)?.isHost) {
+    player = currentPlayer;
+  } else {
+    player = room.players.find(p => p.id === socket.id);
+  }
   if (!player || player.cards.length > 2) return; // Can call Uno with 2 cards (before playing) or 1 card
 
   player.safeUno = true;
@@ -619,6 +643,8 @@ export function unoChallenge(room, socket, { targetPlayerId }, io) {
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       system: true,
     });
+
+    io.to(room.code).emit('uno-challenge-success', { challengerId: challenger.id, targetPlayerId: target.id });
 
     broadcastGameUpdate(room, io);
   }

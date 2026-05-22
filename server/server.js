@@ -128,7 +128,7 @@ io.on('connection', (socket) => {
         jumpIn: true,
         sevenSwap: true,
         zeroRotate: true,
-        drawTillPlay: false,
+        drawTillPlay: true,
       } : {
         pointsToWin: 15,
         turnDuration: 30, // 30 seconds
