@@ -2521,7 +2521,7 @@ input:checked + .slider:before {
 
   /* === PLAYER HAND â€” with padding for FABs on sides === */
   .hand-controls-container {
-    padding: 0.1rem 11rem;
+    padding: 0.1rem 13rem;
     gap: 0;
     border-top: none;
     background: rgba(15, 23, 42, 0.85);
@@ -2543,6 +2543,14 @@ input:checked + .slider:before {
     padding: 0.2rem;
     border-radius: 5px;
     border-width: 1px;
+  }
+
+  .mobile-action-btn {
+    height: 62px;
+    min-width: 76px;
+    padding: 0 16px;
+    font-size: 0.78rem;
+    border-radius: 6px;
   }
 
   .card-value {
@@ -2945,14 +2953,15 @@ input:checked + .slider:before {
   .seat-3 { right: -4px; }
 
   .mobile-action-btn {
-    height: 32px;
-    padding: 0 8px;
-    min-width: 48px;
-    font-size: 0.65rem;
+    height: 54px;
+    padding: 0 12px;
+    min-width: 68px;
+    font-size: 0.7rem;
+    border-radius: 5px;
   }
 
   .hand-controls-container {
-    padding: 0.1rem 10rem;
+    padding: 0.1rem 12rem;
   }
 
   .floating-chat-btn {
