@@ -38,6 +38,7 @@ interface GameTableProps {
   isSinglePlayer: boolean;
   roomCode?: string;
   isHost: boolean;
+  isMobile?: boolean;
 }
 
 function triggerConfetti(playerId: string) {
@@ -161,12 +162,15 @@ export const GameTable: React.FC<GameTableProps> = ({
   isSinglePlayer: _isSinglePlayer,
   roomCode,
   isHost,
+  isMobile = false,
 }) => {
   const [selectedCardIds, setSelectedCardIds] = useState<string[]>([]);
   const [localHand, setLocalHand] = useState<Card[]>([]);
   const [timeLeft, setTimeLeft] = useState<number>(rules.turnDuration);
   const [soundMuted, setSoundMuted] = useState<boolean>(sfx.getMuted());
   const [handKey, setHandKey] = useState<number>(0);
+  const [isPrevPlaysMinimized, setIsPrevPlaysMinimized] = useState<boolean>(false);
+  const [isLastPlayMinimized, setIsLastPlayMinimized] = useState<boolean>(false);
 
   // Drag and drop states & refs
   const [isDragging, setIsDragging] = useState<boolean>(false);
@@ -693,7 +697,7 @@ export const GameTable: React.FC<GameTableProps> = ({
   const suitNames: Record<string, string> = { D: 'red-suit', C: 'black-suit', H: 'red-suit', S: 'black-suit' };
 
   return (
-    <div className="game-layout">
+    <div className={`game-layout ${isMobile ? 'mobile-game' : ''}`}>
       {/* Top Header Bar */}
       <div className="game-top-bar">
         <div className="game-title-info">
@@ -707,7 +711,7 @@ export const GameTable: React.FC<GameTableProps> = ({
             {soundMuted ? '🔇' : '🔊'}
           </button>
           <button className="btn-secondary" style={{ padding: '0.4rem 1rem', fontSize: '0.85rem' }} onClick={onLeaveRoom}>
-            Exit Table
+            {isMobile ? '✕' : 'Exit Table'}
           </button>
         </div>
       </div>
@@ -852,35 +856,47 @@ export const GameTable: React.FC<GameTableProps> = ({
 
           {/* Previous Plays Panel (Left Side of Table) */}
           {playHistory.length > 1 && (
-            <div className="previous-plays-panel">
-              <div className="previous-plays-title">Previous Plays</div>
-              <div className="previous-plays-list" ref={prevPlaysListRef}>
-                {playHistory.slice(0, -1).map((play, playIdx) => (
-                  <div key={playIdx} className="previous-play-row">
-                    <span className="prev-play-name">{play.playerName}:</span>
-                    <div className="prev-play-cards">
-                      {play.cards.map((c, cardIdx) => (
-                        <div key={c.id || cardIdx} className={`prev-card-mini ${suitNames[c.suit]}`}>
-                          {c.rank}{suitSymbols[c.suit]}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ))}
+            <div className={`previous-plays-panel ${isPrevPlaysMinimized ? 'minimized' : ''}`}>
+              <div className="previous-plays-title" onClick={() => isMobile && setIsPrevPlaysMinimized(!isPrevPlaysMinimized)} style={isMobile ? { cursor: 'pointer' } : undefined}>
+                Previous Plays
+                {isMobile && <span className="panel-toggle-icon">{isPrevPlaysMinimized ? '▲' : '▼'}</span>}
               </div>
+              {!isPrevPlaysMinimized && (
+                <div className="previous-plays-list" ref={prevPlaysListRef}>
+                  {playHistory.slice(0, -1).map((play, playIdx) => (
+                    <div key={playIdx} className="previous-play-row">
+                      <span className="prev-play-name">{play.playerName}:</span>
+                      <div className="prev-play-cards">
+                        {play.cards.map((c, cardIdx) => (
+                          <div key={c.id || cardIdx} className={`prev-card-mini ${suitNames[c.suit]}`}>
+                            {c.rank}{suitSymbols[c.suit]}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
           {/* Last Play Panel (Right Side of Table) */}
           {activePlay && (
-            <div className="last-play-panel">
-              <div className="last-play-title">Last Play</div>
-              <div className="last-play-player">
-                By: <span>{players.find((p) => p.id === lastPlayerPlayedId)?.name || 'Unknown'}</span>
+            <div className={`last-play-panel ${isLastPlayMinimized ? 'minimized' : ''}`}>
+              <div className="last-play-title" onClick={() => isMobile && setIsLastPlayMinimized(!isLastPlayMinimized)} style={isMobile ? { cursor: 'pointer' } : undefined}>
+                Last Play
+                {isMobile && <span className="panel-toggle-icon">{isLastPlayMinimized ? '▲' : '▼'}</span>}
               </div>
-              <div className="last-play-combo">
-                {getComboDescription(activePlay)}
-              </div>
+              {!isLastPlayMinimized && (
+                <>
+                  <div className="last-play-player">
+                    By: <span>{players.find((p) => p.id === lastPlayerPlayedId)?.name || 'Unknown'}</span>
+                  </div>
+                  <div className="last-play-combo">
+                    {getComboDescription(activePlay)}
+                  </div>
+                </>
+              )}
             </div>
           )}
 
@@ -937,14 +953,19 @@ export const GameTable: React.FC<GameTableProps> = ({
         {/* Organizer Utilities (Sort, shift, combos) */}
         <div className="hand-utilities-row">
           <div className="hand-organizer-buttons">
-            <button className="btn-utility" onClick={() => handleSort('rank')}>Sort Rank</button>
-            <button className="btn-utility" onClick={() => handleSort('suit')}>Sort Suit</button>
+            <button className="btn-utility" onClick={() => handleSort('rank')} title="Sort by Rank">
+              {isMobile ? '🔤' : 'Sort Rank'}
+            </button>
+            <button className="btn-utility" onClick={() => handleSort('suit')} title="Sort by Suit">
+              {isMobile ? '♠' : 'Sort Suit'}
+            </button>
             {selectedCardIds.length > 0 && (
               <button 
                 className="btn-utility btn-reset-selection" 
                 onClick={() => setSelectedCardIds([])}
+                title="Reset Selection"
               >
-                Reset Selection
+                {isMobile ? '✕' : 'Reset Selection'}
               </button>
             )}
           </div>
@@ -952,10 +973,12 @@ export const GameTable: React.FC<GameTableProps> = ({
           <div className="selected-cards-label">
             {selectedCards.length > 0 ? (
               <>
-                Selected ({selectedCards.length}): <span>{validationMessage}</span>
+                {isMobile ? '' : `Selected (${selectedCards.length}): `}<span>{validationMessage}</span>
               </>
             ) : (
-              isMyTurn ? "Your turn! Select cards to play." : "Waiting for other players..."
+              isMobile 
+                ? (isMyTurn ? "Your turn!" : "Waiting...")
+                : (isMyTurn ? "Your turn! Select cards to play." : "Waiting for other players...")
             )}
           </div>
         </div>
@@ -971,19 +994,19 @@ export const GameTable: React.FC<GameTableProps> = ({
         <div className="hand-actions-row">
           <button
             className="btn-primary"
-            style={{ minWidth: '120px' }}
+            style={{ minWidth: isMobile ? '80px' : '120px' }}
             disabled={!canPlaySelected || hasActionedThisTurn}
             onClick={handlePlayClick}
           >
-            Play Hand
+            {isMobile ? '▶ Play' : 'Play Hand'}
           </button>
           <button
             className="btn-danger"
-            style={{ minWidth: '120px' }}
+            style={{ minWidth: isMobile ? '80px' : '120px' }}
             disabled={!isMyTurn || isFirstPlayOfRound || !activePlay || hasActionedThisTurn}
             onClick={handlePassClick}
           >
-            Pass
+            {isMobile ? '⏭ Pass' : 'Pass'}
           </button>
         </div>
       </div>

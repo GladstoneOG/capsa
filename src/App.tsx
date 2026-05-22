@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { io, type Socket } from 'socket.io-client';
 import { AvatarCreator, getRandomAvatar, DEFAULT_AVATAR, AvatarSVG } from './components/AvatarCreator';
 import type { AvatarConfig } from './components/AvatarCreator';
@@ -51,6 +51,51 @@ export default function App() {
   const [roomCodeInput, setRoomCodeInput] = useState<string>('');
   const [errorMsg, setErrorMsg] = useState<string>('');
   const [copiedCode, setCopiedCode] = useState<boolean>(false);
+
+  // Mobile detection
+  const [isMobileLandscape, setIsMobileLandscape] = useState<boolean>(false);
+  const [isPortrait, setIsPortrait] = useState<boolean>(false);
+  const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
+
+  // Detect mobile landscape and portrait orientation
+  useEffect(() => {
+    const mobileLandscapeQuery = window.matchMedia('(max-width: 932px) and (max-height: 500px) and (orientation: landscape)');
+    const mobilePortraitQuery = window.matchMedia('(max-width: 600px) and (orientation: portrait)');
+    // Also detect landscape phones that are slightly bigger
+    const mobileTouchQuery = window.matchMedia('(hover: none) and (pointer: coarse)');
+
+    const handleChange = () => {
+      const isTouchDevice = mobileTouchQuery.matches;
+      setIsMobileLandscape(mobileLandscapeQuery.matches || (isTouchDevice && window.innerWidth <= 932 && window.innerWidth > window.innerHeight));
+      setIsPortrait(mobilePortraitQuery.matches || (isTouchDevice && window.innerHeight > window.innerWidth && window.innerWidth <= 600));
+    };
+
+    handleChange();
+    mobileLandscapeQuery.addEventListener('change', handleChange);
+    mobilePortraitQuery.addEventListener('change', handleChange);
+    window.addEventListener('resize', handleChange);
+
+    // Fullscreen change listener
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+
+    return () => {
+      mobileLandscapeQuery.removeEventListener('change', handleChange);
+      mobilePortraitQuery.removeEventListener('change', handleChange);
+      window.removeEventListener('resize', handleChange);
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+    };
+  }, []);
+
+  const toggleFullscreen = useCallback(() => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().catch(() => {});
+    } else {
+      document.exitFullscreen().catch(() => {});
+    }
+  }, []);
 
   // Game State
   const [isSinglePlayer, setIsSinglePlayer] = useState<boolean>(false);
@@ -914,6 +959,24 @@ export default function App() {
   // ==================== Render Screen Switching ====================
   return (
     <div style={{ position: 'relative', minHeight: '100vh', overflow: 'hidden' }}>
+      {/* Portrait Orientation Lock Overlay */}
+      {isPortrait && (
+        <div className="portrait-lock-overlay">
+          <div className="portrait-lock-content">
+            <div className="rotate-phone-icon">
+              <svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <rect x="16" y="8" width="32" height="48" rx="4" stroke="currentColor" strokeWidth="2.5" fill="none" />
+                <circle cx="32" cy="50" r="2" fill="currentColor" />
+                <path d="M52 20 L56 24 L52 28" stroke="var(--accent-gold)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                <path d="M56 24 C56 24 50 10 32 10" stroke="var(--accent-gold)" strokeWidth="2.5" strokeLinecap="round" fill="none" />
+              </svg>
+            </div>
+            <h2 style={{ fontSize: '1.4rem', fontWeight: 700, marginBottom: '0.5rem' }}>Rotate Your Device</h2>
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>Please switch to landscape mode to play Capsa Banting</p>
+          </div>
+        </div>
+      )}
+
       <div className="glow-orb glow-orb-1" />
       <div className="glow-orb glow-orb-2" />
 
@@ -1267,6 +1330,7 @@ export default function App() {
           isSinglePlayer={isSinglePlayer}
           roomCode={roomCode}
           isHost={players.find(pl => isSinglePlayer ? pl.id === 'local_user' : pl.id === socketId)?.isHost || false}
+          isMobile={isMobileLandscape}
         />
       )}
 
@@ -1326,6 +1390,17 @@ export default function App() {
             </form>
           </div>
         </>
+      )}
+
+      {/* Mobile Fullscreen Toggle */}
+      {(isMobileLandscape || isPortrait) && (
+        <button
+          className="mobile-fullscreen-btn"
+          onClick={toggleFullscreen}
+          title={isFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen'}
+        >
+          {isFullscreen ? '⊡' : '⛶'}
+        </button>
       )}
     </div>
   );
