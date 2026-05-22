@@ -341,7 +341,7 @@ export default function App() {
   const triggerBotChatMessage = (botName: string, botId: string, actionType: 'play' | 'pass' | 'win' | 'bomb') => {
     const roll = Math.random();
     let text = '';
-    
+
     if (actionType === 'bomb') {
       const quotes = [
         "💥 BOOM! Direct hit!",
@@ -471,7 +471,7 @@ export default function App() {
 
   const startSinglePlayerGame = () => {
     sfx.playDeal();
-    
+
     // Auto-fill empty slots with bots up to 4 players
     let currentPlayers = [...players];
     const botNames = ['Budi Bot', 'Siti Bot', 'Joko Bot', 'Dewi Bot'];
@@ -485,7 +485,7 @@ export default function App() {
       const existingNames = currentPlayers.map((p) => p.name);
       const botName = botNames.find((n) => !existingNames.includes(n)) || `Bot ${currentPlayers.length + 1}`;
       const botAvatar = botAvatars[currentPlayers.length % botAvatars.length];
-      
+
       currentPlayers.push({
         id: `bot_${Math.random()}`,
         name: botName,
@@ -562,7 +562,7 @@ export default function App() {
         }
 
         const hand = activePlayer.cards.filter((c): c is Card => c !== null);
-        
+
         // Is it the very first play of the game?
         const isFirstPlay = latestPlayers.every(p => p.cards.length === 13) && !latestActivePlay;
 
@@ -660,20 +660,20 @@ export default function App() {
       // Check if trick is won: all other players with cards have passed
       const otherPlayersWithCards = updated.filter(player => player.id !== pId && player.cards.length > 0);
       const allOthersPassed = otherPlayersWithCards.every(player => player.passed);
-      
+
       if (allOthersPassed) {
         if (p.cards.length === 0) {
           // Hibah / Gift: Clear active play and pass lead clockwise to next player with cards
           setActivePlay(null);
           setLastPlayerPlayedId(null);
-          
+
           const resetPlayers = updated.map((player) => ({
             ...player,
             passed: false,
             lastPlay: null,
           }));
           setPlayers(resetPlayers);
-          
+
           let nextIdx = idx;
           let found = false;
           for (let i = 0; i < resetPlayers.length; i++) {
@@ -686,9 +686,9 @@ export default function App() {
           if (!found) {
             nextIdx = idx;
           }
-          
+
           setTurnIndex(nextIdx);
-          
+
           const leadPlayerName = resetPlayers[nextIdx].name;
           const trickSysMsg: ChatMessage = {
             id: `sys_${Math.random()}`,
@@ -703,16 +703,16 @@ export default function App() {
           // Trick won by the current player (who still has cards)
           setActivePlay(null);
           setLastPlayerPlayedId(null);
-          
+
           const resetPlayers = updated.map((player) => ({
             ...player,
             passed: false,
             lastPlay: null,
           }));
           setPlayers(resetPlayers);
-          
+
           setTurnIndex(idx);
-          
+
           const trickSysMsg: ChatMessage = {
             id: `sys_${Math.random()}`,
             senderName: 'System',
@@ -761,7 +761,7 @@ export default function App() {
       system: true,
     };
     setChatMessages((prevMsgs) => [...prevMsgs, sysMsg]);
-    
+
     if (p.isBot) {
       triggerBotChatMessage(p.name, p.id, 'pass');
     }
@@ -774,7 +774,7 @@ export default function App() {
 
       setActivePlay(null);
       setLastPlayerPlayedId(null);
-      
+
       const resetPlayers = updated.map((player) => ({
         ...player,
         passed: false,
@@ -835,12 +835,12 @@ export default function App() {
 
   const handleRoundOverSingle = (finalPlayers: Player[]) => {
     setGameState('roundover');
-    
+
     const numPlayers = finalPlayers.length;
     const scoredPlayers = finalPlayers.map(p => {
       const rank = p.finishRank || numPlayers;
       const points = numPlayers - rank + 1;
-      
+
       const newScore = p.score + points;
       return {
         ...p,
@@ -863,7 +863,7 @@ export default function App() {
       system: true,
     };
     setChatMessages(prevMsgs => [...prevMsgs, roundOverMsg]);
-    
+
     if (winner && winner.isBot) {
       triggerBotChatMessage(winner.name, winner.id, 'win');
     }
@@ -922,7 +922,7 @@ export default function App() {
           <div className="glass-panel menu-panel">
             <div className="menu-title-section">
               <h1 className="menu-title">Capsa Banting</h1>
-              <p className="menu-subtitle">Indonesian Big Two Card Game</p>
+              <p className="menu-subtitle">Bikinan Johan tanpa AI</p>
             </div>
 
             {errorMsg && (
@@ -1041,7 +1041,7 @@ export default function App() {
                       <span style={{ fontWeight: 'bold', fontSize: '0.95rem' }}>
                         {p.name} {isLocal ? '(You)' : ''}
                       </span>
-                      
+
                       <div style={{ display: 'flex', gap: '0.25rem' }}>
                         {isHostPlayer && <span className="player-tag host">Host</span>}
                         {p.isBot && <span className="player-tag bot">Bot</span>}
@@ -1215,7 +1215,7 @@ export default function App() {
                       const botNames = ['Budi Bot', 'Siti Bot', 'Joko Bot', 'Dewi Bot'];
                       const existing = players.map((p) => p.name);
                       const botName = botNames.find((n) => !existing.includes(n)) || `Bot ${players.length + 1}`;
-                      
+
                       const botAvatars = [
                         { skinColor: '#FFDBAC', hairStyle: 'spiky', hairColor: '#1A1A1A', expression: 'cool', clothesColor: '#2F855A' },
                         { skinColor: '#F1C27D', hairStyle: 'bob', hairColor: '#E5C158', expression: 'smile', clothesColor: '#6B46C1' },
@@ -1273,8 +1273,8 @@ export default function App() {
       {screen !== 'menu' && (
         <>
           {/* Floating Chat Button */}
-          <button 
-            className={`floating-chat-btn ${isChatOpen ? 'hidden' : ''}`} 
+          <button
+            className={`floating-chat-btn ${isChatOpen ? 'hidden' : ''}`}
             onClick={() => setIsChatOpen(true)}
             title="Open Chat"
           >
@@ -1290,7 +1290,7 @@ export default function App() {
               <h3>Room Chat</h3>
               <button className="chat-close-btn" onClick={() => setIsChatOpen(false)}>✕</button>
             </div>
-            
+
             <div className="chat-messages-container" ref={chatMessagesContainerRef}>
               {chatMessages.map((msg) => {
                 if (msg.system) {
@@ -1300,7 +1300,7 @@ export default function App() {
                     </div>
                   );
                 }
-                
+
                 const isMe = msg.senderId === 'local_user' || msg.senderId === socketId;
                 return (
                   <div key={msg.id} className={`chat-message-row ${isMe ? 'me' : 'other'}`}>
