@@ -40,8 +40,8 @@ interface ChatMessage {
 interface RoomRules {
   pointsToWin: number;
   turnDuration: number;
-  enableBombsSingle?: boolean;
-  enableBombsPair?: boolean;
+  enableBombsSingle: boolean;
+  enableBombsPair: boolean;
   stacking?: boolean;
   jumpIn?: boolean;
   sevenSwap?: boolean;

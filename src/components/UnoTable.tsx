@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { AvatarSVG } from './AvatarCreator';
 import { sfx } from '../utils/audio';
-import { isCardPlayable, getPlayableCards, type UnoCard } from '../utils/unoLogic';
+import { isCardPlayable, type UnoCard } from '../utils/unoLogic';
 
 interface Player {
   id: string;
@@ -163,7 +163,7 @@ export const UnoTable: React.FC<UnoTableProps> = ({
   rules,
   roomCode,
   isHost,
-  isSinglePlayer,
+  isSinglePlayer: _isSinglePlayer,
   onPlayCard,
   onDrawCard,
   onPass,
@@ -689,7 +689,7 @@ export const UnoTable: React.FC<UnoTableProps> = ({
                 setTimeout(() => {
                   setShowZeroRotateAnim(false);
                 }, 1200);
-              } else if (val === 'wild' && val !== 'wild4') {
+              } else if (val === 'wild') {
                 setShowWildAnim(true);
                 setTimeout(() => {
                   setShowWildAnim(false);
@@ -806,16 +806,6 @@ export const UnoTable: React.FC<UnoTableProps> = ({
     }
   }, [discardPile.length, gameState]);
 
-  // Determine top card of discard pile, delaying it if the top card is currently flying
-  const topDiscardCard = useMemo(() => {
-    if (discardPile.length === 0) return null;
-    if (isInitialDealing && !showStartingDiscard) return null;
-    const actualTop = discardPile[discardPile.length - 1];
-    if (playingCardId && actualTop.id === playingCardId) {
-      return discardPile[discardPile.length - 2] || null;
-    }
-    return actualTop;
-  }, [discardPile, playingCardId, isInitialDealing, showStartingDiscard]);
 
   // Helper to compute stable rotations and offsets for discard pile stacking
   const getCardOffsets = useCallback((cardId: string) => {
