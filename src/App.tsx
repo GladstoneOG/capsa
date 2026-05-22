@@ -27,6 +27,7 @@ interface Player {
   isReady: boolean;
   finishRank?: number;
   safeUno?: boolean;
+  disconnected?: boolean;
 }
 
 interface ChatMessage {
@@ -51,6 +52,18 @@ interface RoomRules {
 }
 
 const INDONESIAN_NAMES = ['Aris', 'Budi', 'Candra', 'Dewi', 'Eko', 'Fitri', 'Giri', 'Hadi', 'Indra', 'Joko', 'Kartika', 'Laras', 'Mega', 'Nugroho', 'Putri', 'Rian', 'Siti', 'Taufik', 'Utami', 'Wulan'];
+const PLAYER_SESSION_STORAGE_KEY = 'capsa_player_session_id';
+
+function getOrCreatePlayerSessionId() {
+  const existing = localStorage.getItem(PLAYER_SESSION_STORAGE_KEY);
+  if (existing) return existing;
+
+  const nextId = typeof crypto !== 'undefined' && crypto.randomUUID
+    ? crypto.randomUUID()
+    : `session_${Math.random().toString(36).slice(2)}_${Date.now().toString(36)}`;
+  localStorage.setItem(PLAYER_SESSION_STORAGE_KEY, nextId);
+  return nextId;
+}
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>('menu');
@@ -61,6 +74,7 @@ export default function App() {
   const [roomCodeInput, setRoomCodeInput] = useState<string>('');
   const [errorMsg, setErrorMsg] = useState<string>('');
   const [copiedCode, setCopiedCode] = useState<boolean>(false);
+  const [playerSessionId] = useState<string>(() => getOrCreatePlayerSessionId());
 
   // Mobile detection
   const [isMobileLandscape, setIsMobileLandscape] = useState<boolean>(false);
@@ -170,6 +184,12 @@ export default function App() {
   // Refs
   const socketRef = useRef<Socket | null>(null);
   const botTimerRef = useRef<any>(null);
+  const hasConnectedRef = useRef<boolean>(false);
+  const roomCodeRef = useRef<string>(roomCode);
+  const screenRef = useRef<Screen>(screen);
+  const isSinglePlayerRef = useRef<boolean>(isSinglePlayer);
+  const playerNameRef = useRef<string>(playerName);
+  const avatarRef = useRef<AvatarConfig>(avatar);
   const stateRef = useRef({
     players,
     turnIndex,
@@ -187,6 +207,14 @@ export default function App() {
     unoDiscardPile,
     unoDrawPile
   });
+
+  useEffect(() => {
+    roomCodeRef.current = roomCode;
+    screenRef.current = screen;
+    isSinglePlayerRef.current = isSinglePlayer;
+    playerNameRef.current = playerName;
+    avatarRef.current = avatar;
+  }, [roomCode, screen, isSinglePlayer, playerName, avatar]);
 
   // Update state ref for bot loop
   useEffect(() => {
@@ -258,8 +286,32 @@ export default function App() {
   }, [gameState]);
 
   // ==================== Socket.io Handlers ====================
+  const applyRoomStateFromServer = (room: any, nextScreen?: Screen) => {
+    setRoomCode(room.code || roomCodeRef.current);
+    setPlayers(room.players);
+    setTurnIndex(room.turnIndex || 0);
+    setActivePlay(room.activePlay || null);
+    setLastPlayerPlayedId(room.lastPlayerPlayedId || null);
+    setRules(room.rules);
+    setGameState(room.gameState);
+    setGameType(room.gameType || 'capsa');
+    if (room.gameType === 'uno') {
+      setUnoCurrentColor(room.currentColor || 'red');
+      setUnoCurrentValue(room.currentValue || '0');
+      setUnoPlayDirection(room.playDirection || 1);
+      setUnoAccumulatedDrawCount(room.accumulatedDrawCount || 0);
+      setUnoSevenSwappingPlayerId(room.sevenSwappingPlayerId || null);
+      setUnoLastSevenSwap(room.lastSevenSwap || null);
+      setUnoDiscardPile(room.discardPile || []);
+    }
+    if (nextScreen) {
+      setScreen(nextScreen);
+    }
+  };
+
   const initSocket = () => {
     if (socketRef.current) socketRef.current.disconnect();
+    hasConnectedRef.current = false;
 
     // Check if we are in local dev, otherwise fallback to local port
     const finalUrl = serverUrl || 'http://localhost:3001';
@@ -272,6 +324,17 @@ export default function App() {
 
     socket.on('connect', () => {
       setSocketId(socket.id || '');
+      const wasReconnect = hasConnectedRef.current;
+      hasConnectedRef.current = true;
+
+      if (wasReconnect && !isSinglePlayerRef.current && roomCodeRef.current && screenRef.current !== 'menu') {
+        socket.emit('resume-room', {
+          roomCode: roomCodeRef.current,
+          playerName: playerNameRef.current,
+          avatar: avatarRef.current,
+          sessionId: playerSessionId,
+        });
+      }
     });
 
     socket.on('disconnect', () => {
@@ -310,6 +373,11 @@ export default function App() {
       setRules(room.rules);
       setGameState(room.gameState);
       setGameType(room.gameType || 'capsa');
+    });
+
+    socket.on('room-resumed', (room) => {
+      applyRoomStateFromServer(room, room.gameState === 'lobby' ? 'lobby' : 'table');
+      setErrorMsg('');
     });
 
     socket.on('join-error', (msg) => {
@@ -418,7 +486,12 @@ export default function App() {
     setUnreadChatCount(0);
     setIsSinglePlayer(false);
     initSocket();
-    socketRef.current?.emit('create-room', { playerName, avatar, gameType });
+    socketRef.current?.emit('create-room', {
+      playerName,
+      avatar,
+      gameType,
+      sessionId: playerSessionId,
+    });
   };
 
   const joinOnlineRoom = () => {
@@ -439,6 +512,7 @@ export default function App() {
       roomCode: roomCodeInput.toUpperCase(),
       playerName,
       avatar,
+      sessionId: playerSessionId,
     });
     setRoomCode(roomCodeInput.toUpperCase());
     setScreen('lobby');
@@ -782,7 +856,7 @@ export default function App() {
   const startSinglePlayerUnoGame = () => {
     sfx.playDeal();
 
-    let currentPlayers = [...players];
+    const currentPlayers = [...players];
     const botNames = ['Budi Bot', 'Siti Bot', 'Joko Bot', 'Dewi Bot', 'Aris Bot', 'Dewo Bot', 'Fitri Bot'];
     const botAvatars = [
       { skinColor: '#FFDBAC', hairStyle: 'spiky', hairColor: '#1A1A1A', expression: 'cool', clothesColor: '#2F855A' },
@@ -1109,7 +1183,7 @@ export default function App() {
     }
 
     if (rules.drawTillPlay) {
-      let drawnCards: UnoCard[] = [];
+      const drawnCards: UnoCard[] = [];
       let foundPlayable = false;
 
       while (!foundPlayable && pile.length > 0) {
@@ -1367,7 +1441,7 @@ export default function App() {
     sfx.playDeal();
 
     // Auto-fill empty slots with bots up to 4 players
-    let currentPlayers = [...players];
+    const currentPlayers = [...players];
     const botNames = ['Budi Bot', 'Siti Bot', 'Joko Bot', 'Dewi Bot'];
     const botAvatars = [
       { skinColor: '#FFDBAC', hairStyle: 'spiky', hairColor: '#1A1A1A', expression: 'cool', clothesColor: '#2F855A' },
@@ -1599,10 +1673,14 @@ export default function App() {
   }, [turnIndex, gameState, isSinglePlayer, activePlay, unoCurrentColor, unoCurrentValue, unoSevenSwappingPlayerId]);
 
   function playCardsSingle(pId: string, cards: Card[]) {
-    const { players: currentPlayers, turnIndex: currentTurnIndex } = stateRef.current;
+    const { players: currentPlayers, turnIndex: currentTurnIndex, activePlay: currentActivePlay } = stateRef.current;
 
     const idx = currentPlayers.findIndex((p) => p.id === pId);
     if (idx === -1 || idx !== currentTurnIndex) return;
+    if (!cards.length) return;
+
+    const isFirstPlay = !currentActivePlay && currentPlayers.every(p => p.cards.length === 13);
+    if (isFirstPlay && !contains3Diamonds(cards)) return;
 
     // Count how many players have already finished (have finishRank set)
     const finishedCount = currentPlayers.filter((p) => p.finishRank !== undefined).length;
@@ -1742,10 +1820,13 @@ export default function App() {
   }
 
   function passTurnSingle(pId: string) {
-    const { players: currentPlayers, turnIndex: currentTurnIndex, lastPlayerPlayedId: currentLastPlayerPlayedId } = stateRef.current;
+    const { players: currentPlayers, turnIndex: currentTurnIndex, lastPlayerPlayedId: currentLastPlayerPlayedId, activePlay: currentActivePlay } = stateRef.current;
 
     const idx = currentPlayers.findIndex((p) => p.id === pId);
     if (idx === -1 || idx !== currentTurnIndex) return;
+
+    const isFirstPlay = !currentActivePlay && currentPlayers.every(p => p.cards.length === 13);
+    if (isFirstPlay) return;
 
     const updated = currentPlayers.map((player, index) => {
       if (index === idx) {

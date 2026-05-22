@@ -55,14 +55,37 @@ function getActivePlayerCount(players) {
   return players.filter(p => !p.passed && p.cards.length > 0).length;
 }
 
+function getPublicPlayerState(player) {
+  const { sessionId, ...publicPlayer } = player;
+  return publicPlayer;
+}
+
+function getPublicRoomState(room) {
+  return {
+    ...room,
+    players: room.players.map(getPublicPlayerState),
+  };
+}
+
+function isFirstPlayOfRound(room) {
+  return !room.activePlay && room.players.every(p => p.cards.length === 13);
+}
+
+function contains3Diamonds(cards) {
+  return cards.some(c => c.rank === '3' && c.suit === 'D');
+}
+
 export function getSanitizedRoomState(room, socketId) {
   return {
     ...room,
-    players: room.players.map(p => ({
-      ...p,
-      cards: p.id === socketId ? p.cards : Array(p.cards.length).fill(null),
-      actualCardCount: p.cards.length,
-    })),
+    players: room.players.map(p => {
+      const publicPlayer = getPublicPlayerState(p);
+      return {
+        ...publicPlayer,
+        cards: p.id === socketId ? p.cards : Array(p.cards.length).fill(null),
+        actualCardCount: p.cards.length,
+      };
+    }),
   };
 }
 
@@ -80,7 +103,7 @@ export function broadcastGameUpdate(room, io) {
   if (host && !host.isBot) {
     const hostSocket = io.sockets.sockets.get(host.id);
     if (hostSocket) {
-      hostSocket.emit('bot-coordinator-sync', room);
+      hostSocket.emit('bot-coordinator-sync', getPublicRoomState(room));
     }
   }
 }
@@ -123,7 +146,7 @@ export function startRound(room, io) {
   if (host && !host.isBot) {
     const hostSocket = io.sockets.sockets.get(host.id);
     if (hostSocket) {
-      hostSocket.emit('bot-coordinator-sync', room);
+      hostSocket.emit('bot-coordinator-sync', getPublicRoomState(room));
     }
   }
 }
@@ -157,7 +180,7 @@ function handleRoundOver(room, io) {
     room.gameState = 'gameover';
   }
 
-  io.to(room.code).emit('round-over', room);
+  io.to(room.code).emit('round-over', getPublicRoomState(room));
 }
 
 export function playCards(room, socket, { cards, comboType }, io) {
@@ -166,6 +189,8 @@ export function playCards(room, socket, { cards, comboType }, io) {
   const isAuthorized = currentPlayer.id === socket.id || (isBotTurn && room.players.find(p => p.id === socket.id)?.isHost);
 
   if (!isAuthorized) return;
+  if (!cards?.length) return;
+  if (isFirstPlayOfRound(room) && !contains3Diamonds(cards)) return;
 
   const playedCardIds = cards.map(c => c.id);
   const remainingCards = currentPlayer.cards.filter(c => !playedCardIds.includes(c.id));
@@ -282,6 +307,7 @@ export function passTurn(room, socket, io) {
   const isAuthorized = currentPlayer.id === socket.id || (isBotTurn && room.players.find(p => p.id === socket.id)?.isHost);
 
   if (!isAuthorized) return;
+  if (isFirstPlayOfRound(room)) return;
 
   currentPlayer.passed = true;
   currentPlayer.lastPlay = null;

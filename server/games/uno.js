@@ -39,11 +39,24 @@ function shuffle(deck) {
 export function getSanitizedRoomState(room, socketId) {
   return {
     ...room,
-    players: room.players.map(p => ({
-      ...p,
-      cards: p.id === socketId ? p.cards : Array(p.cards.length).fill(null),
-      actualCardCount: p.cards.length,
-    })),
+    players: room.players.map(p => {
+      const { sessionId, ...publicPlayer } = p;
+      return {
+        ...publicPlayer,
+        cards: p.id === socketId ? p.cards : Array(p.cards.length).fill(null),
+        actualCardCount: p.cards.length,
+      };
+    }),
+  };
+}
+
+function getPublicRoomState(room) {
+  return {
+    ...room,
+    players: room.players.map(p => {
+      const { sessionId, ...publicPlayer } = p;
+      return publicPlayer;
+    }),
   };
 }
 
@@ -61,7 +74,7 @@ export function broadcastGameUpdate(room, io) {
   if (host && !host.isBot) {
     const hostSocket = io.sockets.sockets.get(host.id);
     if (hostSocket) {
-      hostSocket.emit('bot-coordinator-sync', room);
+      hostSocket.emit('bot-coordinator-sync', getPublicRoomState(room));
     }
   }
 }
@@ -182,7 +195,7 @@ export function startRound(room, io) {
   if (host && !host.isBot) {
     const hostSocket = io.sockets.sockets.get(host.id);
     if (hostSocket) {
-      hostSocket.emit('bot-coordinator-sync', room);
+      hostSocket.emit('bot-coordinator-sync', getPublicRoomState(room));
     }
   }
 }
@@ -230,7 +243,7 @@ function handleRoundOver(room, io) {
     room.gameState = 'gameover';
   }
 
-  io.to(room.code).emit('round-over', room);
+  io.to(room.code).emit('round-over', getPublicRoomState(room));
 }
 
 export function drawCard(room, socket, io) {

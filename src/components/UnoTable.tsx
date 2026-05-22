@@ -162,7 +162,7 @@ export const UnoTable: React.FC<UnoTableProps> = ({
   sevenSwappingPlayerId,
   lastSevenSwap,
   lastUnoChallenge,
-  lastPlayerPlayedId,
+  lastPlayerPlayedId: _lastPlayerPlayedId,
   onClearUnoChallenge,
   discardPile,
   gameState,
@@ -196,6 +196,7 @@ export const UnoTable: React.FC<UnoTableProps> = ({
   const [swapCoords, setSwapCoords] = useState<{ x1: number; y1: number; x2: number; y2: number } | null>(null);
   const [activeTurnCoords, setActiveTurnCoords] = useState<{ x: number; y: number; rotation: number } | null>(null);
   const [resizeToggle, setResizeToggle] = useState<number>(0);
+  const [isCompactLayout, setIsCompactLayout] = useState<boolean>(false);
   const [skipTargetCoords, setSkipTargetCoords] = useState<{ x: number; y: number } | null>(null);
   const [skipSourceCoords, setSkipSourceCoords] = useState<{ x: number; y: number } | null>(null);
   const [caughtSourceCoords, setCaughtSourceCoords] = useState<{ x: number; y: number } | null>(null);
@@ -425,6 +426,17 @@ export const UnoTable: React.FC<UnoTableProps> = ({
     const handleResize = () => setResizeToggle(prev => prev + 1);
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  useEffect(() => {
+    const query = window.matchMedia(
+      '(max-width: 932px) and (max-height: 500px) and (orientation: landscape), (max-width: 768px) and (orientation: portrait)'
+    );
+    const updateCompactLayout = () => setIsCompactLayout(query.matches);
+
+    updateCompactLayout();
+    query.addEventListener('change', updateCompactLayout);
+    return () => query.removeEventListener('change', updateCompactLayout);
   }, []);
 
   // Calculate coordinates and rotation pointing to the active seat's avatar
@@ -1033,7 +1045,7 @@ export const UnoTable: React.FC<UnoTableProps> = ({
             let targetRot = 0;
             if (seatNum === 0) {
               const total = p.cards.length;
-              const spreadAngle = Math.min(45, (total - 1) * 3);
+              const spreadAngle = Math.min(isCompactLayout ? 30 : 45, (total - 1) * (isCompactLayout ? 2.6 : 3));
               const angleStep = total > 1 ? spreadAngle / (total - 1) : 0;
               const index = total - diff + i;
               targetRot = index * angleStep - spreadAngle / 2;
@@ -1060,7 +1072,7 @@ export const UnoTable: React.FC<UnoTableProps> = ({
     prevSevenSwappingPlayerIdRef.current = sevenSwappingPlayerId;
     prevLastSevenSwapRef.current = lastSevenSwap;
     prevGameStateRef.current = gameState;
-  }, [players, discardPile, turnIndex, playDirection, sevenSwappingPlayerId, lastSevenSwap, gameState, localIdx, rules.zeroRotate, rules.jumpIn, addFlyingAnim, clearDealingTimeouts, localHand, isInitialDealing, getElementCoords]);
+  }, [players, discardPile, turnIndex, playDirection, sevenSwappingPlayerId, lastSevenSwap, gameState, localIdx, rules.zeroRotate, rules.jumpIn, addFlyingAnim, clearDealingTimeouts, localHand, isInitialDealing, getElementCoords, isCompactLayout]);
 
   // Check if a card is playable
   const playableIds = useMemo(() => {
@@ -1510,12 +1522,12 @@ export const UnoTable: React.FC<UnoTableProps> = ({
 
                 // Fan out positions (spaced out horizontally wider with premium flatter fan arc)
                 const total = localHand.length;
-                const spreadAngle = Math.min(45, (total - 1) * 3);
+                const spreadAngle = Math.min(isCompactLayout ? 30 : 45, (total - 1) * (isCompactLayout ? 2.6 : 3));
                 const angleStep = total > 1 ? spreadAngle / (total - 1) : 0;
                 const rotation = index * angleStep - spreadAngle / 2;
                 
-                const translationX = (index - (total - 1) / 2) * Math.min(70, 800 / total);
-                const translationY = Math.abs(rotation) * 0.4;
+                const translationX = (index - (total - 1) / 2) * Math.min(isCompactLayout ? 38 : 70, (isCompactLayout ? 520 : 800) / total);
+                const translationY = Math.abs(rotation) * (isCompactLayout ? 0.28 : 0.4);
 
                 const isHidden = isInitialDealing && !revealedCardIds.has(card.id);
 

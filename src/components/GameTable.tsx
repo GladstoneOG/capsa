@@ -288,6 +288,7 @@ export const GameTable: React.FC<GameTableProps> = ({
   const localPlayerIndex = players.findIndex((p) => p.id === playerId);
   const localPlayer = players[localPlayerIndex];
   const isMyTurn = turnIndex === localPlayerIndex && gameState === 'playing';
+  const isFirstPlayOfRound = players.every(p => p.cards.length === 13) && !activePlay;
 
   // Synchronize local hand when cards are dealt or changed
   useEffect(() => {
@@ -381,7 +382,10 @@ export const GameTable: React.FC<GameTableProps> = ({
   useEffect(() => {
     if (timerRef.current) clearInterval(timerRef.current);
 
-    if (gameState !== 'playing' || rules.turnDuration === 0) return;
+    if (gameState !== 'playing' || rules.turnDuration === 0 || isFirstPlayOfRound) {
+      setTimeLeft(rules.turnDuration);
+      return;
+    }
 
     setTimeLeft(rules.turnDuration);
 
@@ -405,7 +409,7 @@ export const GameTable: React.FC<GameTableProps> = ({
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, [turnIndex, gameState, isMyTurn]);
+  }, [turnIndex, gameState, isMyTurn, isFirstPlayOfRound, rules.turnDuration]);
 
   // Toggle sound
   const toggleSound = () => {
@@ -611,9 +615,6 @@ export const GameTable: React.FC<GameTableProps> = ({
   const selectedCards = localHand.filter((c) => selectedCardIds.includes(c.id));
   const selectedCombo = checkCombination(selectedCards);
 
-  // Validate play
-  const isFirstPlayOfRound = players.every(p => p.cards.length === 13) && !activePlay;
-
   // Determine if there are valid plays possible for the player
   const validPlaysForMe = isMyTurn && activePlay && localPlayer
     ? getValidPlays(localHand, activePlay, isFirstPlayOfRound, {
@@ -663,7 +664,7 @@ export const GameTable: React.FC<GameTableProps> = ({
   };
 
   const handlePassClick = () => {
-    if (isMyTurn && !hasActionedThisTurn) {
+    if (isMyTurn && !isFirstPlayOfRound && activePlay && !hasActionedThisTurn) {
       setHasActionedThisTurn(true);
       onPass();
       setSelectedCardIds([]);
@@ -760,7 +761,7 @@ export const GameTable: React.FC<GameTableProps> = ({
                     </div>
                   )}
                   
-                  {isPlayerTurn && rules.turnDuration > 0 && (
+                  {isPlayerTurn && rules.turnDuration > 0 && !isFirstPlayOfRound && (
                     <div className="turn-timer-ring">
                       {player.id === playerId && <div className="timer-badge" style={{ position: 'absolute', top: '-18px', left: '50%', transform: 'translateX(-50%)', background: '#fbbf24', color: '#1e1b4b', padding: '0 4px', borderRadius: '4px', fontSize: '0.65rem', fontWeight: 'bold' }}>{timeLeft}s</div>}
                     </div>
