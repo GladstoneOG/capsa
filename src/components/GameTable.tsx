@@ -939,6 +939,14 @@ export const GameTable: React.FC<GameTableProps> = ({
           <div className="hand-organizer-buttons">
             <button className="btn-utility" onClick={() => handleSort('rank')}>Sort Rank</button>
             <button className="btn-utility" onClick={() => handleSort('suit')}>Sort Suit</button>
+            {selectedCardIds.length > 0 && (
+              <button 
+                className="btn-utility btn-reset-selection" 
+                onClick={() => setSelectedCardIds([])}
+              >
+                Reset Selection
+              </button>
+            )}
           </div>
 
           <div className="selected-cards-label">

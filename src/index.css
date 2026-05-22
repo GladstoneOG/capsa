@@ -971,7 +971,8 @@ input:checked + .slider:before {
 .playing-card.selected.not-turn {
   box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
   border: 2px dashed #94a3b8 !important;
-  opacity: 0.85;
+  opacity: 1 !important;
+  background-color: var(--card-front-bg) !important;
 }
 
 .playing-card.unselectable {
@@ -1097,6 +1098,17 @@ input:checked + .slider:before {
   background: rgba(139, 92, 246, 0.2);
   border-color: var(--primary);
   color: #c084fc;
+}
+
+.btn-utility.btn-reset-selection {
+  background: rgba(239, 68, 68, 0.1);
+  border-color: rgba(239, 68, 68, 0.2);
+  color: #f87171;
+}
+.btn-utility.btn-reset-selection:hover {
+  background: rgba(239, 68, 68, 0.2);
+  color: #fca5a5;
+  border-color: rgba(239, 68, 68, 0.4);
 }
 
 .selected-cards-label {
@@ -1234,16 +1246,19 @@ input:checked + .slider:before {
   justify-content: space-between;
   gap: 0.5rem;
   font-size: 0.75rem;
+  width: 100%;
 }
 
 .prev-play-name {
+  display: block;
   color: var(--text-primary);
   font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
-  max-width: 75px;
-  -webkit-mask-image: linear-gradient(to right, #000 65%, transparent 100%);
-  mask-image: linear-gradient(to right, #000 65%, transparent 100%);
+  flex: 1;
+  min-width: 0;
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 20px), transparent 100%);
+  mask-image: linear-gradient(to right, #000 calc(100% - 20px), transparent 100%);
 }
 
 .prev-play-cards {
