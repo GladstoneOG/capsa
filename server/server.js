@@ -4,6 +4,7 @@ import { Server } from 'socket.io';
 import cors from 'cors';
 import * as capsaEngine from './games/capsa.js';
 import * as unoEngine from './games/uno.js';
+import * as monopolyEngine from './games/monopoly.js';
 
 const app = express();
 app.use(cors());
@@ -43,6 +44,7 @@ function emitRoomUpdated(roomCode, room) {
 }
 
 function getRoomEngine(room) {
+  if (room.gameType === 'monopoly') return monopolyEngine;
   return room.gameType === 'uno' ? unoEngine : capsaEngine;
 }
 
@@ -243,7 +245,10 @@ io.on('connection', (socket) => {
           lastPlay: null,
         },
       ],
-      rules: type === 'uno' ? {
+      rules: type === 'monopoly' ? {
+        pointsToWin: 0,
+        turnDuration: 30
+      } : type === 'uno' ? {
         pointsToWin: 250,
         turnDuration: 30,
         stacking: true,
@@ -442,7 +447,13 @@ io.on('connection', (socket) => {
       return;
     }
 
-    if (room.gameType === 'uno') {
+    if (room.gameType === 'monopoly') {
+      if (room.players.length < 2) {
+        socket.emit('start-error', 'Need at least 2 players to start Monopoly.');
+        return;
+      }
+      monopolyEngine.startRound(room, io);
+    } else if (room.gameType === 'uno') {
       if (room.players.length < 2) {
         socket.emit('start-error', 'Need at least 2 players to start Uno.');
         return;
@@ -552,6 +563,14 @@ io.on('connection', (socket) => {
     }
   });
 
+  socket.on('monopoly-action', ({ roomCode, action, payload }) => {
+    const room = rooms.get(roomCode);
+    if (!room || room.gameState !== 'playing') return;
+    if (room.gameType === 'monopoly') {
+      monopolyEngine.handleAction(room, socket, action, payload, io);
+    }
+  });
+
   // 10. Restart Game / Next Round
   socket.on('restart-game', ({ roomCode }) => {
     const room = rooms.get(roomCode);
@@ -567,7 +586,9 @@ io.on('connection', (socket) => {
       });
     }
 
-    if (room.gameType === 'uno') {
+    if (room.gameType === 'monopoly') {
+      monopolyEngine.startRound(room, io);
+    } else if (room.gameType === 'uno') {
       unoEngine.startRound(room, io);
     } else {
       capsaEngine.startRound(room, io);

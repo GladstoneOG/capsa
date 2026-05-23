@@ -532,6 +532,122 @@ class SoundSynthesizer {
     osc.stop(now + 0.5);
     lfo.stop(now + 0.5);
   }
+
+  public playDiceRoll() {
+    if (this.isMuted) return;
+    const ctx = this.initCtx();
+    const now = ctx.currentTime;
+    for (let i = 0; i < 6; i++) {
+      const time = now + i * 0.06;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(150 + Math.random() * 100, time);
+      gain.gain.setValueAtTime(0.08, time);
+      gain.gain.exponentialRampToValueAtTime(0.001, time + 0.03);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(time);
+      osc.stop(time + 0.03);
+    }
+  }
+
+  public playDiceLand() {
+    if (this.isMuted) return;
+    const ctx = this.initCtx();
+    const now = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(120, now);
+    osc.frequency.exponentialRampToValueAtTime(40, now + 0.15);
+    gain.gain.setValueAtTime(0.3, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(now);
+    osc.stop(now + 0.15);
+  }
+
+  public playMoney() {
+    if (this.isMuted) return;
+    const ctx = this.initCtx();
+    const now = ctx.currentTime;
+    const frequencies = [880, 1320, 1760];
+    frequencies.forEach((freq, idx) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(freq, now + idx * 0.02);
+      gain.gain.setValueAtTime(0.08, now + idx * 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.02 + 0.25);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(now + idx * 0.02);
+      osc.stop(now + idx * 0.02 + 0.25);
+    });
+  }
+
+  public playUpgrade() {
+    if (this.isMuted) return;
+    const ctx = this.initCtx();
+    const now = ctx.currentTime;
+    const notes = [523.25, 659.25, 783.99, 1046.50];
+    notes.forEach((freq, idx) => {
+      const time = now + idx * 0.07;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(freq, time);
+      gain.gain.setValueAtTime(0.12, time);
+      gain.gain.exponentialRampToValueAtTime(0.001, time + 0.2);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(time);
+      osc.stop(time + 0.2);
+    });
+  }
+
+  public playJail() {
+    if (this.isMuted) return;
+    const ctx = this.initCtx();
+    const now = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(300, now);
+    osc.frequency.linearRampToValueAtTime(150, now + 0.5);
+    gain.gain.setValueAtTime(0.15, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.5);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(now);
+    osc.stop(now + 0.5);
+  }
+
+  public playBankruptcy() {
+    if (this.isMuted) return;
+    const ctx = this.initCtx();
+    const now = ctx.currentTime;
+    const osc1 = ctx.createOscillator();
+    const osc2 = ctx.createOscillator();
+    osc1.type = 'sawtooth';
+    osc1.frequency.setValueAtTime(180, now);
+    osc1.frequency.linearRampToValueAtTime(90, now + 0.8);
+    osc2.type = 'square';
+    osc2.frequency.setValueAtTime(220, now);
+    osc2.frequency.linearRampToValueAtTime(110, now + 0.8);
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.2, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.85);
+    osc1.connect(gain);
+    osc2.connect(gain);
+    gain.connect(ctx.destination);
+    osc1.start(now);
+    osc2.start(now);
+    osc1.stop(now + 0.85);
+    osc2.stop(now + 0.85);
+  }
 }
 
 export const sfx = new SoundSynthesizer();
