@@ -643,7 +643,7 @@ export const MonopolyTable: React.FC<MonopolyTableProps> = ({
   }, [showRollBanner]);
 
   // Hopping loop to coordinate tile-by-tile movements
-  const stepPlayerPos = useCallback((pId: string, current: number, target: number) => {
+  const stepPlayerPos = useCallback((pId: string, current: number, target: number, isBackward?: boolean) => {
     const playerObj = players.find(p => p.id === pId);
     const isJailTeleport = target === 10 && playerObj?.inJail;
 
@@ -727,13 +727,13 @@ export const MonopolyTable: React.FC<MonopolyTableProps> = ({
     }
 
     // Update remaining moves countdown
-    const stepsLeft = (target - current + 40) % 40;
+    const stepsLeft = isBackward ? (current - target + 40) % 40 : (target - current + 40) % 40;
     setMovingPlayerSteps(prev => ({ ...prev, [pId]: stepsLeft }));
 
-    const next = (current + 1) % 40;
+    const next = isBackward ? (current - 1 + 40) % 40 : (current + 1) % 40;
     setVisualPositions(prev => ({ ...prev, [pId]: next }));
     
-    if (next === 0) {
+    if (next === 0 && !isBackward) {
       addFloatingText(0, 'Salary!', 'salary');
     }
     
@@ -741,7 +741,7 @@ export const MonopolyTable: React.FC<MonopolyTableProps> = ({
     sfx.playTick();
 
     hopTimersRef.current[pId] = setTimeout(() => {
-      stepPlayerPos(pId, next, target);
+      stepPlayerPos(pId, next, target, isBackward);
     }, 280);
   }, [monopolyBoard, players, addFloatingText]);
 
@@ -767,9 +767,11 @@ export const MonopolyTable: React.FC<MonopolyTableProps> = ({
           targetPos = 30;
         }
 
+        const isBackward = (prevPos - targetPos + 40) % 40 === 3;
+
         if (!isDraggingRef.current && !isCameraManual && p.id === activePlayer?.id) {
           const targetCoords = getTileLocalCoords(targetPos);
-          const stepsCount = (targetPos - prevPos + 40) % 40;
+          const stepsCount = isBackward ? (prevPos - targetPos + 40) % 40 : (targetPos - prevPos + 40) % 40;
           const duration = Math.max(0.4, stepsCount * 0.28);
           setCameraTransition(`${duration}s linear`);
           setCameraX(-targetCoords.x * 1.20);
@@ -777,7 +779,7 @@ export const MonopolyTable: React.FC<MonopolyTableProps> = ({
           setCameraScale(1.28);
         }
         
-        stepPlayerPos(p.id, prevPos, targetPos);
+        stepPlayerPos(p.id, prevPos, targetPos, isBackward);
       }
     });
   }, [players, gameState, visualPositions, stepPlayerPos, isDiceRolling, activePlayer?.id, isCameraManual, dice]);
@@ -938,7 +940,7 @@ export const MonopolyTable: React.FC<MonopolyTableProps> = ({
       }
     });
 
-    // 2. Check for Rent ("Rent!")
+    // 2. Check for Rent ("Rent!") & Tax Payments
     players.forEach(p => {
       const prevP = prevPlayers.find(pp => pp.id === p.id);
       if (prevP && p.money < prevP.money) {
@@ -956,6 +958,11 @@ export const MonopolyTable: React.FC<MonopolyTableProps> = ({
             if (!justBought) {
               addText(currentTilePos, 'Rent!', 'rent');
             }
+          }
+
+          // Check if landed on a tax tile (Income Tax or Luxury Tax)
+          if (tile.type === 'tax') {
+            addText(currentTilePos, `${tile.name}!`, 'rent');
           }
         }
       }
@@ -1327,6 +1334,16 @@ export const MonopolyTable: React.FC<MonopolyTableProps> = ({
     return '#8b5cf6'; // Default Violet
   };
 
+  const getPlayerColorTint = (ownerId: string | null) => {
+    if (!ownerId) return undefined;
+    const idx = players.findIndex(p => p.id === ownerId);
+    if (idx === 0) return 'rgba(59, 130, 246, 0.15)'; // Blue tint
+    if (idx === 1) return 'rgba(16, 185, 129, 0.15)'; // Green tint
+    if (idx === 2) return 'rgba(239, 68, 68, 0.15)';   // Red tint
+    if (idx === 3) return 'rgba(234, 179, 8, 0.15)';  // Yellow tint
+    return 'rgba(139, 92, 246, 0.15)'; // Violet tint
+  };
+
   const activeLandedTile = activePlayer ? monopolyBoard[visualPositions[activePlayer.id] ?? activePlayer.position] : null;
 
   return (
@@ -1531,6 +1548,7 @@ export const MonopolyTable: React.FC<MonopolyTableProps> = ({
                     gridRow: row,
                     gridColumn: col,
                     ['--monopoly-glow-color' as any]: glowColor,
+                    ['--tile-owner-tint' as any]: getPlayerColorTint(tile.owner),
                     border: tile.owner ? `3.5px solid ${ownerColor}` : undefined
                   }}
                   onClick={() => {
@@ -2159,6 +2177,30 @@ export const MonopolyTable: React.FC<MonopolyTableProps> = ({
               const isRail = tile.type === 'railroad';
               const isUtil = tile.type === 'utility';
 
+              const getCurrentRent = () => {
+                if (!tile.owner) return 0;
+                if (tile.mortgaged) return 0;
+
+                if (isProp) {
+                  const isMonopoly = tile.color ? monopolyColorGroups[tile.color] === tile.owner : false;
+                  if (tile.houses === 0) {
+                    return isMonopoly ? (tile.rent?.[0] || 0) * 2 : (tile.rent?.[0] || 0);
+                  }
+                  return tile.rent?.[tile.houses] || 0;
+                }
+                if (isRail) {
+                  const count = monopolyBoard.filter(t => t.type === 'railroad' && t.owner === tile.owner).length;
+                  return tile.rent?.[Math.min(count - 1, 3)] || 25;
+                }
+                if (isUtil) {
+                  const count = monopolyBoard.filter(t => t.type === 'utility' && t.owner === tile.owner).length;
+                  const diceSum = dice[0] + dice[1];
+                  const mult = count === 2 ? 10 : 4;
+                  return diceSum * mult;
+                }
+                return 0;
+              };
+
               return (
                 <>
                   {isProp && (
@@ -2181,6 +2223,28 @@ export const MonopolyTable: React.FC<MonopolyTableProps> = ({
                   )}
 
                   <div className="deed-rents">
+                    {tile.owner && (
+                      <div className="current-rent-indicator" style={{
+                        background: tile.mortgaged ? 'rgba(239, 68, 68, 0.08)' : 'rgba(16, 185, 129, 0.08)',
+                        border: tile.mortgaged ? '1px dashed #ef4444' : '1px dashed #10b981',
+                        borderRadius: '8px',
+                        padding: '10px 12px',
+                        marginBottom: '14px',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        fontSize: '0.8rem',
+                        fontWeight: 'bold',
+                        color: tile.mortgaged ? '#ef4444' : '#10b981',
+                        boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.02)'
+                      }}>
+                        <span>Total Current Rent:</span>
+                        <strong style={{ fontSize: '1.05rem', fontFamily: 'monospace' }}>
+                          {tile.mortgaged ? '$0 (Mortgaged)' : `$${getCurrentRent()}`}
+                        </strong>
+                      </div>
+                    )}
+
                     {isProp && tile.rent && (
                       <>
                         <div><span>Rent:</span> <strong>${tile.rent[0]}</strong></div>
@@ -2221,6 +2285,36 @@ export const MonopolyTable: React.FC<MonopolyTableProps> = ({
                       </div>
                     )}
                   </div>
+
+                  {tile.owner && tile.owner !== playerId && (
+                    <button
+                      className="btn-gold"
+                      style={{
+                        width: '100%',
+                        padding: '6px',
+                        fontSize: '0.75rem',
+                        marginTop: '12px',
+                        fontWeight: 'bold',
+                        boxShadow: 'none'
+                      }}
+                      onClick={() => {
+                        setTradeTargetId(tile.owner!);
+                        setDemandedProperties([tile.index]);
+                        
+                        // Reset other fields for a clean start
+                        setOfferedProperties([]);
+                        setOfferedMoney(0);
+                        setOfferedJailCards(0);
+                        setDemandedMoney(0);
+                        setDemandedJailCards(0);
+                        
+                        setIsTradeEditorOpen(true);
+                        setSelectedDeedIndex(null);
+                      }}
+                    >
+                      🤝 Offer to Buy
+                    </button>
+                  )}
 
                   <button 
                     className="btn-primary" 
@@ -2776,7 +2870,7 @@ export const MonopolyTable: React.FC<MonopolyTableProps> = ({
               {/* Bidder List */}
               <div style={{ marginBottom: '20px' }}>
                 <h4 style={{ fontSize: '0.9rem', marginBottom: '8px', borderBottom: '1px solid rgba(0,0,0,0.05)', paddingBottom: '4px' }}>Bidders In Room</h4>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '8px' }}>
                   {players.filter(p => !p.bankrupt).map(p => {
                     const isBiddingActive = auctionState.bidders.includes(p.id);
                     const isCurrentBidder = bidderId === p.id;
@@ -2786,20 +2880,37 @@ export const MonopolyTable: React.FC<MonopolyTableProps> = ({
                         key={p.id}
                         style={{
                           display: 'flex',
-                          alignItems: 'center',
-                          gap: '6px',
-                          padding: '6px 10px',
+                          flexDirection: 'column',
+                          gap: '4px',
+                          padding: '8px',
                           borderRadius: '8px',
                           background: isCurrentBidder ? '#dcfce7' : '#f1f5f9',
                           border: isCurrentBidder ? '2px solid #10b981' : isWinner ? '2px solid #fbbf24' : '1px solid transparent',
-                          opacity: isBiddingActive ? 1 : 0.4
+                          opacity: isBiddingActive ? 1 : 0.5,
+                          boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
                         }}
                       >
-                        <AvatarSVG config={p.avatar} size={20} />
-                        <span style={{ fontSize: '0.8rem', fontWeight: isCurrentBidder ? 'bold' : 'normal' }}>
-                          {p.name} {p.id === playerId ? '(You)' : ''}
-                        </span>
-                        {!isBiddingActive && <span style={{ fontSize: '0.75rem', color: '#ef4444', marginLeft: '4px' }}>(Passed)</span>}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <AvatarSVG config={p.avatar} size={20} />
+                          <span style={{ fontSize: '0.8rem', fontWeight: isCurrentBidder ? 'bold' : 'normal', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flexGrow: 1 }} title={p.name}>
+                            {p.name} {p.id === playerId ? '(You)' : ''}
+                          </span>
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', fontSize: '0.7rem', borderTop: '1px solid rgba(0,0,0,0.06)', paddingTop: '4px', marginTop: '2px' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                            <span style={{ color: 'var(--text-muted)' }}>Cash:</span>
+                            <strong style={{ color: '#10b981' }}>${p.money}</strong>
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                            <span style={{ color: 'var(--text-muted)' }}>Worth:</span>
+                            <strong style={{ color: '#3b82f6' }}>${p.netWorth}</strong>
+                          </div>
+                        </div>
+                        {!isBiddingActive && (
+                          <div style={{ fontSize: '0.7rem', color: '#ef4444', fontWeight: 'bold', textAlign: 'center', marginTop: '2px' }}>
+                            Passed
+                          </div>
+                        )}
                       </div>
                     );
                   })}
@@ -2906,7 +3017,17 @@ export const MonopolyTable: React.FC<MonopolyTableProps> = ({
         return (
           <div className="deed-card-modal-backdrop">
             <div className="player-detail-modal" style={{ maxWidth: '640px', width: '95%' }}>
-              <button className="player-detail-close" onClick={() => setIsTradeEditorOpen(false)}>✕</button>
+              <button 
+                className="player-detail-close" 
+                onClick={() => {
+                  setIsTradeEditorOpen(false);
+                  if (activeTrade && activeTrade.status === 'countering' && activeTrade.receiverId === playerId) {
+                    onMonopolyAction('trade-decline');
+                  }
+                }}
+              >
+                ✕
+              </button>
               
               <h3 style={{ fontSize: '1.4rem', fontWeight: 900, marginBottom: '15px', color: 'var(--primary)', textAlign: 'center' }}>
                 🤝 PROPOSE TRADE DEAL
@@ -3140,7 +3261,16 @@ export const MonopolyTable: React.FC<MonopolyTableProps> = ({
                 <button className="btn-primary" style={{ flexGrow: 1, padding: '12px 0' }} onClick={handleSendTrade}>
                   📤 Send Offer
                 </button>
-                <button className="btn-secondary" style={{ flexGrow: 1, padding: '12px 0' }} onClick={() => setIsTradeEditorOpen(false)}>
+                <button 
+                  className="btn-secondary" 
+                  style={{ flexGrow: 1, padding: '12px 0' }} 
+                  onClick={() => {
+                    setIsTradeEditorOpen(false);
+                    if (activeTrade && activeTrade.status === 'countering' && activeTrade.receiverId === playerId) {
+                      onMonopolyAction('trade-decline');
+                    }
+                  }}
+                >
                   Cancel
                 </button>
               </div>
@@ -3163,7 +3293,7 @@ export const MonopolyTable: React.FC<MonopolyTableProps> = ({
           setDemandedMoney(activeTrade.senderMoney);
           setDemandedJailCards(activeTrade.senderJailCards);
           setIsTradeEditorOpen(true);
-          onMonopolyAction('trade-decline');
+          onMonopolyAction('trade-counter');
         };
 
         return (
@@ -3191,7 +3321,14 @@ export const MonopolyTable: React.FC<MonopolyTableProps> = ({
                           return (
                             <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.8rem' }}>
                               {tile?.color && <div className={`detail-card-color-dot tile-group-${tile.color}`} style={{ width: '8px', height: '8px', borderRadius: '50%' }} />}
-                              <span>{tile?.name || `Tile ${idx}`}</span>
+                              <span>
+                                {tile?.name || `Tile ${idx}`}{' '}
+                                <span style={{ color: '#64748b', fontSize: '0.7rem' }}>
+                                  (Worth: ${tile?.price || 0}
+                                  {tile?.rent ? `, Rent: $${tile.houses > 0 ? tile.rent[tile.houses] : tile.rent[0]}` : ''}
+                                  {tile?.mortgaged ? ' - Mortgaged' : ''})
+                                </span>
+                              </span>
                             </div>
                           );
                         })}
@@ -3216,7 +3353,14 @@ export const MonopolyTable: React.FC<MonopolyTableProps> = ({
                           return (
                             <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.8rem' }}>
                               {tile?.color && <div className={`detail-card-color-dot tile-group-${tile.color}`} style={{ width: '8px', height: '8px', borderRadius: '50%' }} />}
-                              <span>{tile?.name || `Tile ${idx}`}</span>
+                              <span>
+                                {tile?.name || `Tile ${idx}`}{' '}
+                                <span style={{ color: '#64748b', fontSize: '0.7rem' }}>
+                                  (Worth: ${tile?.price || 0}
+                                  {tile?.rent ? `, Rent: $${tile.houses > 0 ? tile.rent[tile.houses] : tile.rent[0]}` : ''}
+                                  {tile?.mortgaged ? ' - Mortgaged' : ''})
+                                </span>
+                              </span>
                             </div>
                           );
                         })}
@@ -3246,15 +3390,19 @@ export const MonopolyTable: React.FC<MonopolyTableProps> = ({
       })()}
 
       {/* Awaiting Trade Response Banner */}
-      {activeTrade && activeTrade.senderId === playerId && activeTrade.status === 'pending' && (() => {
+      {activeTrade && activeTrade.senderId === playerId && (activeTrade.status === 'pending' || activeTrade.status === 'countering') && (() => {
         const receiver = players.find(p => p.id === activeTrade.receiverId);
         return (
           <div className="deed-card-modal-backdrop" style={{ background: 'rgba(0,0,0,0.2)', backdropFilter: 'none' }}>
             <div className="player-detail-modal" style={{ maxWidth: '380px', padding: '15px', textAlign: 'center' }}>
               <div style={{ fontSize: '1.8rem', marginBottom: '8px' }}>⏳</div>
-              <h4 style={{ fontWeight: 'bold', marginBottom: '6px' }}>Offer Sent!</h4>
+              <h4 style={{ fontWeight: 'bold', marginBottom: '6px' }}>
+                {activeTrade.status === 'countering' ? 'Opponent Countering!' : 'Offer Sent!'}
+              </h4>
               <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '15px' }}>
-                Awaiting response from <strong style={{ color: 'var(--text-primary)' }}>{receiver?.name || 'opponent'}</strong>...
+                {activeTrade.status === 'countering' 
+                  ? `${receiver?.name || 'opponent'} is preparing a counter offer...`
+                  : `Awaiting response from ${receiver?.name || 'opponent'}...`}
               </p>
               <button
                 className="btn-secondary"

@@ -293,7 +293,7 @@
   align-items: center;
   padding: 4px;
   position: relative;
-  background: #f8fafc;
+  background: var(--tile-owner-tint, #f8fafc);
   cursor: pointer;
   transform-style: preserve-3d;
   transition: background 0.2s;

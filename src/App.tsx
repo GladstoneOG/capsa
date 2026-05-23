@@ -740,6 +740,7 @@ export default function App() {
       return;
     }
 
+    const delay = (roomState.gameType === 'monopoly' && roomState.monopolyPhase === 'card_drawn') ? 4000 : 1500;
     botTimerRef.current = setTimeout(() => {
       if (roomState.gameType === 'uno') {
         const hand = targetBotPlayer.cards.filter((c: any) => c !== null);
@@ -839,7 +840,7 @@ export default function App() {
           socketRef.current?.emit('pass-turn', { roomCode: roomState.code });
         }
       }
-    }, 1500);
+    }, delay);
 
     // Bot catching vulnerable players down to 1 card
     if (roomState.gameType === 'uno') {
@@ -2854,6 +2855,18 @@ export default function App() {
       setMonopolyActiveTrade(null);
     }
 
+    else if (action === 'trade-counter') {
+      const { monopolyActiveTrade: activeTrade } = stateRef.current;
+      if (!activeTrade) return;
+      setMonopolyActiveTrade({
+        ...activeTrade,
+        status: 'countering'
+      });
+      const receiver = currentPlayers.find(p => p.id === activeTrade.receiverId);
+      const sender = currentPlayers.find(p => p.id === activeTrade.senderId);
+      ioToSystemChat(`🔄 ${receiver ? receiver.name : 'Opponent'} is preparing a counter offer to ${sender ? sender.name : 'player'}.`);
+    }
+
     else if (action === 'trade-cancel') {
       ioToSystemChat(`Trade offer canceled.`);
       setMonopolyActiveTrade(null);
@@ -2997,6 +3010,8 @@ export default function App() {
 
     if (targetBotId && targetBotPlayer) {
       if (botTimerRef.current) clearTimeout(botTimerRef.current);
+
+      const delay = (gameType === 'monopoly' && monopolyPhase === 'card_drawn') ? 4000 : 1500;
 
       botTimerRef.current = setTimeout(() => {
         // Retrieve the absolute freshest state from the ref
@@ -3156,7 +3171,7 @@ export default function App() {
             passTurnSingle(activePlayer.id);
           }
         }
-      }, 1500);
+      }, delay);
     }
 
     return () => {

@@ -271,13 +271,29 @@ export function evaluateBotTrade(
     }
   }
   
-  // Accept if receiving >= giving
-  // Also, bots should not accept if they don't have enough money to give
+  // Bots cannot accept if they don't have enough money to give
   if (offer.receiverMoney > botPlayer.money) {
     return false;
   }
-  
-  return receivingValue >= givingValue;
+
+  // Calculate ratio of offered value to requested value
+  const ratio = givingValue > 0 ? receivingValue / givingValue : 1.0;
+  let rejectChance = 0.5;
+
+  if (ratio >= 1.0) {
+    // Rejection chance decreases as the offer becomes more generous
+    rejectChance = Math.max(0.0, 0.5 - (ratio - 1.0) * 0.85);
+  } else {
+    // Rejection chance increases as the offer gets worse
+    rejectChance = Math.min(1.0, 0.5 + (1.0 - ratio) * 2.0);
+    // Strict threshold: always reject if offer value is less than 75% of requested value
+    if (ratio < 0.75) {
+      rejectChance = 1.0;
+    }
+  }
+
+  // Random roll to determine acceptance
+  return Math.random() >= rejectChance;
 }
 
 function getBotPropertyValuation(botPlayer: any, tile: TileState, board: TileState[], isGiving: boolean): number {

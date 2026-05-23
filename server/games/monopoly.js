@@ -708,7 +708,8 @@ export function handleAction(room, socket, action, payload, io) {
     'auction-pass',
     'trade-accept',
     'trade-decline',
-    'trade-cancel'
+    'trade-cancel',
+    'trade-counter'
   ].includes(action);
 
   if (!bypassTurnAuth) {
@@ -1322,6 +1323,20 @@ export function handleAction(room, socket, action, payload, io) {
       const receiver = room.players.find(p => p.id === receiverId);
       addSystemChatMessage(room, io, `❌ Trade offer declined${receiver ? ` by ${receiver.name}` : ''}.`);
       room.activeTrade = null;
+      broadcastGameUpdate(room, io);
+      break;
+    }
+
+    case 'trade-counter': {
+      if (!room.activeTrade) return;
+      const { senderId, receiverId } = room.activeTrade;
+      const authorized = receiverId === socket.id || (room.players.find(p => p.id === receiverId)?.isBot && room.players.find(p => p.id === socket.id)?.isHost);
+      if (!authorized) return;
+
+      room.activeTrade.status = 'countering';
+      const receiver = room.players.find(p => p.id === receiverId);
+      const sender = room.players.find(p => p.id === senderId);
+      addSystemChatMessage(room, io, `🔄 ${receiver ? receiver.name : 'Opponent'} is preparing a counter offer to ${sender ? sender.name : 'player'}.`);
       broadcastGameUpdate(room, io);
       break;
     }
