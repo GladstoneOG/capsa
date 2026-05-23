@@ -19,6 +19,9 @@ const io = new Server(httpServer, {
     origin: process.env.CLIENT_URL || '*', // Allow dynamic Vercel frontend or local dev
     methods: ['GET', 'POST'],
   },
+  transports: ['websocket'],
+  pingInterval: 25000,
+  pingTimeout: 60000,
 });
 
 const rooms = new Map();
@@ -103,7 +106,7 @@ function replacePlayerIdReferences(room, oldId, newId) {
 
 function findDisconnectedPlayer(room, sessionId) {
   if (!sessionId) return null;
-  return room.players.find(p => p.sessionId === sessionId && p.disconnected);
+  return room.players.find(p => p.sessionId === sessionId);
 }
 
 function restoreDisconnectedPlayer(room, roomCode, player, socket, { sessionId, playerName, avatar }) {

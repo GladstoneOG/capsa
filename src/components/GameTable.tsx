@@ -382,7 +382,7 @@ export const GameTable: React.FC<GameTableProps> = ({
   useEffect(() => {
     if (timerRef.current) clearInterval(timerRef.current);
 
-    if (gameState !== 'playing' || rules.turnDuration === 0 || isFirstPlayOfRound) {
+    if (gameState !== 'playing' || rules.turnDuration === 0) {
       setTimeLeft(rules.turnDuration);
       return;
     }
@@ -394,8 +394,19 @@ export const GameTable: React.FC<GameTableProps> = ({
         if (prev <= 1) {
           // Time out!
           if (isMyTurn) {
-            sfx.playPass();
-            onPass();
+            if (isFirstPlayOfRound) {
+              const threeDiamonds = localHandRef.current.find(c => c.rank === '3' && c.suit === 'D');
+              if (threeDiamonds) {
+                onPlayCards([threeDiamonds]);
+                setSelectedCardIds([]);
+              } else {
+                sfx.playPass();
+                onPass();
+              }
+            } else {
+              sfx.playPass();
+              onPass();
+            }
           }
           return rules.turnDuration;
         }
@@ -761,7 +772,7 @@ export const GameTable: React.FC<GameTableProps> = ({
                     </div>
                   )}
                   
-                  {isPlayerTurn && rules.turnDuration > 0 && !isFirstPlayOfRound && (
+                  {isPlayerTurn && rules.turnDuration > 0 && (
                     <div className="turn-timer-ring">
                       {player.id === playerId && <div className="timer-badge" style={{ position: 'absolute', top: '-18px', left: '50%', transform: 'translateX(-50%)', background: '#fbbf24', color: '#1e1b4b', padding: '0 4px', borderRadius: '4px', fontSize: '0.65rem', fontWeight: 'bold' }}>{timeLeft}s</div>}
                     </div>

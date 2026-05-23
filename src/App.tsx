@@ -316,8 +316,11 @@ export default function App() {
     // Check if we are in local dev, otherwise fallback to local port
     const finalUrl = serverUrl || 'http://localhost:3001';
     const socket = io(finalUrl, {
-      reconnectionAttempts: 3,
-      timeout: 10000,
+      transports: ['websocket'],
+      reconnection: true,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
+      timeout: 20000,
     });
 
     socketRef.current = socket;
