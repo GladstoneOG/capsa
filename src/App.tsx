@@ -11,7 +11,7 @@ import { getBotPlayDecision, type UnoCard } from './utils/unoLogic';
 import './uno.css';
 import { Confetti } from './components/Confetti';
 import { MonopolyTable } from './components/MonopolyTable';
-import { LOCAL_BOARD_TILES, LOCAL_CHANCE_CARDS, LOCAL_CHEST_CARDS, getBotMonopolyDecision } from './utils/monopolyLogic';
+import { LOCAL_BOARD_TILES, LOCAL_CHANCE_CARDS, LOCAL_CHEST_CARDS, getBotMonopolyDecision, evaluateBotTrade } from './utils/monopolyLogic';
 import type { TileState } from './utils/monopolyLogic';
 import './monopoly.css';
 
@@ -172,11 +172,14 @@ export default function App() {
   // Monopoly States
   const [monopolyBoard, setMonopolyBoard] = useState<TileState[]>([]);
   const [isMonopolyAnimating, setIsMonopolyAnimating] = useState<boolean>(false);
-  const [monopolyPhase, setMonopolyPhase] = useState<'roll' | 'action' | 'jail_decision' | 'card_drawn' | 'bankrupt_decision' | 'end_turn'>('roll');
+  const [monopolyPhase, setMonopolyPhase] = useState<'roll' | 'action' | 'jail_decision' | 'card_drawn' | 'bankrupt_decision' | 'end_turn' | 'auction'>('roll');
   const [monopolyDice, setMonopolyDice] = useState<number[]>([1, 1]);
+  const [monopolyRollId, setMonopolyRollId] = useState<string | null>(null);
   const [monopolyCurrentCard, setMonopolyCurrentCard] = useState<any | null>(null);
   const [monopolyCardType, setMonopolyCardType] = useState<string | null>(null);
   const [monopolyActiveDebt, setMonopolyActiveDebt] = useState<any | null>(null);
+  const [monopolyAuctionState, setMonopolyAuctionState] = useState<any | null>(null);
+  const [monopolyActiveTrade, setMonopolyActiveTrade] = useState<any | null>(null);
   const [monopolyChanceDeck, setMonopolyChanceDeck] = useState<any[]>([]);
   const [monopolyChestDeck, setMonopolyChestDeck] = useState<any[]>([]);
   const [showConfetti, setShowConfetti] = useState<boolean>(false);
@@ -215,6 +218,7 @@ export default function App() {
   const isSinglePlayerRef = useRef<boolean>(isSinglePlayer);
   const playerNameRef = useRef<string>(playerName);
   const avatarRef = useRef<AvatarConfig>(avatar);
+  const lastBotSyncRoomStateRef = useRef<any>(null);
   const stateRef = useRef({
     players,
     turnIndex,
@@ -237,6 +241,8 @@ export default function App() {
     monopolyCurrentCard,
     monopolyCardType,
     monopolyActiveDebt,
+    monopolyAuctionState,
+    monopolyActiveTrade,
     monopolyChanceDeck,
     monopolyChestDeck
   });
@@ -273,6 +279,8 @@ export default function App() {
       monopolyCurrentCard,
       monopolyCardType,
       monopolyActiveDebt,
+      monopolyAuctionState,
+      monopolyActiveTrade,
       monopolyChanceDeck,
       monopolyChestDeck
     };
@@ -298,6 +306,8 @@ export default function App() {
     monopolyCurrentCard,
     monopolyCardType,
     monopolyActiveDebt,
+    monopolyAuctionState,
+    monopolyActiveTrade,
     monopolyChanceDeck,
     monopolyChestDeck
   ]);
@@ -487,9 +497,12 @@ export default function App() {
         setMonopolyBoard(room.monopolyBoard || []);
         setMonopolyPhase(room.monopolyPhase || 'roll');
         setMonopolyDice(room.dice || [1, 1]);
+        setMonopolyRollId(room.rollId || null);
         setMonopolyCurrentCard(room.currentCard || null);
         setMonopolyCardType(room.cardType || null);
         setMonopolyActiveDebt(room.activeDebt || null);
+        setMonopolyAuctionState(room.auctionState || null);
+        setMonopolyActiveTrade(room.activeTrade || null);
       }
       setScreen('table');
     });
@@ -514,9 +527,12 @@ export default function App() {
         setMonopolyBoard(room.monopolyBoard || []);
         setMonopolyPhase(room.monopolyPhase || 'roll');
         setMonopolyDice(room.dice || [1, 1]);
+        setMonopolyRollId(room.rollId || null);
         setMonopolyCurrentCard(room.currentCard || null);
         setMonopolyCardType(room.cardType || null);
         setMonopolyActiveDebt(room.activeDebt || null);
+        setMonopolyAuctionState(room.auctionState || null);
+        setMonopolyActiveTrade(room.activeTrade || null);
       }
     });
 
@@ -537,9 +553,12 @@ export default function App() {
         setMonopolyBoard(room.monopolyBoard || []);
         setMonopolyPhase(room.monopolyPhase || 'roll');
         setMonopolyDice(room.dice || [1, 1]);
+        setMonopolyRollId(room.rollId || null);
         setMonopolyCurrentCard(room.currentCard || null);
         setMonopolyCardType(room.cardType || null);
         setMonopolyActiveDebt(room.activeDebt || null);
+        setMonopolyAuctionState(room.auctionState || null);
+        setMonopolyActiveTrade(room.activeTrade || null);
       }
     });
 
@@ -653,21 +672,61 @@ export default function App() {
 
   // Host Bot logic orchestrator for multiplayer
   const triggerBotLogicForMultiplayer = (roomState: any) => {
+    if (roomState.gameType === 'monopoly' && (isMonopolyAnimating || roomState.monopolyPhase === 'rolling_animation')) {
+      lastBotSyncRoomStateRef.current = roomState;
+      return;
+    }
+
     if (botTimerRef.current) clearTimeout(botTimerRef.current);
+    if (roomState.gameType === 'monopoly') {
+      lastBotSyncRoomStateRef.current = null;
+    }
 
     const { players: rPlayers, turnIndex: rTurnIdx, gameState: rGameSt } = roomState;
     if (rGameSt !== 'playing') return;
 
-    const currentPlayer = rPlayers[rTurnIdx];
-    if (!currentPlayer) return;
+    // Only host client coordinates bot logic for multiplayer
+    const isHost = rPlayers.find((p: any) => p.id === socketRef.current?.id)?.isHost;
+    if (!isHost) return;
 
-    // Special swap target selection phase (not advanced to turnIndex yet)
-    if (roomState.gameType === 'uno' && roomState.sevenSwappingPlayerId) {
-      const activeSwappingPlayer = rPlayers.find((p: any) => p.id === roomState.sevenSwappingPlayerId);
-      if (activeSwappingPlayer && activeSwappingPlayer.isBot) {
-        // Run swap targeting logic if host
-        const isHost = rPlayers.find((p: any) => p.id === socketRef.current?.id)?.isHost;
-        if (isHost) {
+    // Determine who needs to make a decision right now
+    let targetBotId = null;
+    let targetBotPlayer = null;
+
+    if (roomState.gameType === 'monopoly') {
+      if (roomState.monopolyPhase === 'auction' && roomState.auctionState) {
+        const bidderId = roomState.auctionState.bidders[roomState.auctionState.activeBidderIndex];
+        const bidder = rPlayers.find((p: any) => p.id === bidderId);
+        if (bidder && bidder.isBot) {
+          targetBotId = bidderId;
+          targetBotPlayer = bidder;
+        }
+      } else if (roomState.activeTrade && roomState.activeTrade.status === 'pending') {
+        const receiver = rPlayers.find((p: any) => p.id === roomState.activeTrade.receiverId);
+        if (receiver && receiver.isBot) {
+          targetBotId = receiver.id;
+          targetBotPlayer = receiver;
+        }
+      } else {
+        const currentPlayer = rPlayers[rTurnIdx];
+        if (currentPlayer && currentPlayer.isBot) {
+          targetBotId = currentPlayer.id;
+          targetBotPlayer = currentPlayer;
+        }
+      }
+    } else {
+      const currentPlayer = rPlayers[rTurnIdx];
+      if (currentPlayer && currentPlayer.isBot) {
+        targetBotId = currentPlayer.id;
+        targetBotPlayer = currentPlayer;
+      }
+    }
+
+    if (!targetBotId || !targetBotPlayer) {
+      // Special swap target selection phase (not advanced to turnIndex yet)
+      if (roomState.gameType === 'uno' && roomState.sevenSwappingPlayerId) {
+        const activeSwappingPlayer = rPlayers.find((p: any) => p.id === roomState.sevenSwappingPlayerId);
+        if (activeSwappingPlayer && activeSwappingPlayer.isBot) {
           botTimerRef.current = setTimeout(() => {
             const opponents = rPlayers.filter((p: any) => p.id !== activeSwappingPlayer.id);
             opponents.sort((a: any, b: any) => a.cards.length - b.cards.length);
@@ -681,61 +740,106 @@ export default function App() {
       return;
     }
 
-    if (currentPlayer.isBot) {
-      botTimerRef.current = setTimeout(() => {
-        if (roomState.gameType === 'uno') {
-          const hand = currentPlayer.cards.filter((c: any) => c !== null);
-          const decision = getBotPlayDecision(
-            hand,
-            roomState.currentColor,
-            roomState.currentValue,
-            roomState.accumulatedDrawCount || 0,
-            roomState.rules.stacking || false
-          );
+    botTimerRef.current = setTimeout(() => {
+      if (roomState.gameType === 'uno') {
+        const hand = targetBotPlayer.cards.filter((c: any) => c !== null);
+        const decision = getBotPlayDecision(
+          hand,
+          roomState.currentColor,
+          roomState.currentValue,
+          roomState.accumulatedDrawCount || 0,
+          roomState.rules.stacking || false
+        );
 
-          if (decision.action === 'play') {
-            socketRef.current?.emit('play-card', {
-              roomCode: roomState.code,
-              cards: [decision.card],
-              chosenColor: decision.chosenColor,
-              isJumpIn: false
-            });
+        if (decision.action === 'play') {
+          socketRef.current?.emit('play-card', {
+            roomCode: roomState.code,
+            cards: [decision.card],
+            chosenColor: decision.chosenColor,
+            isJumpIn: false
+          });
 
-            // Bot Uno Call chance
-            if (currentPlayer.cards.length <= 2 && !currentPlayer.safeUno) {
-              if (Math.random() < 0.8) {
-                socketRef.current?.emit('uno-call', { roomCode: roomState.code });
-              }
-            }
-          } else {
-            // Check if already drawn
-            if (!botDrawnRef.current[currentPlayer.id]) {
-              botDrawnRef.current[currentPlayer.id] = true;
-              socketRef.current?.emit('draw-card', { roomCode: roomState.code });
-            } else {
-              botDrawnRef.current[currentPlayer.id] = false;
-              socketRef.current?.emit('pass-turn', { roomCode: roomState.code });
+          // Bot Uno Call chance
+          if (targetBotPlayer.cards.length <= 2 && !targetBotPlayer.safeUno) {
+            if (Math.random() < 0.8) {
+              socketRef.current?.emit('uno-call', { roomCode: roomState.code });
             }
           }
         } else {
-          // Capsa logic
-          const hand = currentPlayer.cards.filter((c: any) => c !== null);
-          const prevPlay = roomState.activePlay;
-          const isFirstPlay = rPlayers.every((p: any) => p.cards.length === 13) && !prevPlay;
-          const botPlay = getBotPlay(hand, prevPlay, isFirstPlay, {
-            enableBombsSingle: roomState.rules.enableBombsSingle,
-            enableBombsPair: roomState.rules.enableBombsPair,
-          });
-
-          if (botPlay && botPlay.length > 0) {
-            const combo = checkCombination(botPlay);
-            socketRef.current?.emit('play-cards', { roomCode: roomState.code, cards: botPlay, comboType: combo.type });
+          // Check if already drawn
+          if (!botDrawnRef.current[targetBotPlayer.id]) {
+            botDrawnRef.current[targetBotPlayer.id] = true;
+            socketRef.current?.emit('draw-card', { roomCode: roomState.code });
           } else {
+            botDrawnRef.current[targetBotPlayer.id] = false;
             socketRef.current?.emit('pass-turn', { roomCode: roomState.code });
           }
         }
-      }, 1500); // 1.5s delay for realistic bot play
-    }
+      } else if (roomState.gameType === 'monopoly') {
+        if (roomState.monopolyPhase === 'auction' && roomState.auctionState) {
+          const bidderId = roomState.auctionState.bidders[roomState.auctionState.activeBidderIndex];
+          if (bidderId !== targetBotId) return;
+
+          const activeTileIndex = roomState.auctionState.tileIndex;
+          const landedTile = roomState.monopolyBoard[activeTileIndex];
+          const decision = getBotMonopolyDecision(
+            targetBotPlayer,
+            roomState.monopolyBoard,
+            'auction',
+            null,
+            landedTile,
+            roomState.auctionState
+          );
+          if (decision) {
+            socketRef.current?.emit('monopoly-action', {
+              roomCode: roomState.code,
+              action: decision.action,
+              payload: decision.payload
+            });
+          }
+        } else if (roomState.activeTrade && roomState.activeTrade.status === 'pending' && roomState.activeTrade.receiverId === targetBotId) {
+          const otherPlayer = rPlayers.find((pl: any) => pl.id === roomState.activeTrade.senderId);
+          const accepted = evaluateBotTrade(targetBotPlayer, otherPlayer, roomState.monopolyBoard, roomState.activeTrade);
+          socketRef.current?.emit('monopoly-action', {
+            roomCode: roomState.code,
+            action: accepted ? 'trade-accept' : 'trade-decline'
+          });
+        } else {
+          const activeTileIndex = targetBotPlayer.position || 0;
+          const landedTile = roomState.monopolyBoard[activeTileIndex];
+          const decision = getBotMonopolyDecision(
+            targetBotPlayer,
+            roomState.monopolyBoard,
+            roomState.monopolyPhase,
+            roomState.monopolyActiveDebt,
+            landedTile
+          );
+          if (decision) {
+            socketRef.current?.emit('monopoly-action', {
+              roomCode: roomState.code,
+              action: decision.action,
+              payload: decision.payload
+            });
+          }
+        }
+      } else {
+        // Capsa logic
+        const hand = targetBotPlayer.cards.filter((c: any) => c !== null);
+        const prevPlay = roomState.activePlay;
+        const isFirstPlay = rPlayers.every((p: any) => p.cards.length === 13) && !prevPlay;
+        const botPlay = getBotPlay(hand, prevPlay, isFirstPlay, {
+          enableBombsSingle: roomState.rules.enableBombsSingle,
+          enableBombsPair: roomState.rules.enableBombsPair,
+        });
+
+        if (botPlay && botPlay.length > 0) {
+          const combo = checkCombination(botPlay);
+          socketRef.current?.emit('play-cards', { roomCode: roomState.code, cards: botPlay, comboType: combo.type });
+        } else {
+          socketRef.current?.emit('pass-turn', { roomCode: roomState.code });
+        }
+      }
+    }, 1500);
 
     // Bot catching vulnerable players down to 1 card
     if (roomState.gameType === 'uno') {
@@ -1690,7 +1794,8 @@ export default function App() {
         return p;
       });
       ioToSystemChat(`👮 ${player.name} was sent directly to Jail!`);
-      setEndTurnPhaseSingle(player, nextPlayers);
+      const updatedP = nextPlayers.find(p => p.id === player.id)!;
+      setEndTurnPhaseSingle(updatedP, nextPlayers);
       updatePlayersAndBoard(nextPlayers, boardList);
       return;
     }
@@ -1798,14 +1903,14 @@ export default function App() {
     boardList: TileState[],
     player: Player,
     card: any,
-    cardType: string,
+    _cardType: string,
     chanceDeck: any[],
     chestDeck: any[]
   ) => {
     setMonopolyCurrentCard(null);
     setMonopolyCardType(null);
 
-    const updatedPlayers = [...playersList];
+    const updatedPlayers = playersList.map(p => p.id === player.id ? { ...p } : p);
     const updatedPlayer = updatedPlayers.find(p => p.id === player.id)!;
     const updatePlayersAndBoard = (nextPlayers: Player[], nextBoard: TileState[]) => {
       const freshPlayers = updateNetWorthLocal(nextPlayers, nextBoard);
@@ -2064,6 +2169,7 @@ export default function App() {
     setPlayers(initializedPlayers);
     setMonopolyBoard(initialBoard);
     setMonopolyDice([1, 1]);
+    setMonopolyRollId(null);
     setMonopolyPhase('roll');
     setMonopolyCurrentCard(null);
     setMonopolyCardType(null);
@@ -2102,6 +2208,26 @@ export default function App() {
     }, 100);
   };
 
+  const resumeAfterAuctionSingle = (activePlayer: Player, playersList: Player[], boardList: TileState[]) => {
+    setMonopolyAuctionState(null);
+    if (activePlayer.doublesRolled) {
+      const updatedPlayers = playersList.map(p => {
+        if (p.id === activePlayer.id) {
+          return { ...p, doublesRolled: false };
+        }
+        return p;
+      });
+      setPlayers(updatedPlayers);
+      setMonopolyBoard(boardList);
+      setMonopolyPhase('roll');
+      ioToSystemChat(`🎲 Doubles! ${activePlayer.name} gets to roll again.`);
+    } else {
+      setPlayers(playersList);
+      setMonopolyBoard(boardList);
+      setEndTurnPhaseSingle(activePlayer, playersList);
+    }
+  };
+
   const handleMonopolyActionSingle = (action: string, payload?: any) => {
     if (isMonopolyAnimating && action !== 'leave' && action !== 'end-turn') return;
     
@@ -2110,7 +2236,6 @@ export default function App() {
       turnIndex: currentTurnIdx,
       monopolyBoard: currentBoard,
       monopolyPhase: currentPhase,
-      monopolyDice: currentDice,
       monopolyCurrentCard: currentCard,
       monopolyCardType: currentCardType,
       monopolyActiveDebt: currentActiveDebt,
@@ -2128,7 +2253,7 @@ export default function App() {
     };
 
     if (action === 'roll-dice') {
-      if (currentPhase !== 'roll') return;
+      if (currentPhase !== 'roll' || currentPlayer.inJail) return;
 
       const d1 = Math.floor(Math.random() * 6) + 1;
       const d2 = Math.floor(Math.random() * 6) + 1;
@@ -2136,6 +2261,7 @@ export default function App() {
       const isDoubles = d1 === d2;
       
       setMonopolyDice([d1, d2]);
+      setMonopolyRollId(Math.random().toString(36).substring(2, 9));
       setIsMonopolyAnimating(true);
 
       setTimeout(() => {
@@ -2204,6 +2330,7 @@ export default function App() {
       const isDoubles = d1 === d2;
       
       setMonopolyDice([d1, d2]);
+      setMonopolyRollId(Math.random().toString(36).substring(2, 9));
       setIsMonopolyAnimating(true);
 
       setTimeout(() => {
@@ -2331,7 +2458,22 @@ export default function App() {
     else if (action === 'pass-property') {
       if (currentPhase !== 'action') return;
       ioToSystemChat(`🏠 ${currentPlayer.name} passed on buying ${currentBoard[currentPlayer.position!].name}.`);
-      setEndTurnPhaseSingle(currentPlayer, currentPlayers);
+      const bidders = currentPlayers.filter(p => !p.bankrupt).map(p => p.id);
+      
+      if (bidders.length === 0) {
+        ioToSystemChat(`🎲 No other bidders available. Auction ended.`);
+        resumeAfterAuctionSingle(currentPlayer, currentPlayers, currentBoard);
+      } else {
+        setMonopolyPhase('auction');
+        setMonopolyAuctionState({
+          tileIndex: currentPlayer.position!,
+          highestBid: 0,
+          highestBidder: null,
+          bidders,
+          activeBidderIndex: 0
+        });
+        ioToSystemChat(`🎲 Auction started for ${currentBoard[currentPlayer.position!].name}! Starting bid is $10.`);
+      }
     }
 
     else if (action === 'ok-card') {
@@ -2512,6 +2654,210 @@ export default function App() {
         setPlayers(currentPlayers.map((p, idx) => idx === nextTurn ? { ...p, rollCount: 0, doublesRolled: false } : p));
       }
     }
+
+    else if (action === 'auction-bid') {
+      const { monopolyAuctionState: auctionState } = stateRef.current;
+      if (!auctionState) return;
+
+      const bid = payload.bid;
+      const bidderId = auctionState.bidders[auctionState.activeBidderIndex];
+      const bidder = currentPlayers.find(p => p.id === bidderId);
+      
+      if (bidder && bid > auctionState.highestBid && bidder.money! >= bid) {
+        if (auctionState.bidders.length === 1) {
+          const tile = currentBoard[auctionState.tileIndex];
+          if (tile) {
+            const updatedPlayers = currentPlayers.map(p => {
+              if (p.id === bidderId) {
+                return { ...p, money: p.money! - bid };
+              }
+              return p;
+            });
+            const updatedBoard = currentBoard.map(t => {
+              if (t.index === auctionState.tileIndex) {
+                return { ...t, owner: bidderId };
+              }
+              return t;
+            });
+            
+            ioToSystemChat(`🏆 ${bidder.name} won the auction and bought ${tile.name} for $${bid}!`);
+            setMonopolyAuctionState(null);
+            
+            const activePlayerFresh = updatedPlayers[currentTurnIdx];
+            resumeAfterAuctionSingle(activePlayerFresh, updatedPlayers, updatedBoard);
+          }
+        } else {
+          const nextAuctionState = {
+            ...auctionState,
+            highestBid: bid,
+            highestBidder: bidderId,
+            activeBidderIndex: (auctionState.activeBidderIndex + 1) % auctionState.bidders.length
+          };
+          setMonopolyAuctionState(nextAuctionState);
+          ioToSystemChat(`💰 ${bidder.name} bid $${bid}.`);
+        }
+      }
+    }
+
+    else if (action === 'auction-pass') {
+      const { monopolyAuctionState: auctionState } = stateRef.current;
+      if (!auctionState) return;
+
+      const bidderId = auctionState.bidders[auctionState.activeBidderIndex];
+      const bidder = currentPlayers.find(p => p.id === bidderId);
+      
+      if (bidder) {
+        ioToSystemChat(`❌ ${bidder.name} passed in auction.`);
+        const nextBidders = auctionState.bidders.filter((id: string) => id !== bidderId);
+        
+        if (nextBidders.length === 0) {
+          ioToSystemChat(`🎲 Auction ended. No one bought ${currentBoard[auctionState.tileIndex].name}.`);
+          setMonopolyAuctionState(null);
+          resumeAfterAuctionSingle(currentPlayer, currentPlayers, currentBoard);
+        } else {
+          let nextActiveIndex = auctionState.activeBidderIndex;
+          if (nextActiveIndex >= nextBidders.length) {
+            nextActiveIndex = 0;
+          }
+          
+          if (nextBidders.length === 1 && auctionState.highestBidder !== null) {
+            const winnerId = auctionState.highestBidder;
+            const winner = currentPlayers.find(p => p.id === winnerId);
+            const tile = currentBoard[auctionState.tileIndex];
+            
+            if (winner && tile) {
+              const updatedPlayers = currentPlayers.map(p => {
+                if (p.id === winnerId) {
+                  return { ...p, money: p.money! - auctionState.highestBid };
+                }
+                return p;
+              });
+              const updatedBoard = currentBoard.map(t => {
+                if (t.index === auctionState.tileIndex) {
+                  return { ...t, owner: winnerId };
+                }
+                return t;
+              });
+              
+              ioToSystemChat(`🏆 ${winner.name} won the auction and bought ${tile.name} for $${auctionState.highestBid}!`);
+              setMonopolyAuctionState(null);
+              
+              const activePlayerFresh = updatedPlayers[currentTurnIdx];
+              resumeAfterAuctionSingle(activePlayerFresh, updatedPlayers, updatedBoard);
+            }
+          } else {
+            setMonopolyAuctionState({
+              ...auctionState,
+              bidders: nextBidders,
+              activeBidderIndex: nextActiveIndex
+            });
+          }
+        }
+      }
+    }
+
+    else if (action === 'trade-propose') {
+      if (currentPlayer.id !== 'local_user') return;
+      const {
+        receiverId,
+        senderProperties,
+        senderMoney,
+        receiverProperties,
+        receiverMoney,
+        senderJailCards,
+        receiverJailCards
+      } = payload || {};
+
+      const sender = currentPlayers.find(p => p.id === currentPlayer.id);
+      const receiver = currentPlayers.find(p => p.id === receiverId);
+      if (!sender || !receiver || sender.bankrupt || receiver.bankrupt) return;
+
+      if (senderMoney > sender.money! || receiverMoney > receiver.money!) return;
+      if (senderJailCards > sender.getOutOfJailCards! || receiverJailCards > receiver.getOutOfJailCards!) return;
+
+      setMonopolyActiveTrade({
+        senderId: sender.id,
+        receiverId: receiver.id,
+        senderProperties,
+        senderMoney,
+        receiverProperties,
+        receiverMoney,
+        senderJailCards,
+        receiverJailCards,
+        status: 'pending'
+      });
+
+      ioToSystemChat(`🤝 ${sender.name} proposed a trade to ${receiver.name}.`);
+    }
+
+    else if (action === 'trade-accept') {
+      const { monopolyActiveTrade: activeTrade } = stateRef.current;
+      if (!activeTrade) return;
+
+      const { senderId, receiverId, senderProperties, senderMoney, receiverProperties, receiverMoney, senderJailCards, receiverJailCards } = activeTrade;
+      const sender = currentPlayers.find(p => p.id === senderId);
+      const receiver = currentPlayers.find(p => p.id === receiverId);
+      if (!sender || !receiver || sender.bankrupt || receiver.bankrupt) {
+        setMonopolyActiveTrade(null);
+        return;
+      }
+
+      if (sender.money! < senderMoney || receiver.money! < receiverMoney) {
+        setMonopolyActiveTrade(null);
+        ioToSystemChat(`❌ Trade failed: players do not have enough money.`);
+        return;
+      }
+      if (sender.getOutOfJailCards! < senderJailCards || receiver.getOutOfJailCards! < receiverJailCards) {
+        setMonopolyActiveTrade(null);
+        ioToSystemChat(`❌ Trade failed: players do not have enough jail cards.`);
+        return;
+      }
+
+      const nextBoard = currentBoard.map(tile => {
+        if (senderProperties.includes(tile.index)) {
+          return { ...tile, owner: receiverId };
+        }
+        if (receiverProperties.includes(tile.index)) {
+          return { ...tile, owner: senderId };
+        }
+        return tile;
+      });
+
+      const nextPlayers = currentPlayers.map(p => {
+        if (p.id === senderId) {
+          return {
+            ...p,
+            money: p.money! - senderMoney + receiverMoney,
+            getOutOfJailCards: p.getOutOfJailCards! - senderJailCards + receiverJailCards
+          };
+        }
+        if (p.id === receiverId) {
+          return {
+            ...p,
+            money: p.money! - receiverMoney + senderMoney,
+            getOutOfJailCards: p.getOutOfJailCards! - receiverJailCards + senderJailCards
+          };
+        }
+        return p;
+      });
+
+      ioToSystemChat(`🤝 Trade accepted! Assets exchanged between ${sender.name} and ${receiver.name}.`);
+      setMonopolyActiveTrade(null);
+      updatePlayersAndBoard(nextPlayers, nextBoard);
+    }
+
+    else if (action === 'trade-decline') {
+      const { monopolyActiveTrade: activeTrade } = stateRef.current;
+      if (!activeTrade) return;
+      const receiver = currentPlayers.find(p => p.id === activeTrade.receiverId);
+      ioToSystemChat(`❌ Trade offer declined${receiver ? ` by ${receiver.name}` : ''}.`);
+      setMonopolyActiveTrade(null);
+    }
+
+    else if (action === 'trade-cancel') {
+      ioToSystemChat(`Trade offer canceled.`);
+      setMonopolyActiveTrade(null);
+    }
   };
 
   const startSinglePlayerGame = () => {
@@ -2597,14 +2943,60 @@ export default function App() {
     botDrawnRef.current = {};
   }, [turnIndex]);
 
+  // Play sound effect when auction is initiated
+  useEffect(() => {
+    if (monopolyPhase === 'auction') {
+      sfx.playAuction();
+    }
+  }, [monopolyPhase]);
+
+  // Multiplayer bot trigger watcher - executes deferred bot decisions when animation ends
+  useEffect(() => {
+    if (isSinglePlayer || gameState !== 'playing' || isMonopolyAnimating) return;
+    if (lastBotSyncRoomStateRef.current) {
+      const roomState = lastBotSyncRoomStateRef.current;
+      lastBotSyncRoomStateRef.current = null;
+      triggerBotLogicForMultiplayer(roomState);
+    }
+  }, [isMonopolyAnimating, gameState, isSinglePlayer]);
+
   useEffect(() => {
     if (!isSinglePlayer || gameState !== 'playing' || isMonopolyAnimating) return;
 
-    const currentPlayer = players[turnIndex];
-    if (currentPlayer && currentPlayer.isBot) {
-      if (botTimerRef.current) clearTimeout(botTimerRef.current);
+    let targetBotId: string | null = null;
+    let targetBotPlayer: Player | null = null;
 
-      const targetBotId = currentPlayer.id;
+    if (gameType === 'monopoly') {
+      if (monopolyPhase === 'auction' && monopolyAuctionState) {
+        const bidderId = monopolyAuctionState.bidders[monopolyAuctionState.activeBidderIndex];
+        const bidder = players.find(p => p.id === bidderId);
+        if (bidder && bidder.isBot) {
+          targetBotId = bidderId;
+          targetBotPlayer = bidder;
+        }
+      } else if (monopolyActiveTrade && monopolyActiveTrade.status === 'pending') {
+        const receiver = players.find(p => p.id === monopolyActiveTrade.receiverId);
+        if (receiver && receiver.isBot) {
+          targetBotId = receiver.id;
+          targetBotPlayer = receiver;
+        }
+      } else {
+        const currentPlayer = players[turnIndex];
+        if (currentPlayer && currentPlayer.isBot) {
+          targetBotId = currentPlayer.id;
+          targetBotPlayer = currentPlayer;
+        }
+      }
+    } else {
+      const currentPlayer = players[turnIndex];
+      if (currentPlayer && currentPlayer.isBot) {
+        targetBotId = currentPlayer.id;
+        targetBotPlayer = currentPlayer;
+      }
+    }
+
+    if (targetBotId && targetBotPlayer) {
+      if (botTimerRef.current) clearTimeout(botTimerRef.current);
 
       botTimerRef.current = setTimeout(() => {
         // Retrieve the absolute freshest state from the ref
@@ -2617,31 +3009,30 @@ export default function App() {
           unoCurrentColor: currentColor,
           unoCurrentValue: currentValue,
           unoAccumulatedDrawCount: accumulatedDraw,
-          unoSevenSwappingPlayerId: swappingPlayerId
+          unoSevenSwappingPlayerId: swappingPlayerId,
+          monopolyPhase: latestPhase,
+          monopolyAuctionState: latestAuctionState,
+          monopolyActiveTrade: latestActiveTrade
         } = stateRef.current;
 
         // Validation guard: Verify game state is still playing
         if (latestGameState !== 'playing') return;
 
-        // Special case: 7 swap target selection
-        if (latestGameType === 'uno' && swappingPlayerId === targetBotId) {
-          const opponents = latestPlayers.filter((p) => p.id !== targetBotId);
-          opponents.sort((a, b) => a.cards.length - b.cards.length);
-          const target = opponents[0];
-          if (target) {
-            swapHandUnoSingle(target.id);
-          }
-          return;
-        }
-
-        // Validation guard: Verify it is still this bot's turn
-        const activePlayer = latestPlayers[latestTurnIndex];
-        if (!activePlayer || activePlayer.id !== targetBotId) {
-          console.warn(`[Bot Timer Guard] Stale timer prevented bot ${targetBotId} from playing out of turn.`);
-          return;
-        }
-
         if (latestGameType === 'uno') {
+          // Special case: 7 swap target selection
+          if (swappingPlayerId === targetBotId) {
+            const opponents = latestPlayers.filter((p) => p.id !== targetBotId);
+            opponents.sort((a, b) => a.cards.length - b.cards.length);
+            const target = opponents[0];
+            if (target) {
+              swapHandUnoSingle(target.id);
+            }
+            return;
+          }
+
+          const activePlayer = latestPlayers[latestTurnIndex];
+          if (!activePlayer || activePlayer.id !== targetBotId) return;
+
           const hand = activePlayer.cards.filter((c): c is UnoCard => c !== null);
 
           // Stacking / Normal Play decision
@@ -2681,13 +3072,11 @@ export default function App() {
             if (!botDrawnRef.current[targetBotId]) {
               botDrawnRef.current[targetBotId] = true;
               drawCardUnoSingle();
-              // Schedule a follow-up check: after drawing, try to play the new card or auto-pass
               setTimeout(() => {
                 const { players: freshP, turnIndex: freshTurn, gameState: freshGS } = stateRef.current;
                 if (freshGS !== 'playing') return;
                 const freshBot = freshP[freshTurn];
                 if (!freshBot || freshBot.id !== targetBotId) return;
-                // Bot still has the turn (drawn card was playable), try to play it
                 const freshHand = freshBot.cards.filter((c: any) => c !== null);
                 const newDecision = getBotPlayDecision(
                   freshHand,
@@ -2699,7 +3088,6 @@ export default function App() {
                 if (newDecision.action === 'play') {
                   playCardUnoSingle(newDecision.card, newDecision.chosenColor);
                 } else {
-                  // Still can't play, pass
                   passTurnUnoSingle();
                 }
                 botDrawnRef.current[targetBotId] = false;
@@ -2710,27 +3098,51 @@ export default function App() {
             }
           }
         } else if (latestGameType === 'monopoly') {
-          const activeBot = latestPlayers[latestTurnIndex];
-          if (!activeBot || activeBot.id !== targetBotId || activeBot.bankrupt) return;
+          if (latestPhase === 'auction' && latestAuctionState) {
+            const bidderId = latestAuctionState.bidders[latestAuctionState.activeBidderIndex];
+            if (bidderId !== targetBotId) return;
 
-          const activeTileIndex = activeBot.position || 0;
-          const landedTile = stateRef.current.monopolyBoard[activeTileIndex];
+            const activeTileIndex = latestAuctionState.tileIndex;
+            const landedTile = stateRef.current.monopolyBoard[activeTileIndex];
+            const decision = getBotMonopolyDecision(
+              targetBotPlayer,
+              stateRef.current.monopolyBoard,
+              'auction',
+              null,
+              landedTile,
+              latestAuctionState
+            );
+            if (decision) {
+              handleMonopolyActionSingle(decision.action, decision.payload);
+            }
+          } else if (latestActiveTrade && latestActiveTrade.status === 'pending' && latestActiveTrade.receiverId === targetBotId) {
+            const otherPlayer = latestPlayers.find(pl => pl.id === latestActiveTrade.senderId);
+            const accepted = evaluateBotTrade(targetBotPlayer, otherPlayer, stateRef.current.monopolyBoard, latestActiveTrade);
+            handleMonopolyActionSingle(accepted ? 'trade-accept' : 'trade-decline');
+          } else {
+            const activeBot = latestPlayers[latestTurnIndex];
+            if (!activeBot || activeBot.id !== targetBotId || activeBot.bankrupt) return;
 
-          const decision = getBotMonopolyDecision(
-            activeBot,
-            stateRef.current.monopolyBoard,
-            stateRef.current.monopolyPhase,
-            stateRef.current.monopolyActiveDebt,
-            landedTile
-          );
+            const activeTileIndex = activeBot.position || 0;
+            const landedTile = stateRef.current.monopolyBoard[activeTileIndex];
 
-          if (decision) {
-            handleMonopolyActionSingle(decision.action, decision.payload);
+            const decision = getBotMonopolyDecision(
+              activeBot,
+              stateRef.current.monopolyBoard,
+              latestPhase,
+              stateRef.current.monopolyActiveDebt,
+              landedTile
+            );
+
+            if (decision) {
+              handleMonopolyActionSingle(decision.action, decision.payload);
+            }
           }
         } else {
           // Capsa Logic
+          const activePlayer = latestPlayers[latestTurnIndex];
+          if (!activePlayer || activePlayer.id !== targetBotId) return;
           const hand = activePlayer.cards.filter((c): c is Card => c !== null);
-          // Is it the very first play of the game?
           const isFirstPlay = latestPlayers.every(p => p.cards.length === 13) && !stateRef.current.activePlay;
 
           const play = getBotPlay(hand, stateRef.current.activePlay, isFirstPlay, {
@@ -2744,37 +3156,28 @@ export default function App() {
             passTurnSingle(activePlayer.id);
           }
         }
-      }, 1500); // 1.5 seconds delay for natural thinking feel
+      }, 1500);
     }
 
-    // Bot catching vulnerable players down to 1 card
-    if (gameType === 'uno') {
-      const vulnerable = players.find(p => p.cards.length === 1 && !p.safeUno);
-      if (vulnerable) {
-        // Find if there is a bot that will challenge them
-        const bots = players.filter(p => p.isBot && p.id !== vulnerable.id);
-        if (bots.length > 0 && Math.random() < 0.70) {
-          // 70% chance a bot spots them and challenges
-          const randomBot = bots[Math.floor(Math.random() * bots.length)];
-          setTimeout(() => {
-            // Re-check vulnerability
-            const { players: freshPlayers } = stateRef.current;
-            const freshVulnerable = freshPlayers.find(p => p.id === vulnerable.id && p.cards.length === 1 && !p.safeUno);
-            if (freshVulnerable) {
-              unoChallengeUnoSingle(freshVulnerable.id, randomBot.id);
-            }
-          }, 1000 + Math.random() * 1000);
-        }
-      }
-    }
-
-    // Cleanup function ensures any pending bot timer is canceled when turn/game changes
     return () => {
       if (botTimerRef.current) {
         clearTimeout(botTimerRef.current);
       }
     };
-  }, [turnIndex, gameState, isSinglePlayer, activePlay, unoCurrentColor, unoCurrentValue, unoSevenSwappingPlayerId, monopolyPhase, monopolyActiveDebt, isMonopolyAnimating]);
+  }, [
+    turnIndex,
+    gameState,
+    isSinglePlayer,
+    activePlay,
+    unoCurrentColor,
+    unoCurrentValue,
+    unoSevenSwappingPlayerId,
+    monopolyPhase,
+    monopolyAuctionState,
+    monopolyActiveTrade,
+    monopolyActiveDebt,
+    isMonopolyAnimating
+  ]);
 
   function playCardsSingle(pId: string, cards: Card[]) {
     const { players: currentPlayers, turnIndex: currentTurnIndex, activePlay: currentActivePlay } = stateRef.current;
@@ -3634,7 +4037,7 @@ export default function App() {
             {players.find(pl => isSinglePlayer ? pl.id === 'local_user' : pl.id === socketId)?.isHost && players.length < (gameType === 'uno' ? 8 : 4) && (
               <div style={{ marginTop: 'auto', paddingTop: '1rem', display: 'flex', flexDirection: 'column' }}>
                 <button
-                  className="btn-primary"
+                  className="btn-primary btn-add-bot"
                   style={{ background: 'linear-gradient(135deg, #1d72b8 0%, #1e40af 100%)', boxShadow: 'none' }}
                   onClick={() => {
                     if (isSinglePlayer) {
@@ -3741,19 +4144,25 @@ export default function App() {
       {screen === 'table' && gameType === 'monopoly' && (
         <MonopolyTable
           playerId={isSinglePlayer ? 'local_user' : socketId}
-          players={players}
+          players={players as any}
           turnIndex={turnIndex}
           monopolyBoard={monopolyBoard}
           dice={monopolyDice}
+          rollId={monopolyRollId}
           monopolyPhase={monopolyPhase}
           currentCard={monopolyCurrentCard}
           cardType={monopolyCardType}
           activeDebt={monopolyActiveDebt}
+          auctionState={monopolyAuctionState}
+          activeTrade={monopolyActiveTrade}
           gameState={gameState}
           roomCode={roomCode}
           isHost={players.find(pl => isSinglePlayer ? pl.id === 'local_user' : pl.id === socketId)?.isHost || false}
           isSinglePlayer={isSinglePlayer}
-          onMonopolyAction={isSinglePlayer ? handleMonopolyActionSingle : (action, payload) => socketRef.current?.emit('monopoly-action', { roomCode, action, payload })}
+          onMonopolyAction={isSinglePlayer ? handleMonopolyActionSingle : (action, payload) => {
+            if (isMonopolyAnimating && action !== 'leave' && action !== 'end-turn') return;
+            socketRef.current?.emit('monopoly-action', { roomCode, action, payload });
+          }}
           onLeaveRoom={leaveRoom}
           onRestartGame={isSinglePlayer ? restartSinglePlayerMonopolyGameRound : restartOnlineGame}
           onAnimationStateChange={setIsMonopolyAnimating}

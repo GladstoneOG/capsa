@@ -107,8 +107,9 @@ export function getBotMonopolyDecision(
   botPlayer: any,
   board: TileState[],
   phase: string,
-  activeDebt: any,
-  landedTile: TileState
+  _activeDebt: any,
+  landedTile: TileState,
+  auctionState?: any
 ): { action: string; payload?: any } {
   
   if (phase === 'jail_decision') {
@@ -122,6 +123,15 @@ export function getBotMonopolyDecision(
   }
 
   if (phase === 'roll') {
+    if (botPlayer.inJail) {
+      if (botPlayer.getOutOfJailCards > 0) {
+        return { action: 'use-jail-card' };
+      }
+      if (botPlayer.money > 450) {
+        return { action: 'pay-jail-fine' };
+      }
+      return { action: 'roll-jail-doubles' };
+    }
     return { action: 'roll-dice' };
   }
 
@@ -135,6 +145,39 @@ export function getBotMonopolyDecision(
       }
     }
     return { action: 'pass-property' };
+  }
+
+  if (phase === 'auction' && auctionState) {
+    const tile = board[auctionState.tileIndex];
+    if (!tile) return { action: 'auction-pass' };
+    
+    // Base valuation is price
+    let maxValuation = tile.price || 100;
+    
+    // Adjust maxValuation based on colors
+    if (tile.type === 'property' && tile.color) {
+      const colorGroup = board.filter(t => t.type === 'property' && t.color === tile.color);
+      const ownedBySelf = colorGroup.filter(t => t.owner === botPlayer.id).length;
+      const ownedByOthers = colorGroup.filter(t => t.owner !== null && t.owner !== botPlayer.id);
+      
+      if (ownedBySelf > 0) {
+        // Completing or progressing monopoly
+        maxValuation = Math.floor(maxValuation * (1.2 + ownedBySelf * 0.2));
+      } else if (ownedByOthers.length > 0) {
+        // Block other's monopoly
+        const otherOwners = new Set(ownedByOthers.map(t => t.owner));
+        if (otherOwners.size === 1) {
+          maxValuation = Math.floor(maxValuation * 1.15);
+        }
+      }
+    }
+    
+    const nextBid = Math.max(10, auctionState.highestBid + 10);
+    // Never bid if it leaves less than $50 cash
+    if (nextBid <= maxValuation && botPlayer.money - nextBid >= 50) {
+      return { action: 'auction-bid', payload: { bid: nextBid } };
+    }
+    return { action: 'auction-pass' };
   }
 
   if (phase === 'card_drawn') {
@@ -191,4 +234,77 @@ export function getBotMonopolyDecision(
   }
 
   return { action: 'end-turn' };
+}
+
+export function evaluateBotTrade(
+  botPlayer: any,
+  _otherPlayer: any,
+  board: TileState[],
+  offer: {
+    senderProperties: number[];
+    senderMoney: number;
+    receiverProperties: number[];
+    receiverMoney: number;
+    senderJailCards: number;
+    receiverJailCards: number;
+  }
+): boolean {
+  // botPlayer is the receiver of the trade offer, otherPlayer is the sender
+  
+  // Calculate value of assets bot is giving away
+  let givingValue = offer.receiverMoney;
+  givingValue += offer.receiverJailCards * 50;
+  for (const idx of offer.receiverProperties) {
+    const tile = board[idx];
+    if (tile) {
+      givingValue += getBotPropertyValuation(botPlayer, tile, board, true);
+    }
+  }
+  
+  // Calculate value of assets bot is receiving
+  let receivingValue = offer.senderMoney;
+  receivingValue += offer.senderJailCards * 50;
+  for (const idx of offer.senderProperties) {
+    const tile = board[idx];
+    if (tile) {
+      receivingValue += getBotPropertyValuation(botPlayer, tile, board, false);
+    }
+  }
+  
+  // Accept if receiving >= giving
+  // Also, bots should not accept if they don't have enough money to give
+  if (offer.receiverMoney > botPlayer.money) {
+    return false;
+  }
+  
+  return receivingValue >= givingValue;
+}
+
+function getBotPropertyValuation(botPlayer: any, tile: TileState, board: TileState[], isGiving: boolean): number {
+  let value = tile.price || 100;
+  if (tile.type !== 'property' || !tile.color) {
+    return value;
+  }
+  
+  const colorGroup = board.filter(t => t.type === 'property' && t.color === tile.color);
+  const ownedBySelf = colorGroup.filter(t => t.owner === botPlayer.id).length;
+  
+  if (isGiving) {
+    if (ownedBySelf === colorGroup.length) {
+      return value * 2.0; // Monopoly is precious
+    }
+    if (ownedBySelf > 1) {
+      return value * 1.5;
+    }
+    return value;
+  } else {
+    const ownedBySelfNew = ownedBySelf + 1;
+    if (ownedBySelfNew === colorGroup.length) {
+      return value * 2.2; // Completes monopoly!
+    }
+    if (ownedBySelfNew > 1) {
+      return value * 1.6;
+    }
+    return value;
+  }
 }

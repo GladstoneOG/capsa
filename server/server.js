@@ -104,6 +104,13 @@ function replacePlayerIdReferences(room, oldId, newId) {
   if (room.lastSevenSwap?.targetId === oldId) {
     room.lastSevenSwap.targetId = newId;
   }
+  if (room.monopolyBoard) {
+    room.monopolyBoard.forEach(tile => {
+      if (tile.owner === oldId) {
+        tile.owner = newId;
+      }
+    });
+  }
 }
 
 function findDisconnectedPlayer(room, sessionId) {

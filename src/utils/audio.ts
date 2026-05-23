@@ -648,6 +648,98 @@ class SoundSynthesizer {
     osc1.stop(now + 0.85);
     osc2.stop(now + 0.85);
   }
+
+  public playPing() {
+    if (this.isMuted) return;
+    const ctx = this.initCtx();
+    const now = ctx.currentTime;
+
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(1200, now);
+    osc.frequency.exponentialRampToValueAtTime(800, now + 0.35);
+
+    gain.gain.setValueAtTime(0.0, now);
+    gain.gain.linearRampToValueAtTime(0.18, now + 0.03); // Quick rise
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35); // Slow decay
+
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+
+    osc.start(now);
+    osc.stop(now + 0.35);
+  }
+
+  public playAuction() {
+    if (this.isMuted) return;
+    const ctx = this.initCtx();
+    const now = ctx.currentTime;
+
+    const playStrike = (time: number, isDouble: boolean) => {
+      const vol = isDouble ? 0.15 : 0.25;
+      
+      // Impact body resonance (wood block thud)
+      const osc1 = ctx.createOscillator();
+      const gain1 = ctx.createGain();
+      osc1.type = 'triangle';
+      osc1.frequency.setValueAtTime(180, time);
+      osc1.frequency.exponentialRampToValueAtTime(80, time + 0.12);
+      
+      gain1.gain.setValueAtTime(vol, time);
+      gain1.gain.exponentialRampToValueAtTime(0.001, time + 0.12);
+      
+      osc1.connect(gain1);
+      gain1.connect(ctx.destination);
+      osc1.start(time);
+      osc1.stop(time + 0.12);
+
+      // Higher-pitched snap (gavel strike)
+      const osc2 = ctx.createOscillator();
+      const gain2 = ctx.createGain();
+      osc2.type = 'sine';
+      osc2.frequency.setValueAtTime(600, time);
+      osc2.frequency.exponentialRampToValueAtTime(200, time + 0.05);
+      
+      gain2.gain.setValueAtTime(vol * 0.8, time);
+      gain2.gain.exponentialRampToValueAtTime(0.001, time + 0.05);
+      
+      osc2.connect(gain2);
+      gain2.connect(ctx.destination);
+      osc2.start(time);
+      osc2.stop(time + 0.05);
+
+      // Brief noise burst for the impact click
+      const bufferSize = ctx.sampleRate * 0.02; // 20ms
+      const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < bufferSize; i++) {
+        data[i] = Math.random() * 2 - 1;
+      }
+      const noise = ctx.createBufferSource();
+      noise.buffer = buffer;
+      
+      const filter = ctx.createBiquadFilter();
+      filter.type = 'bandpass';
+      filter.frequency.setValueAtTime(1200, time);
+      
+      const noiseGain = ctx.createGain();
+      noiseGain.gain.setValueAtTime(vol * 0.5, time);
+      noiseGain.gain.exponentialRampToValueAtTime(0.001, time + 0.02);
+
+      noise.connect(filter);
+      filter.connect(noiseGain);
+      noiseGain.connect(ctx.destination);
+      
+      noise.start(time);
+      noise.stop(time + 0.02);
+    };
+
+    // Double strike of gavel: whack... whack!
+    playStrike(now, false);
+    playStrike(now + 0.18, true);
+  }
 }
 
 export const sfx = new SoundSynthesizer();
