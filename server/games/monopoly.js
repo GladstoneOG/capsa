@@ -58,7 +58,9 @@ const CHANCE_CARDS = [
   { id: 'ch_repairs', text: 'Make general repairs on all your property. Pay $25 per house and $100 per hotel.', action: 'repairs', houseCost: 25, hotelCost: 100 },
   { id: 'ch_speeding', text: 'Speeding fine $15', action: 'take_money', amount: 15 },
   { id: 'ch_reading', text: 'Take a trip to Reading Railroad. If you pass GO, collect $200.', action: 'move', target: 5 },
-  { id: 'ch_chairman', text: 'You have been elected Chairman of the Board. Pay each player $50.', action: 'pay_each', amount: 50 }
+  { id: 'ch_chairman', text: 'You have been elected Chairman of the Board. Pay each player $50.', action: 'pay_each', amount: 50 },
+  { id: 'ch_odd_even', text: '🎯 Odd/Even Card! Use before rolling to force your dice result to be odd or even.', action: 'give_odd_even' },
+  { id: 'ch_angel', text: '😇 Angel Card! Use to skip paying rent OR block a forced acquisition once.', action: 'give_angel' }
 ];
 
 const CHEST_CARDS = [
@@ -77,7 +79,9 @@ const CHEST_CARDS = [
   { id: 'cc_consultancy', text: 'Receive $25 consultancy fee.', action: 'give_money', amount: 25 },
   { id: 'cc_street_repairs', text: 'You are assessed for street repairs. Pay $40 per house and $115 per hotel.', action: 'repairs', houseCost: 40, hotelCost: 115 },
   { id: 'cc_beauty', text: 'You have won second prize in a beauty contest. Collect $10.', action: 'give_money', amount: 10 },
-  { id: 'cc_inherit', text: 'You inherit $100.', action: 'give_money', amount: 100 }
+  { id: 'cc_inherit', text: 'You inherit $100.', action: 'give_money', amount: 100 },
+  { id: 'cc_odd_even', text: '🎯 Odd/Even Card! Use before rolling to force your dice result to be odd or even.', action: 'give_odd_even' },
+  { id: 'cc_angel', text: '😇 Angel Card! Use to skip paying rent OR block a forced acquisition once.', action: 'give_angel' }
 ];
 
 function shuffle(array) {
@@ -148,6 +152,10 @@ export function startRound(room, io) {
     p.netWorth = 1500;
     p.passed = false;
     p.lastPlay = null;
+    p.status = null;
+    // Get Rich consumable cards
+    p.oddEvenCards = 0;
+    p.angelCards = 0;
     delete p.finishRank;
     delete p.roundPoints;
   });
@@ -296,32 +304,36 @@ function checkGameWinner(room, io) {
 }
 
 function calculateRent(tile, board, diceSum, chanceDoubleMultiplier = false) {
+  let base = 0;
   if (tile.type === 'property') {
     const isMonopoly = ownsMonopoly(board, tile.color, tile.owner);
     if (tile.houses === 0) {
-      return isMonopoly ? tile.rent[0] * 2 : tile.rent[0];
+      base = isMonopoly ? tile.rent[0] * 2 : tile.rent[0];
+    } else {
+      base = tile.rent[tile.houses];
     }
-    return tile.rent[tile.houses];
-  }
-
-  if (tile.type === 'railroad') {
+  } else if (tile.type === 'railroad') {
     const count = board.filter(t => t.type === 'railroad' && t.owner === tile.owner).length;
     const baseRent = tile.rent[Math.min(count - 1, 3)];
-    return chanceDoubleMultiplier ? baseRent * 2 : baseRent;
-  }
-
-  if (tile.type === 'utility') {
+    base = chanceDoubleMultiplier ? baseRent * 2 : baseRent;
+  } else if (tile.type === 'utility') {
     const count = board.filter(t => t.type === 'utility' && t.owner === tile.owner).length;
     const mult = count === 2 ? 10 : 4;
     const finalMult = chanceDoubleMultiplier ? 10 : mult;
-    return diceSum * finalMult;
+    base = diceSum * finalMult;
   }
 
-  return 0;
+  // Festival doubles rent for 3 turns
+  if (tile.festivalTurns && tile.festivalTurns > 0) {
+    base = base * 2;
+  }
+
+  return base;
 }
 
 function handleLandedAction(room, player, diceSum, io, chanceDoubleMultiplier = false) {
   const tile = room.monopolyBoard[player.position];
+  const isGetRich = room.rules && room.rules.ruleset === 'Get Rich';
   
   if (tile.type === 'go') {
     setEndTurnPhase(room, player, io);
@@ -334,7 +346,13 @@ function handleLandedAction(room, player, diceSum, io, chanceDoubleMultiplier = 
       room.monopolyPhase = 'action';
     } else if (tile.owner === player.id) {
       // Landed on own property
-      setEndTurnPhase(room, player, io);
+      if (isGetRich && tile.type === 'property' && tile.houses < 5) {
+        // Get Rich: offer instant build on landing
+        room.monopolyPhase = 'landed_build';
+        room.landedBuildMaxHouses = tile.houses === 4 ? 5 : 4;
+      } else {
+        setEndTurnPhase(room, player, io);
+      }
     } else if (tile.mortgaged) {
       // Mortgaged property: no rent
       addSystemChatMessage(room, io, `${player.name} landed on ${tile.name} (Mortgaged by owner). No rent paid.`);
@@ -345,8 +363,30 @@ function handleLandedAction(room, player, diceSum, io, chanceDoubleMultiplier = 
       const rentAmount = calculateRent(tile, room.monopolyBoard, diceSum, chanceDoubleMultiplier);
       
       addSystemChatMessage(room, io, `${player.name} landed on ${tile.name} and owes ${owner.name} $${rentAmount} rent.`);
+
+      // Get Rich: Angel Card can skip rent
+      if (isGetRich && player.angelCards > 0) {
+        room.monopolyPhase = 'use_angel_rent';
+        room.pendingRent = { fromId: player.id, toId: owner.id, amount: rentAmount };
+        return;
+      }
       
       triggerPayment(room, player, owner, rentAmount, io);
+
+      // Get Rich: After paying rent, offer forced acquisition
+      if (isGetRich && room.monopolyPhase !== 'bankrupt_decision') {
+        const tileWorth = (tile.price || 0) + (tile.houses || 0) * (tile.housePrice || 0);
+        // Cannot force-acquire hotels (houses === 5)
+        if (tile.houses < 5 && player.money >= tileWorth) {
+          if (owner.angelCards > 0) {
+            room.monopolyPhase = 'use_angel_force';
+            room.pendingForceAcquire = { byId: player.id, tileIndex: tile.index, worth: tileWorth };
+          } else {
+            room.monopolyPhase = 'force_acquire_decision';
+            room.pendingForceAcquire = { byId: player.id, tileIndex: tile.index, worth: tileWorth };
+          }
+        }
+      }
     }
     return;
   }
@@ -363,13 +403,38 @@ function handleLandedAction(room, player, diceSum, io, chanceDoubleMultiplier = 
   }
 
   if (tile.type === 'parking') {
-    addSystemChatMessage(room, io, `${player.name} relaxes at Free Parking!`);
-    setEndTurnPhase(room, player, io);
+    if (isGetRich) {
+      // Airport: pay $100 to fly anywhere
+      if (player.money >= 100) {
+        addSystemChatMessage(room, io, `✈️ ${player.name} landed on the Airport! Pay $100 to fly to any tile.`);
+        room.monopolyPhase = 'airport_selection';
+      } else {
+        addSystemChatMessage(room, io, `✈️ ${player.name} landed on the Airport but can't afford the $100 fare.`);
+        setEndTurnPhase(room, player, io);
+      }
+    } else {
+      addSystemChatMessage(room, io, `${player.name} relaxes at Free Parking!`);
+      setEndTurnPhase(room, player, io);
+    }
     return;
   }
 
   if (tile.type === 'gotojail') {
-    sendPlayerToJail(room, player, io);
+    if (isGetRich) {
+      // Festival: choose a property to double its rent for 3 turns
+      const ownedProps = room.monopolyBoard.filter(t =>
+        (t.type === 'property' || t.type === 'railroad' || t.type === 'utility') && t.owner === player.id
+      );
+      if (ownedProps.length > 0) {
+        addSystemChatMessage(room, io, `🎉 ${player.name} landed on Festival! Choose a property to double rent for 3 turns.`);
+        room.monopolyPhase = 'festival_selection';
+      } else {
+        addSystemChatMessage(room, io, `🎉 ${player.name} landed on Festival! No properties to boost.`);
+        setEndTurnPhase(room, player, io);
+      }
+    } else {
+      sendPlayerToJail(room, player, io);
+    }
     return;
   }
 
@@ -446,9 +511,16 @@ function resumeAfterAuction(room, player, io) {
 }
 
 function drawCard(room, player, type, diceSum, io) {
+  const isGetRich = room.rules && room.rules.ruleset === 'Get Rich';
+  let allCards = type === 'chance' ? CHANCE_CARDS : CHEST_CARDS;
+  // In Default mode, filter out Get Rich exclusive cards
+  if (!isGetRich) {
+    allCards = allCards.filter(c => c.action !== 'give_odd_even' && c.action !== 'give_angel');
+  }
+
   let deck = type === 'chance' ? room.chanceDeck : room.chestDeck;
   if (deck.length === 0) {
-    deck = type === 'chance' ? shuffle(CHANCE_CARDS) : shuffle(CHEST_CARDS);
+    deck = shuffle(allCards);
     if (type === 'chance') room.chanceDeck = deck;
     else room.chestDeck = deck;
   }
@@ -461,7 +533,7 @@ function drawCard(room, player, type, diceSum, io) {
   addSystemChatMessage(room, io, `✉️ ${player.name} drew a ${type.toUpperCase()} card: "${card.text}"`);
 }
 
-function resolveCardAction(room, player, io, diceSum) {
+function resolveCardAction(room, player, io, diceSum) {  // eslint-disable-line
   const card = room.currentCard;
   if (!card) return;
 
@@ -630,6 +702,22 @@ function resolveCardAction(room, player, io, diceSum) {
     return;
   }
 
+  // Get Rich: Odd/Even card
+  if (card.action === 'give_odd_even') {
+    player.oddEvenCards = Math.min((player.oddEvenCards || 0) + 1, 1);
+    addSystemChatMessage(room, io, `🎯 ${player.name} received an Odd/Even Card!`);
+    setEndTurnPhase(room, player, io);
+    return;
+  }
+
+  // Get Rich: Angel card
+  if (card.action === 'give_angel') {
+    player.angelCards = Math.min((player.angelCards || 0) + 1, 1);
+    addSystemChatMessage(room, io, `😇 ${player.name} received an Angel Card!`);
+    setEndTurnPhase(room, player, io);
+    return;
+  }
+
   // Fallback
   setEndTurnPhase(room, player, io);
 }
@@ -709,7 +797,8 @@ export function handleAction(room, socket, action, payload, io) {
     'trade-accept',
     'trade-decline',
     'trade-cancel',
-    'trade-counter'
+    'trade-counter',
+    'set-player-status'
   ].includes(action);
 
   if (!bypassTurnAuth) {
@@ -722,8 +811,40 @@ export function handleAction(room, socket, action, payload, io) {
     case 'roll-dice': {
       if (room.monopolyPhase !== 'roll' || player.inJail) return;
 
-      const d1 = Math.floor(Math.random() * 6) + 1;
-      const d2 = Math.floor(Math.random() * 6) + 1;
+      const isGetRich = room.rules && room.rules.ruleset === 'Get Rich';
+      let d1, d2;
+
+      if (isGetRich && payload && payload.power !== undefined) {
+        // Power bar: map power% to dice sum range
+        const power = payload.power; // 0-100
+        let minSum, maxSum;
+        if (power <= 33) { minSum = 2; maxSum = 4; }
+        else if (power <= 66) { minSum = 5; maxSum = 8; }
+        else { minSum = 9; maxSum = 12; }
+
+        const oddEvenChoice = payload.oddEvenChoice || null;
+        // Consume the Odd/Even card if used
+        if (oddEvenChoice && player.oddEvenCards > 0) {
+          player.oddEvenCards -= 1;
+        }
+
+        // Generate dice in valid range + parity
+        let attempts = 0;
+        do {
+          d1 = Math.floor(Math.random() * 6) + 1;
+          d2 = Math.floor(Math.random() * 6) + 1;
+          const s = d1 + d2;
+          const parityOk = !oddEvenChoice ||
+            (oddEvenChoice === 'odd' && s % 2 === 1) ||
+            (oddEvenChoice === 'even' && s % 2 === 0);
+          const rangeOk = s >= minSum && s <= maxSum;
+          if (rangeOk && parityOk) break;
+          attempts++;
+        } while (attempts < 200);
+      } else {
+        d1 = Math.floor(Math.random() * 6) + 1;
+        d2 = Math.floor(Math.random() * 6) + 1;
+      }
       
       room.dice = [d1, d2];
       room.rollId = Math.random().toString(36).substring(2, 9);
@@ -802,12 +923,18 @@ export function handleAction(room, socket, action, payload, io) {
         
         updateNetWorth(room, player.id);
 
-        // Resume doubles state if set
-        if (player.doublesRolled) {
-          player.doublesRolled = false;
-          room.monopolyPhase = 'roll';
+        const isGetRich = room.rules && room.rules.ruleset === 'Get Rich';
+        if (isGetRich && tile.type === 'property') {
+          room.monopolyPhase = 'landed_build';
+          room.landedBuildMaxHouses = 4;
         } else {
-          setEndTurnPhase(room, player, io);
+          // Resume doubles state if set
+          if (player.doublesRolled) {
+            player.doublesRolled = false;
+            room.monopolyPhase = 'roll';
+          } else {
+            setEndTurnPhase(room, player, io);
+          }
         }
       }
       broadcastGameUpdate(room, io);
@@ -1042,13 +1169,21 @@ export function handleAction(room, socket, action, payload, io) {
       const tile = room.monopolyBoard[tileIndex];
       if (!tile || tile.owner !== player.id || tile.mortgaged || !tile.mortgageValue) return;
 
-      // Cannot mortgage if color group has houses
+      // Cannot mortgage if color group has houses (under Get Rich, only check this tile's houses)
       if (tile.type === 'property') {
-        const colorGroup = room.monopolyBoard.filter(t => t.type === 'property' && t.color === tile.color);
-        const hasHouses = colorGroup.some(t => t.houses > 0);
-        if (hasHouses) {
-          socket.emit('monopoly-error', 'Must sell all houses in the color group before mortgaging.');
-          return;
+        const isGetRich = room.rules && room.rules.ruleset === 'Get Rich';
+        if (isGetRich) {
+          if (tile.houses > 0) {
+            socket.emit('monopoly-error', 'Must sell all houses on this property before mortgaging.');
+            return;
+          }
+        } else {
+          const colorGroup = room.monopolyBoard.filter(t => t.type === 'property' && t.color === tile.color);
+          const hasHouses = colorGroup.some(t => t.houses > 0);
+          if (hasHouses) {
+            socket.emit('monopoly-error', 'Must sell all houses in the color group before mortgaging.');
+            return;
+          }
         }
       }
 
@@ -1117,9 +1252,30 @@ export function handleAction(room, socket, action, payload, io) {
       break;
     }
 
+    case 'set-player-status': {
+      const sendingPlayer = room.players.find(p => p.id === socket.id);
+      if (sendingPlayer) {
+        sendingPlayer.status = payload; // 'managing' | 'trading' | null
+        broadcastGameUpdate(room, io);
+      }
+      break;
+    }
+
     case 'end-turn': {
       if (room.monopolyPhase !== 'end_turn') return;
       
+      const currentPlayer = room.players[room.turnIndex];
+      if (currentPlayer) {
+        currentPlayer.status = null;
+      }
+
+      // Decrement festivalTurns on all tiles owned by the ending player
+      room.monopolyBoard.forEach(tile => {
+        if (tile.owner === currentPlayer.id && tile.festivalTurns && tile.festivalTurns > 0) {
+          tile.festivalTurns -= 1;
+        }
+      });
+
       // Advance turn
       room.turnIndex = getNextActiveTurnIndex(room);
       room.monopolyPhase = 'roll';
@@ -1131,6 +1287,191 @@ export function handleAction(room, socket, action, payload, io) {
 
       addSystemChatMessage(room, io, `Turn passed to ${nextPlayer.name}.`);
 
+      broadcastGameUpdate(room, io);
+      break;
+    }
+
+    case 'festival-select': {
+      if (room.monopolyPhase !== 'festival_selection') return;
+      const tileIndex = payload;
+      const fTile = room.monopolyBoard[tileIndex];
+      if (!fTile || fTile.owner !== player.id) return;
+      fTile.festivalTurns = 3;
+      addSystemChatMessage(room, io, `🎉 ${player.name} boosted ${fTile.name}! Rent doubled for 3 turns.`);
+      setEndTurnPhase(room, player, io);
+      broadcastGameUpdate(room, io);
+      break;
+    }
+
+    case 'festival-skip': {
+      if (room.monopolyPhase !== 'festival_selection') return;
+      setEndTurnPhase(room, player, io);
+      broadcastGameUpdate(room, io);
+      break;
+    }
+
+    case 'airport-fly': {
+      if (room.monopolyPhase !== 'airport_selection') return;
+      const { targetIndex } = payload || {};
+      if (targetIndex === undefined || targetIndex < 0 || targetIndex >= 40) return;
+      if (player.money < 100) return;
+      player.money -= 100;
+      const oldPos = player.position;
+      player.position = targetIndex;
+      if (player.position < oldPos) {
+        player.money += 200;
+        addSystemChatMessage(room, io, `${player.name} passed GO while flying and collected $200!`);
+      }
+      addSystemChatMessage(room, io, `✈️ ${player.name} paid $100 and flew to ${room.monopolyBoard[targetIndex].name}.`);
+      updateNetWorth(room, player.id);
+      const diceSum2 = player.lastRoll[0] + player.lastRoll[1];
+      handleLandedAction(room, player, diceSum2, io);
+      broadcastGameUpdate(room, io);
+      break;
+    }
+
+    case 'airport-skip': {
+      if (room.monopolyPhase !== 'airport_selection') return;
+      addSystemChatMessage(room, io, `${player.name} skipped the Airport.`);
+      setEndTurnPhase(room, player, io);
+      broadcastGameUpdate(room, io);
+      break;
+    }
+
+    case 'force-acquire': {
+      if (room.monopolyPhase !== 'force_acquire_decision' || !room.pendingForceAcquire) return;
+      const fa = room.pendingForceAcquire;
+      if (fa.byId !== player.id) return;
+      const faTile = room.monopolyBoard[fa.tileIndex];
+      if (!faTile) return;
+      const prevOwner = room.players.find(p => p.id === faTile.owner);
+      if (!prevOwner) return;
+      if (player.money < fa.worth) return;
+      player.money -= fa.worth;
+      prevOwner.money += fa.worth;
+      faTile.owner = player.id;
+      addSystemChatMessage(room, io, `💼 ${player.name} force-acquired ${faTile.name} from ${prevOwner.name} for $${fa.worth}!`);
+      updateNetWorth(room, player.id);
+      updateNetWorth(room, prevOwner.id);
+      room.pendingForceAcquire = null;
+      // Set lastActionDetail so client can show "Acquired!" label
+      room.lastActionDetail = { type: 'force-acquire', tileIndex: fa.tileIndex };
+      setEndTurnPhase(room, player, io);
+      broadcastGameUpdate(room, io);
+      break;
+    }
+
+    case 'decline-force-acquire': {
+      if (!['force_acquire_decision', 'use_angel_force'].includes(room.monopolyPhase)) return;
+      room.pendingForceAcquire = null;
+      setEndTurnPhase(room, player, io);
+      broadcastGameUpdate(room, io);
+      break;
+    }
+
+    case 'use-angel-rent': {
+      // Angel card owner decides to skip rent
+      if (room.monopolyPhase !== 'use_angel_rent' || !room.pendingRent) return;
+      const angelPlayer = room.players.find(p => p.id === room.pendingRent.fromId);
+      if (!angelPlayer || angelPlayer.id !== player.id) return;
+      if (angelPlayer.angelCards > 0) {
+        angelPlayer.angelCards -= 1;
+        addSystemChatMessage(room, io, `😇 ${angelPlayer.name} used an Angel Card to skip rent!`);
+      }
+      room.pendingRent = null;
+      setEndTurnPhase(room, player, io);
+      broadcastGameUpdate(room, io);
+      break;
+    }
+
+    case 'decline-angel-rent': {
+      // Player chose not to use Angel card, pay rent normally
+      if (room.monopolyPhase !== 'use_angel_rent' || !room.pendingRent) return;
+      const dr = room.pendingRent;
+      const drDebtor = room.players.find(p => p.id === dr.fromId);
+      const drCreditor = room.players.find(p => p.id === dr.toId);
+      room.pendingRent = null;
+      if (drDebtor && drCreditor) {
+        triggerPayment(room, drDebtor, drCreditor, dr.amount, io);
+        // Get Rich: Check forced acquisition opportunity after rent
+        if (room.monopolyPhase !== 'bankrupt_decision') {
+          const drTile = room.monopolyBoard[drDebtor.position];
+          if (drTile && drTile.houses < 5) {
+            const tileWorth = (drTile.price || 0) + (drTile.houses || 0) * (drTile.housePrice || 0);
+            if (drDebtor.money >= tileWorth) {
+              if (drCreditor.angelCards > 0) {
+                room.monopolyPhase = 'use_angel_force';
+                room.pendingForceAcquire = { byId: drDebtor.id, tileIndex: drTile.index, worth: tileWorth };
+              } else {
+                room.monopolyPhase = 'force_acquire_decision';
+                room.pendingForceAcquire = { byId: drDebtor.id, tileIndex: drTile.index, worth: tileWorth };
+              }
+            }
+          }
+        }
+      }
+      broadcastGameUpdate(room, io);
+      break;
+    }
+
+    case 'use-angel-force': {
+      // Property owner uses Angel Card to block force acquisition
+      if (room.monopolyPhase !== 'use_angel_force' || !room.pendingForceAcquire) return;
+      const fa2 = room.pendingForceAcquire;
+      const faTile2 = room.monopolyBoard[fa2.tileIndex];
+      if (!faTile2) return;
+      const tileOwner2 = room.players.find(p => p.id === faTile2.owner);
+      // Auth: the tile owner or the host for bots
+      const isAuthOwner = tileOwner2 && (tileOwner2.id === socket.id || (tileOwner2.isBot && room.players.find(p => p.id === socket.id)?.isHost));
+      if (!isAuthOwner) return;
+      if (tileOwner2.angelCards > 0) {
+        tileOwner2.angelCards -= 1;
+        addSystemChatMessage(room, io, `😇 ${tileOwner2.name} used an Angel Card to block the force acquisition!`);
+      }
+      room.pendingForceAcquire = null;
+      setEndTurnPhase(room, player, io);
+      broadcastGameUpdate(room, io);
+      break;
+    }
+
+    case 'decline-angel-force': {
+      // Property owner chose NOT to use Angel card to block
+      if (room.monopolyPhase !== 'use_angel_force' || !room.pendingForceAcquire) return;
+      // Transition to force_acquire_decision for the landing player
+      room.monopolyPhase = 'force_acquire_decision';
+      broadcastGameUpdate(room, io);
+      break;
+    }
+
+    case 'landed-build': {
+      if (room.monopolyPhase !== 'landed_build') return;
+      let lbIndex;
+      let count = 1;
+      if (payload && typeof payload === 'object') {
+        lbIndex = payload.tileIndex;
+        count = payload.count;
+      } else {
+        lbIndex = payload;
+      }
+      const lbTile = room.monopolyBoard[lbIndex];
+      if (!lbTile || lbTile.type !== 'property' || lbTile.owner !== player.id || lbTile.mortgaged) return;
+      
+      const maxHouses = room.landedBuildMaxHouses !== undefined ? room.landedBuildMaxHouses : 4;
+      if (lbTile.houses + count > maxHouses) return;
+      if (player.money < lbTile.housePrice * count) return;
+      
+      player.money -= lbTile.housePrice * count;
+      lbTile.houses += count;
+      const buildName = (lbTile.houses === 5) ? 'Hotel!' : `${lbTile.houses} house(s)`;
+      addSystemChatMessage(room, io, `🏗️ ${player.name} instantly built on ${lbTile.name} (${buildName}).`);
+      updateNetWorth(room, player.id);
+      broadcastGameUpdate(room, io);
+      break;
+    }
+
+    case 'landed-build-done': {
+      if (room.monopolyPhase !== 'landed_build') return;
+      setEndTurnPhase(room, player, io);
       broadcastGameUpdate(room, io);
       break;
     }

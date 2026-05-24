@@ -110,6 +110,7 @@ button, select, input {
   transition: all 0.2s ease;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 0.5rem;
 }
 .btn-primary:hover {
@@ -130,6 +131,10 @@ button, select, input {
   cursor: pointer;
   box-shadow: 0 4px 15px var(--accent-gold-glow);
   transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
 }
 .btn-gold:hover {
   transform: translateY(-2px);
@@ -145,6 +150,10 @@ button, select, input {
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
 }
 .btn-secondary:hover {
   background: rgba(255,255,255,0.12);
@@ -160,6 +169,10 @@ button, select, input {
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
 }
 .btn-danger:hover {
   transform: translateY(-2px);
@@ -186,7 +199,7 @@ button, select, input {
   min-height: 100vh;
   padding: 1.5rem;
   position: relative;
-  overflow: hidden;
+  overflow: visible;
 }
 
 /* Glowing decoration circles */

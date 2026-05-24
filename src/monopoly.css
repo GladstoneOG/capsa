@@ -161,27 +161,24 @@
 }
 
 .monopoly-board-wrapper {
-  perspective: 1200px;
-  width: 750px;
-  height: 750px;
+  perspective: 1500px;
+  width: 1200px;
+  height: 1200px;
   display: flex;
   justify-content: center;
   align-items: center;
   z-index: 1;
   transform: translateY(-35px);
+  overflow: visible;
 }
 
 /* 3D Board Tilt & Camera Transitions */
 .monopoly-board-tilt {
-  width: 620px;
+  width: 638px;
   height: 620px;
-  background: #bfdbfe; /* Clean background outer edge */
-  border: 10px solid #0f172a;
-  border-radius: 6px;
-  box-shadow: 
-    0 30px 60px rgba(0,0,0,0.6), 
-    0 10px 20px rgba(0,0,0,0.4),
-    inset 0 0 40px rgba(0,0,0,0.1);
+  background: transparent;
+  border: none;
+  border-radius: 8px;
   transform-style: preserve-3d;
   
   /* Bind camera translations to React state variables */
@@ -222,6 +219,29 @@
   background: #f1f5f9;
   position: relative;
   transform-style: preserve-3d;
+}
+
+/* Framing tray built flush on the grid plane as a front overlay to completely cover 3D fractional rounding gaps! */
+.monopoly-board-grid::after {
+  content: '';
+  position: absolute;
+  top: -15px;
+  left: -14.5px;
+  right: -15px;
+  bottom: -14.5px;
+  border: 11px solid #0f172a;
+  border-radius: 8px;
+  pointer-events: none;
+  /* Extrude it slightly to the exact tiles' Z height to lock them in! */
+  transform: translateZ(1px);
+  transform-style: preserve-3d;
+  z-index: 99;
+  
+  /* Deep premium physical drop shadows representing realistic table depth */
+  box-shadow: 
+    0 25px 55px rgba(0, 0, 0, 0.55), 
+    0 10px 18px rgba(0, 0, 0, 0.4),
+    inset 0 0 15px rgba(255, 255, 255, 0.1);
 }
 
 /* Inner board center panel (wood felt look) */
@@ -328,17 +348,19 @@
   flex-direction: column;
 }
 .monopoly-tile.horizontal-tile .color-bar {
-  width: 100%;
+  width: calc(100% + 8px);
   height: 12px;
   border-bottom: 2px solid #0f172a;
 }
 .monopoly-tile.horizontal-tile.bottom-row .color-bar {
   order: -1; /* Color bar at top */
+  margin: -4px -4px 0 -4px;
 }
 .monopoly-tile.horizontal-tile.top-row .color-bar {
   order: 2; /* Color bar at bottom */
   border-bottom: none;
   border-top: 2px solid #0f172a;
+  margin: 0 -4px -4px -4px;
 }
 
 /* Vertical tiles (left and right columns) */
@@ -347,16 +369,15 @@
 }
 .monopoly-tile.vertical-tile .color-bar {
   width: 12px;
-  height: 100%;
-  border-right: 2px solid #0f172a;
+  height: calc(100% + 8px);
 }
 .monopoly-tile.vertical-tile.left-col .color-bar {
-  order: 2; /* Color bar on inner side (right) */
-  border-right: none;
+  margin: -4px -4px -4px auto; /* Pushed to the right (inner bottom of Left Column)! */
   border-left: 2px solid #0f172a;
 }
 .monopoly-tile.vertical-tile.right-col .color-bar {
-  order: -1; /* Color bar on inner side (left) */
+  margin: -4px auto -4px -4px; /* Kept on the left (inner bottom of Right Column)! */
+  border-right: 2px solid #0f172a;
 }
 
 /* Content details inside tiles */
@@ -384,11 +405,15 @@
 /* For northwest (left-col) and southeast (right-col) rows, rotate text left 90deg and position absolutely to prevent border spill */
 .monopoly-tile.side-tile.vertical-tile .tile-info-container {
   position: absolute;
-  width: 50px;
-  height: 73px;
+  width: 42px; /* Fits perfectly within the 48px tile height to avoid overlapping neighbors! */
+  height: 68px; /* Fits perfectly within the 73px tile width */
   top: 50%;
   transform: translate(-50%, -50%) rotate(-90deg);
   transform-origin: center center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
 }
 
 .monopoly-tile.side-tile.vertical-tile.left-col .tile-info-container {
@@ -399,7 +424,17 @@
   left: 48.5px; /* Center of right-col text area: 12 + (85 - 12)/2 = 48.5px */
 }
 
+.monopoly-tile.vertical-tile .tile-name {
+  font-size: 0.44rem; /* Balanced size for vertical tiles to support wrapping */
+  letter-spacing: -0.2px;
+  line-height: 1.05;
+  word-wrap: break-word;
+  word-break: break-word;
+}
+
 .tile-name {
+  display: block; /* Enforce block rendering so text wraps naturally inside boundaries */
+  width: 100%;
   font-size: 0.55rem;
   font-weight: 700;
   text-align: center;
@@ -424,6 +459,190 @@
 .monopoly-tile.corner-tile .tile-name {
   font-size: 0.65rem;
   font-weight: 800;
+}
+
+/* Premium Special Non-Purchasable Tiles */
+.monopoly-tile.tile-jail {
+  position: relative;
+  overflow: hidden;
+}
+/* Beautiful steel bars watermark background for jail corner! */
+.monopoly-tile.tile-jail::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent 40%, rgba(15, 23, 42, 0.08) 40%, rgba(15, 23, 42, 0.08) 45%, transparent 45%);
+  background-size: 10px 100%;
+  pointer-events: none;
+}
+
+/* Chance and Chest tiles have custom border and tint removed to avoid confusion with owned properties */
+.monopoly-tile.tile-chance {
+  /* Inherits standard tile borders/backgrounds */
+}
+
+.monopoly-tile.tile-chest {
+  /* Inherits standard tile borders/backgrounds */
+}
+
+/* Premium Emoji Shake Animation */
+.premium-emoji-shake {
+  display: inline-block;
+  animation: emoji-premium-shake 3s ease-in-out infinite;
+  transform-origin: bottom center;
+}
+
+@keyframes emoji-premium-shake {
+  0%, 75%, 100% {
+    transform: rotate(0deg);
+  }
+  80% {
+    transform: rotate(-15deg);
+  }
+  84% {
+    transform: rotate(12deg);
+  }
+  88% {
+    transform: rotate(-10deg);
+  }
+  92% {
+    transform: rotate(8deg);
+  }
+  96% {
+    transform: rotate(-4deg);
+  }
+}
+
+.monopoly-tile.tile-tax {
+  background: linear-gradient(135deg, #fafafa 0%, #f4f4f5 100%) !important;
+  border: 2px dashed #a1a1aa !important;
+  box-shadow: inset 0 0 8px rgba(0, 0, 0, 0.05) !important;
+}
+
+/* ==================== Center scrolling 2D City Skyline ==================== */
+.board-center-scrolling-city {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden; /* Perfect flat 2D clipping wrapper centered behind Decks! */
+  pointer-events: none;
+  z-index: 0;
+  transform: translateZ(0.2px); 
+}
+
+/* Rotated diagonal wrapper sized 140% to keep everything parallel to logo without corner gaps */
+.scrolling-city-diagonal-wrapper {
+  position: absolute;
+  top: -20%;
+  left: -20%;
+  width: 140%;
+  height: 140%;
+  transform: rotateZ(-35deg);
+  background: linear-gradient(to bottom, #7dd3fc 0%, #e0f2fe 65%, #4ade80 65%, #22c55e 100%); /* sky blue top, green ground bottom meeting at 65%! */
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  transform-style: preserve-3d;
+}
+
+/* Scrolling Clouds Ribbon sitting closer to the middle (horizon line is bottom: 35%) */
+.scrolling-clouds-ribbon {
+  display: flex;
+  width: 200%;
+  height: 120px;
+  position: absolute;
+  bottom: 46%; /* Placed lower, closer to the horizon/middle! */
+  left: 0;
+  animation: scroll-city-inf 45s linear infinite; /* Slower scrolling speed for background depth */
+  transform-style: preserve-3d;
+  z-index: 2;
+  pointer-events: none;
+}
+.clouds-panel {
+  display: block;
+  position: relative;
+  width: 50%;
+  height: 100%;
+}
+.cloud-item {
+  font-size: 3.2rem; /* Large beautiful fluffy clouds */
+  opacity: 0.75;
+  filter: drop-shadow(0 2px 5px rgba(255,255,255,0.95));
+}
+.cloud-item.c1 { animation: drift-cloud 16s ease-in-out infinite alternate; }
+.cloud-item.c2 { animation: drift-cloud 22s ease-in-out infinite alternate-reverse; }
+.cloud-item.c3 { animation: drift-cloud 18s ease-in-out infinite alternate; animation-delay: -3s; }
+.cloud-item.c4 { animation: drift-cloud 20s ease-in-out infinite alternate-reverse; animation-delay: -1s; }
+.cloud-item.c5 { animation: drift-cloud 17s ease-in-out infinite alternate; animation-delay: -5s; }
+.cloud-item.c6 { animation: drift-cloud 24s ease-in-out infinite alternate-reverse; animation-delay: -2s; }
+.cloud-item.c7 { animation: drift-cloud 19s ease-in-out infinite alternate; animation-delay: -4s; }
+
+@keyframes drift-cloud {
+  0% { transform: translateX(-30px) scale(0.9); }
+  100% { transform: translateX(30px) scale(1.1); }
+}
+
+/* Looping City Skyline Ribbon sitting exactly on the green ground horizon (at bottom: 35%)! */
+.scrolling-city-ribbon {
+  display: flex;
+  width: 200%;
+  height: 135px; /* Taller cityscape */
+  position: absolute;
+  bottom: 35%; /* Placed exactly at the horizon meeting line! */
+  left: 0;
+  animation: scroll-city-inf 25s linear infinite;
+  transform-style: preserve-3d;
+  z-index: 5;
+}
+.city-svg-ribbon {
+  width: 50%;
+  height: 100%;
+}
+
+@keyframes scroll-city-inf {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
+/* Scrolling foreground trees ribbon sitting closer to the horizon line (at bottom: 35%) */
+.scrolling-trees-ribbon {
+  display: flex;
+  width: 200%;
+  height: 90px;
+  position: absolute;
+  bottom: 8%; /* Placed higher up, closer to the horizon/middle! */
+  left: 0;
+  animation: scroll-city-inf 18s linear infinite; /* Faster scrolling speed for foreground depth */
+  transform-style: preserve-3d;
+  z-index: 10;
+  pointer-events: none;
+}
+.trees-panel {
+  display: block;
+  position: relative;
+  width: 50%;
+  height: 100%;
+}
+.city-tree-sway {
+  font-size: 2.8rem; /* Large tactile forest trees */
+  opacity: 0.95;
+  transform-origin: bottom center;
+  filter: drop-shadow(0 3px 4px rgba(0,0,0,0.3));
+}
+.city-tree-sway.t1 { animation: sway-tree-slow 4.5s ease-in-out infinite alternate; }
+.city-tree-sway.t2 { animation: sway-tree-slow 3.5s ease-in-out infinite alternate-reverse; }
+.city-tree-sway.t3 { animation: sway-tree-slow 5s ease-in-out infinite alternate; animation-delay: -1s; }
+.city-tree-sway.t4 { animation: sway-tree-slow 4s ease-in-out infinite alternate-reverse; animation-delay: -2s; }
+.city-tree-sway.t5 { animation: sway-tree-slow 4.8s ease-in-out infinite alternate; }
+
+@keyframes sway-tree-slow {
+  0% { transform: rotate(-5deg); }
+  100% { transform: rotate(5deg); }
 }
 
 /* Owned Property Overlay */
@@ -507,62 +726,151 @@
   transform-style: preserve-3d;
 }
 
+.tile-buildings-container.grid-layout {
+  display: grid;
+  grid-template-columns: repeat(2, auto);
+  grid-template-rows: repeat(2, auto);
+}
+
 /* CSS 3D Cube */
+/* Generic CSS 3D Closed Box with CSS Variables */
 .cube-3d {
   position: relative;
   transform-style: preserve-3d;
 }
 
 .cube-3d.house {
-  width: 15px;
-  height: 15px;
-  transform: translateZ(7.5px);
+  --w: 14px;
+  --d: 12px;
+  --h: 10px;
+  width: var(--w);
+  height: var(--d);
+  transform: translate3d(0, 0, 2px);
 }
 
 .cube-3d.hotel {
-  width: 26px;
-  height: 26px;
-  transform: translateZ(13px);
+  --w: 24px;
+  --d: 18px;
+  --h: 16px;
+  width: var(--w);
+  height: var(--d);
+  transform: translate3d(0, 0, 2px);
 }
 
 .cube-face {
   position: absolute;
-  border: 1px solid rgba(0, 0, 0, 0.35);
-  box-shadow: inset 0 0 4px rgba(255, 255, 255, 0.15);
-}
-
-.cube-3d.house .cube-face {
-  width: 15px;
-  height: 15px;
+  box-sizing: border-box;
+  border: 1px solid rgba(0, 0, 0, 0.45);
+  box-shadow: inset 0 0 2px rgba(255, 255, 255, 0.2);
   background: var(--building-color, #22c55e);
+  transform-style: preserve-3d;
 }
 
-.cube-3d.hotel .cube-face {
-  width: 26px;
-  height: 26px;
-  background: var(--building-color, #ef4444);
-  border-color: rgba(255, 255, 255, 0.5);
+/* Light shading based on 3D face orientation */
+.cube-face.face-top {
+  width: var(--w);
+  height: var(--d);
+  transform: translateZ(var(--h));
+  filter: brightness(1.2);
 }
 
-/* Premium golden roof for hotels */
-.cube-3d.hotel .cube-face.top {
-  background: linear-gradient(135deg, #fbbf24 0%, #d97706 100%) !important;
+.cube-face.face-bottom {
+  width: var(--w);
+  height: var(--d);
+  transform: translateZ(0);
+  filter: brightness(0.5);
+  box-shadow: 0 2px 5px rgba(0,0,0,0.5);
+}
+
+.cube-face.face-front {
+  width: var(--w);
+  height: var(--h);
+  transform-origin: bottom center;
+  transform: translateY(calc(var(--d) - var(--h))) rotateX(-90deg);
+  filter: brightness(1.0);
+}
+
+.cube-face.face-back {
+  width: var(--w);
+  height: var(--h);
+  transform-origin: top center;
+  transform: rotateX(90deg);
+  filter: brightness(0.75);
+}
+
+.cube-face.face-left {
+  width: var(--h);
+  height: var(--d);
+  transform-origin: left center;
+  transform: rotateY(90deg);
+  filter: brightness(0.9);
+}
+
+.cube-face.face-right {
+  width: var(--h);
+  height: var(--d);
+  transform-origin: right center;
+  transform: translateX(calc(var(--w) - var(--h))) rotateY(-90deg);
+  filter: brightness(0.8);
+}
+
+/* Premium Detailed House Texturing */
+.cube-3d.house .cube-face.face-top {
+  /* Dynamic dual-sloped roof texture using split linear-gradient shingle pattern! */
+  background: 
+    linear-gradient(90deg, rgba(0, 0, 0, 0.15) 50%, rgba(255, 255, 255, 0.1) 50%),
+    repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.2) 2px, rgba(0,0,0,0.2) 4px),
+    var(--building-color, #22c55e) !important;
+  border: 1px solid rgba(0, 0, 0, 0.5);
+  box-shadow: inset 0 0 4px rgba(0,0,0,0.4);
+}
+
+.cube-3d.house .cube-face.face-front {
+  /* Tiny dark door and windows on the front wall */
+  background: 
+    linear-gradient(to right, transparent 5px, #1e293b 5px, #1e293b 9px, transparent 9px) bottom no-repeat,
+    linear-gradient(to right, transparent 2px, #fef08a 2px, #fef08a 5px, transparent 5px, #fef08a 9px, #fef08a 12px, transparent 12px) top 2px left no-repeat,
+    var(--building-color, #22c55e);
+  background-size: 100% 6px, 100% 3px, 100% 100%;
+}
+
+.cube-3d.house .cube-face.face-left,
+.cube-3d.house .cube-face.face-right {
+  /* Windows on side walls */
+  background: 
+    linear-gradient(to right, transparent 3px, #fef08a 3px, #fef08a 6px, transparent 6px, #fef08a 9px, #fef08a 12px, transparent 12px) top 3px left no-repeat,
+    var(--building-color, #22c55e);
+  background-size: 100% 3px, 100% 100%;
+}
+
+/* Premium Detailed Hotel Texturing */
+.cube-3d.hotel .cube-face.face-top {
+  /* Grand gold lined peak roof */
+  background: 
+    linear-gradient(135deg, #fbbf24 0%, #d97706 100%) !important;
   border: 1.5px solid #ffffff;
+  box-shadow: inset 0 0 6px rgba(255, 255, 255, 0.5);
 }
 
-/* House cube faces transforms (15px size -> translateZ 7.5px) */
-.cube-3d.house .cube-face.front  { transform: rotateY(0deg) translateZ(7.5px); }
-.cube-3d.house .cube-face.back   { transform: rotateY(180deg) translateZ(7.5px); }
-.cube-3d.house .cube-face.left   { transform: rotateY(-90deg) translateZ(7.5px); }
-.cube-3d.house .cube-face.right  { transform: rotateY(90deg) translateZ(7.5px); }
-.cube-3d.house .cube-face.top    { transform: rotateX(90deg) translateZ(7.5px); }
+.cube-3d.hotel .cube-face.face-front {
+  /* Elegant double golden entrance canopy doors & warm glowing windows */
+  background: 
+    linear-gradient(to right, transparent 9px, #fbbf24 9px, #fbbf24 15px, transparent 15px) bottom no-repeat,
+    linear-gradient(to right, transparent 2px, #fef08a 2px, #fef08a 5px, transparent 5px, #fef08a 8px, #fef08a 11px, transparent 11px, #fef08a 13px, #fef08a 16px, transparent 16px, #fef08a 19px, #fef08a 22px, transparent 22px) top 2px left no-repeat,
+    linear-gradient(to right, transparent 2px, #fef08a 2px, #fef08a 5px, transparent 5px, #fef08a 8px, #fef08a 11px, transparent 11px, #fef08a 13px, #fef08a 16px, transparent 16px, #fef08a 19px, #fef08a 22px, transparent 22px) top 8px left no-repeat,
+    var(--building-color, #ef4444);
+  background-size: 100% 8px, 100% 3px, 100% 3px, 100% 100%;
+}
 
-/* Hotel cube faces transforms (26px size -> translateZ 13px) */
-.cube-3d.hotel .cube-face.front  { transform: rotateY(0deg) translateZ(13px); }
-.cube-3d.hotel .cube-face.back   { transform: rotateY(180deg) translateZ(13px); }
-.cube-3d.hotel .cube-face.left   { transform: rotateY(-90deg) translateZ(13px); }
-.cube-3d.hotel .cube-face.right  { transform: rotateY(90deg) translateZ(13px); }
-.cube-3d.hotel .cube-face.top    { transform: rotateX(90deg) translateZ(13px); }
+.cube-3d.hotel .cube-face.face-left,
+.cube-3d.hotel .cube-face.face-right {
+  /* Grand hotel tall window rows */
+  background: 
+    linear-gradient(to right, transparent 3px, #fef08a 3px, #fef08a 6px, transparent 6px, #fef08a 9px, #fef08a 12px, transparent 12px) top 3px left no-repeat,
+    linear-gradient(to right, transparent 3px, #fef08a 3px, #fef08a 6px, transparent 6px, #fef08a 9px, #fef08a 12px, transparent 12px) top 9px left no-repeat,
+    var(--building-color, #ef4444);
+  background-size: 100% 3px, 100% 3px, 100% 100%;
+}
 
 
 /* ==================== 3D Dice Rolling Animation ==================== */
@@ -723,11 +1031,13 @@
   width: 100vw;
   height: 100vh;
   background: rgba(0,0,0,0.4);
-  z-index: 600;
+  z-index: 6000;
   display: flex;
   justify-content: center;
   align-items: center;
   backdrop-filter: blur(4px);
+  transform: translateZ(900px);
+  transform-style: preserve-3d;
 }
 
 .deed-card {
@@ -738,6 +1048,7 @@
   padding: 10px;
   color: #0f172a;
   text-align: center;
+  transform: translateZ(50px);
 }
 
 .deed-header {
@@ -2045,6 +2356,18 @@
   border-color: #854d0e;
 }
 
+.table-3d-card.odd-even-card {
+  background: linear-gradient(135deg, #a78bfa 0%, #7c3aed 100%);
+  color: white;
+  border-color: #5b21b6;
+}
+
+.table-3d-card.angel-card {
+  background: linear-gradient(135deg, #34d399 0%, #10b981 100%);
+  color: white;
+  border-color: #065f46;
+}
+
 .card-face-mini {
   padding: 4px;
   line-height: 1.1;
@@ -2977,4 +3300,95 @@
 }
 .player-detail-modal ::-webkit-scrollbar-thumb:hover {
   background: rgba(0, 0, 0, 0.25);
+}
+
+/* ==================== Traded! Floating Text modifications ==================== */
+.tile-action-popup.traded {
+  background: linear-gradient(135deg, #a855f7 0%, #7e22ce 100%);
+  box-shadow: 0 8px 20px rgba(168, 85, 247, 0.6);
+  border: 1.5px solid #ffffff;
+}
+
+.tile-action-popup.acquired {
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  box-shadow: 0 8px 20px rgba(239, 68, 68, 0.5);
+  border: 1.5px solid #fbbf24;
+}
+
+.tile-action-popup.festival {
+  background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
+  box-shadow: 0 8px 20px rgba(251, 191, 36, 0.5);
+  border: 1.5px solid #ffffff;
+}
+
+.tile-action-popup.airport {
+  background: linear-gradient(135deg, #38bdf8 0%, #0284c7 100%);
+  box-shadow: 0 8px 20px rgba(56, 189, 248, 0.5);
+  border: 1.5px solid #ffffff;
+}
+
+
+/* ==================== 3D Player Token Floating Status Labels ==================== */
+.player-status-badge {
+  position: absolute;
+  top: -55px; /* Floating over avatar's head */
+  left: 50%;
+  transform: translateX(-50%);
+  color: #ffffff;
+  font-family: 'Outfit', sans-serif;
+  font-size: 0.62rem;
+  font-weight: 900;
+  padding: 3px 8px;
+  border-radius: 20px;
+  border: 1.2px solid #ffffff;
+  white-space: nowrap;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.35);
+  pointer-events: none;
+  z-index: 110;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  animation: status-badge-bounce 0.8s ease-in-out infinite alternate;
+}
+
+.player-status-badge.managing {
+  background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+  box-shadow: 0 0 10px rgba(59, 130, 246, 0.5), 0 4px 8px rgba(0, 0, 0, 0.3);
+}
+
+.player-status-badge.trading {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  box-shadow: 0 0 10px rgba(16, 185, 129, 0.5), 0 4px 8px rgba(0, 0, 0, 0.3);
+}
+
+@keyframes status-badge-bounce {
+  0% { transform: translateX(-50%) translateY(0); }
+  100% { transform: translateX(-50%) translateY(-5px); }
+}
+
+/* ==================== HUD Corner Status Pills ==================== */
+.corner-status-pill {
+  font-size: 0.6rem;
+  font-weight: 900;
+  color: #ffffff;
+  padding: 1.5px 6px;
+  border-radius: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  animation: pill-pulse 1s infinite alternate;
+}
+
+.corner-status-pill.managing {
+  background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+  box-shadow: 0 0 6px rgba(59, 130, 246, 0.4);
+}
+
+.corner-status-pill.trading {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  box-shadow: 0 0 6px rgba(16, 185, 129, 0.4);
+}
+
+@keyframes pill-pulse {
+  0% { opacity: 0.8; transform: scale(0.96); }
+  100% { opacity: 1; transform: scale(1.04); }
 }

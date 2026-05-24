@@ -12,6 +12,7 @@ export interface TileState {
   owner: string | null;
   houses: number;
   mortgaged: boolean;
+  festivalTurns?: number;
 }
 
 export const LOCAL_BOARD_TILES: Omit<TileState, 'owner' | 'houses' | 'mortgaged'>[] = [
@@ -60,7 +61,7 @@ export const LOCAL_BOARD_TILES: Omit<TileState, 'owner' | 'houses' | 'mortgaged'
 export interface CardDefinition {
   id: string;
   text: string;
-  action: 'move' | 'give_money' | 'take_money' | 'jail_free' | 'goto_jail' | 'back_spaces' | 'nearest_railroad' | 'nearest_utility' | 'pay_each' | 'collect_each' | 'repairs';
+  action: 'move' | 'give_money' | 'take_money' | 'jail_free' | 'goto_jail' | 'back_spaces' | 'nearest_railroad' | 'nearest_utility' | 'pay_each' | 'collect_each' | 'repairs' | 'give_odd_even' | 'give_angel';
   target?: number;
   amount?: number;
   houseCost?: number;
@@ -81,7 +82,10 @@ export const LOCAL_CHANCE_CARDS: CardDefinition[] = [
   { id: 'ch_repairs', text: 'Make general repairs on all your property. Pay $25 per house and $100 per hotel.', action: 'repairs', houseCost: 25, hotelCost: 100 },
   { id: 'ch_speeding', text: 'Speeding fine $15', action: 'take_money', amount: 15 },
   { id: 'ch_reading', text: 'Take a trip to Reading Railroad. If you pass GO, collect $200.', action: 'move', target: 5 },
-  { id: 'ch_chairman', text: 'You have been elected Chairman of the Board. Pay each player $50.', action: 'pay_each', amount: 50 }
+  { id: 'ch_chairman', text: 'You have been elected Chairman of the Board. Pay each player $50.', action: 'pay_each', amount: 50 },
+  // Get Rich exclusive cards
+  { id: 'ch_odd_even', text: '🎯 Odd/Even Card! Use before rolling to force your dice result to be odd or even.', action: 'give_odd_even' },
+  { id: 'ch_angel', text: '😇 Angel Card! Use to skip paying rent OR block a forced acquisition once.', action: 'give_angel' }
 ];
 
 export const LOCAL_CHEST_CARDS: CardDefinition[] = [
@@ -100,7 +104,10 @@ export const LOCAL_CHEST_CARDS: CardDefinition[] = [
   { id: 'cc_consultancy', text: 'Receive $25 consultancy fee.', action: 'give_money', amount: 25 },
   { id: 'cc_street_repairs', text: 'You are assessed for street repairs. Pay $40 per house and $115 per hotel.', action: 'repairs', houseCost: 40, hotelCost: 115 },
   { id: 'cc_beauty', text: 'You have won second prize in a beauty contest. Collect $10.', action: 'give_money', amount: 10 },
-  { id: 'cc_inherit', text: 'You inherit $100.', action: 'give_money', amount: 100 }
+  { id: 'cc_inherit', text: 'You inherit $100.', action: 'give_money', amount: 100 },
+  // Get Rich exclusive cards
+  { id: 'cc_odd_even', text: '🎯 Odd/Even Card! Use before rolling to force your dice result to be odd or even.', action: 'give_odd_even' },
+  { id: 'cc_angel', text: '😇 Angel Card! Use to skip paying rent OR block a forced acquisition once.', action: 'give_angel' }
 ];
 
 export function getBotMonopolyDecision(
@@ -109,7 +116,9 @@ export function getBotMonopolyDecision(
   phase: string,
   _activeDebt: any,
   landedTile: TileState,
-  auctionState?: any
+  auctionState?: any,
+  landedBuildMaxHouses?: number,
+  isGetRich?: boolean
 ): { action: string; payload?: any } {
   
   if (phase === 'jail_decision') {
@@ -133,6 +142,74 @@ export function getBotMonopolyDecision(
       return { action: 'roll-jail-doubles' };
     }
     return { action: 'roll-dice' };
+  }
+
+  // Get Rich: Festival - choose cheapest property to boost
+  if (phase === 'festival_selection') {
+    const ownedProps = board.filter(t =>
+      (t.type === 'property' || t.type === 'railroad' || t.type === 'utility') && t.owner === botPlayer.id
+    );
+    if (ownedProps.length > 0) {
+      // Pick highest-rent property
+      const best = ownedProps.reduce((a, b) => {
+        const aRent = a.rent ? (a.rent[a.houses] || a.rent[0]) : 25;
+        const bRent = b.rent ? (b.rent[b.houses] || b.rent[0]) : 25;
+        return bRent > aRent ? b : a;
+      });
+      return { action: 'festival-select', payload: best.index };
+    }
+    return { action: 'festival-skip' };
+  }
+
+  // Get Rich: Airport - bot flies to the most expensive unowned property, or skips
+  if (phase === 'airport_selection') {
+    if (botPlayer.money >= 100) {
+      const unowned = board.filter(t => t.owner === null && t.price && t.price <= botPlayer.money - 100);
+      if (unowned.length > 0) {
+        unowned.sort((a, b) => (b.price || 0) - (a.price || 0));
+        return { action: 'airport-fly', payload: { targetIndex: unowned[0].index } };
+      }
+    }
+    return { action: 'airport-skip' };
+  }
+
+  // Get Rich: Force acquire - bot always tries if possible
+  if (phase === 'force_acquire_decision') {
+    return { action: 'force-acquire' };
+  }
+
+  // Get Rich: Angel card for rent skip - bot uses it if it has money problems
+  if (phase === 'use_angel_rent') {
+    if ((botPlayer.angelCards || 0) > 0 && botPlayer.money < 300) {
+      return { action: 'use-angel-rent' };
+    }
+    return { action: 'decline-angel-rent' };
+  }
+
+  // Get Rich: Angel card for blocking force acquisition - owner bot decides
+  if (phase === 'use_angel_force') {
+    // Use angel if we own the property and would lose it
+    if ((botPlayer.angelCards || 0) > 0) {
+      return { action: 'use-angel-force' };
+    }
+    return { action: 'decline-angel-force' };
+  }
+
+  // Get Rich: Landed build - bot builds if profitable
+  if (phase === 'landed_build') {
+    if (landedTile && landedTile.owner === botPlayer.id && landedTile.type === 'property') {
+      const maxHouses = landedBuildMaxHouses !== undefined ? landedBuildMaxHouses : 4;
+      const currentHouses = landedTile.houses;
+      const canBuildCount = maxHouses - currentHouses;
+      const housePrice = landedTile.housePrice || 50;
+      const availableMoney = botPlayer.money - 200;
+      const affordableCount = Math.floor(availableMoney / housePrice);
+      const countToBuild = Math.min(canBuildCount, affordableCount);
+      if (countToBuild > 0) {
+        return { action: 'landed-build', payload: { tileIndex: landedTile.index, count: countToBuild } };
+      }
+    }
+    return { action: 'landed-build-done' };
   }
 
   if (phase === 'action') {
@@ -207,6 +284,9 @@ export function getBotMonopolyDecision(
   }
 
   if (phase === 'end_turn') {
+    if (isGetRich) {
+      return { action: 'end-turn' };
+    }
     // Try to build houses if we have monopolies and extra money
     const ownedProperties = board.filter(t => t.owner === botPlayer.id && t.type === 'property' && !t.mortgaged);
     
@@ -278,7 +358,7 @@ export function evaluateBotTrade(
 
   // Calculate ratio of offered value to requested value
   const ratio = givingValue > 0 ? receivingValue / givingValue : 1.0;
-  let rejectChance = 0.5;
+  let rejectChance: number;
 
   if (ratio >= 1.0) {
     // Rejection chance decreases as the offer becomes more generous
@@ -297,7 +377,7 @@ export function evaluateBotTrade(
 }
 
 function getBotPropertyValuation(botPlayer: any, tile: TileState, board: TileState[], isGiving: boolean): number {
-  let value = tile.price || 100;
+  const value = tile.price || 100;
   if (tile.type !== 'property' || !tile.color) {
     return value;
   }

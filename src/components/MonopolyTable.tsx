@@ -16,6 +16,8 @@ interface Player {
   jailTurns: number;
   getOutOfJailCards: number;
   freeTollCards?: number;
+  oddEvenCards?: number;
+  angelCards?: number;
   bankrupt: boolean;
   lastRoll: number[];
   rollCount: number;
@@ -23,6 +25,7 @@ interface Player {
   netWorth: number;
   score?: number;
   finishRank?: number;
+  status?: 'managing' | 'trading' | null;
 }
 
 interface TileState {
@@ -37,6 +40,7 @@ interface TileState {
   owner: string | null;
   houses: number;
   mortgaged: boolean;
+  festivalTurns?: number;
 }
 
 interface MonopolyTableProps {
@@ -45,7 +49,7 @@ interface MonopolyTableProps {
   turnIndex: number;
   monopolyBoard: TileState[];
   dice: number[];
-  monopolyPhase: 'roll' | 'action' | 'jail_decision' | 'card_drawn' | 'bankrupt_decision' | 'end_turn' | 'auction';
+  monopolyPhase: string;
   currentCard: any | null;
   cardType: string | null;
   activeDebt: any | null;
@@ -60,7 +64,13 @@ interface MonopolyTableProps {
   onRestartGame: () => void;
   onAnimationStateChange?: (isAnimating: boolean) => void;
   onToggleChat?: () => void;
+  onVisualPositionsChange?: (positions: Record<string, number>) => void;
   rollId?: string | null;
+  rules?: any;
+  lastActionDetail?: any;
+  pendingForceAcquire?: any | null;
+  pendingRent?: any | null;
+  landedBuildMaxHouses?: number;
 }
 
 // Maps board index to grid row and column (1-indexed CSS Grid)
@@ -81,18 +91,24 @@ function getTileGridCoords(index: number): { row: number; col: number } {
 }
 
 // Returns local board coordinates (X, Y) relative to board center (0, 0)
-// ranging from -310 to +310 based on non-uniform grid tracks (85px corners, 50px sides)
+// ranging from -319 to +319 for X and -310 to +310 for Y based on non-uniform grid tracks (85px corners, 52px/50px sides)
 function getTileLocalCoords(index: number): { x: number; y: number } {
   const { row, col } = getTileGridCoords(index);
   
-  const getCenterOfIndex = (idx: number) => {
+  const getCenterOfCol = (idx: number) => {
     if (idx === 1) return 42.5;
-    if (idx >= 2 && idx <= 10) return 110 + (idx - 2) * 50;
-    return 577.5; // idx === 11
+    if (idx >= 2 && idx <= 10) return 111 + (idx - 2) * 52;
+    return 595.5; // 638 - 42.5
   };
 
-  const tileX = getCenterOfIndex(col) - 310;
-  const tileY = getCenterOfIndex(row) - 310;
+  const getCenterOfRow = (idx: number) => {
+    if (idx === 1) return 42.5;
+    if (idx >= 2 && idx <= 10) return 110 + (idx - 2) * 50;
+    return 577.5; // 620 - 42.5
+  };
+
+  const tileX = getCenterOfCol(col) - 319;
+  const tileY = getCenterOfRow(row) - 310;
   return { x: tileX, y: tileY };
 }
 
@@ -144,9 +160,17 @@ export const MonopolyTable: React.FC<MonopolyTableProps> = ({
   onRestartGame,
   onAnimationStateChange,
   onToggleChat,
+  onVisualPositionsChange,
   rollId = null,
+  rules = { ruleset: 'Default' },
+  lastActionDetail,
+  pendingForceAcquire = null,
+  pendingRent = null,
+  landedBuildMaxHouses = 4,
 }) => {
   const [selectedDeedIndex, setSelectedDeedIndex] = useState<number | null>(null);
+  const [tradeBoardSelectionMode, setTradeBoardSelectionMode] = useState<'me' | 'them' | null>(null);
+  const [incomingTradeViewBoardMode, setIncomingTradeViewBoardMode] = useState<boolean>(false);
   const [isBuildManagerOpen, setIsBuildManagerOpen] = useState<boolean>(false);
   const [isTradeEditorOpen, setIsTradeEditorOpen] = useState<boolean>(false);
   const [tradeTargetId, setTradeTargetId] = useState<string | null>(null);
@@ -204,17 +228,69 @@ export const MonopolyTable: React.FC<MonopolyTableProps> = ({
   const isDraggingRef = useRef<boolean>(false);
   const [isCameraManual, setIsCameraManual] = useState<boolean>(false);
   
+  // Power bar and Odd/Even states
+  const [powerValue, setPowerValue] = useState<number>(0);
+  const [isPressing, setIsPressing] = useState<boolean>(false);
+  const powerDirectionRef = useRef<number>(1);
+  const [oddEvenChoice, setOddEvenChoice] = useState<'odd' | 'even' | null>(null);
+  const powerAnimIdRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (isPressing) {
+      const updatePower = () => {
+        setPowerValue(prev => {
+          let next = prev + powerDirectionRef.current * 4;
+          if (next >= 100) {
+            next = 100;
+            powerDirectionRef.current = -1;
+          } else if (next <= 0) {
+            next = 0;
+            powerDirectionRef.current = 1;
+          }
+          return next;
+        });
+        powerAnimIdRef.current = requestAnimationFrame(updatePower);
+      };
+      powerAnimIdRef.current = requestAnimationFrame(updatePower);
+    } else {
+      if (powerAnimIdRef.current) {
+        cancelAnimationFrame(powerAnimIdRef.current);
+        powerAnimIdRef.current = null;
+      }
+    }
+    return () => {
+      if (powerAnimIdRef.current) {
+        cancelAnimationFrame(powerAnimIdRef.current);
+      }
+    };
+  }, [isPressing]);
+
+  const handlePowerBarStart = (e: React.MouseEvent | React.TouchEvent) => {
+    e.preventDefault();
+    if (isDiceRolling || monopolyPhase !== 'roll' || activePlayer?.id !== playerId) return;
+    setPowerValue(0);
+    powerDirectionRef.current = 1;
+    setIsPressing(true);
+  };
+
+  const handlePowerBarRelease = () => {
+    if (!isPressing) return;
+    setIsPressing(false);
+    onMonopolyAction('roll-dice', { power: powerValue, oddEvenChoice });
+    setOddEvenChoice(null);
+  };
+
   const [tileFloatingTexts, setTileFloatingTexts] = useState<{
     id: string;
     tileIndex: number;
     text: string;
-    type: 'bought' | 'rent' | 'built' | 'sold' | 'mortgaged' | 'jailed' | 'monopoly' | 'salary';
+    type: 'bought' | 'rent' | 'built' | 'sold' | 'mortgaged' | 'jailed' | 'monopoly' | 'salary' | 'traded' | 'acquired' | 'festival' | 'airport';
   }[]>([]);
   const prevBoardForFloatingTextRef = useRef<TileState[]>([]);
   const prevPlayersForFloatingTextRef = useRef<Player[]>([]);
   const prevMonopolyColorGroupsRef = useRef<Record<string, string | null>>({});
 
-  const addFloatingText = useCallback((tileIndex: number, text: string, type: 'bought' | 'rent' | 'built' | 'sold' | 'mortgaged' | 'jailed' | 'monopoly' | 'salary') => {
+  const addFloatingText = useCallback((tileIndex: number, text: string, type: 'bought' | 'rent' | 'built' | 'sold' | 'mortgaged' | 'jailed' | 'monopoly' | 'salary' | 'traded' | 'acquired' | 'festival' | 'airport') => {
     const id = `${type}_${tileIndex}_${Date.now()}_${Math.random()}`;
     setTileFloatingTexts(prev => [...prev, { id, tileIndex, text, type }]);
     setTimeout(() => {
@@ -881,6 +957,12 @@ export const MonopolyTable: React.FC<MonopolyTableProps> = ({
     return groups;
   }, [monopolyBoard]);
 
+  const isUpgradedGroup = useCallback((tile: TileState) => {
+    if (rules?.ruleset === 'Get Rich') return false;
+    if (tile.type !== 'property' || !tile.color) return false;
+    return monopolyBoard.filter(t => t.color === tile.color).some(t => t.houses > 0);
+  }, [monopolyBoard, rules]);
+
   // Floating text action triggers ("Bought!", "Rent!", "Built!", "Sold!", "Mortgaged!", "Unmortgaged!", "Jailed!", "Monopoly!")
   useEffect(() => {
     if (gameState !== 'playing' || monopolyBoard.length === 0) return;
@@ -898,9 +980,9 @@ export const MonopolyTable: React.FC<MonopolyTableProps> = ({
 
     const prevBoard = prevBoardForFloatingTextRef.current;
     const prevPlayers = prevPlayersForFloatingTextRef.current;
-    const newTexts: { id: string; tileIndex: number; text: string; type: 'bought' | 'rent' | 'built' | 'sold' | 'mortgaged' | 'jailed' | 'monopoly' }[] = [];
+    const newTexts: { id: string; tileIndex: number; text: string; type: 'bought' | 'rent' | 'built' | 'sold' | 'mortgaged' | 'jailed' | 'monopoly' | 'traded' | 'acquired' | 'festival' | 'salary' | 'airport' }[] = [];
 
-    const addText = (tileIndex: number, text: string, type: 'bought' | 'rent' | 'built' | 'sold' | 'mortgaged' | 'jailed' | 'monopoly') => {
+    const addText = (tileIndex: number, text: string, type: 'bought' | 'rent' | 'built' | 'sold' | 'mortgaged' | 'jailed' | 'monopoly' | 'traded' | 'acquired' | 'festival' | 'salary' | 'airport') => {
       const id = `${type}_${tileIndex}_${Date.now()}_${Math.random()}`;
       newTexts.push({ id, tileIndex, text, type });
       setTimeout(() => {
@@ -916,6 +998,20 @@ export const MonopolyTable: React.FC<MonopolyTableProps> = ({
       // Purchase: owner went from null to a player ID
       if (tile.owner && !prevTile.owner) {
         addText(tile.index, 'Bought!', 'bought');
+      }
+
+      // Trade: owner changed from Player A to Player B (both non-null)
+      if (tile.owner && prevTile.owner && tile.owner !== prevTile.owner) {
+        if (lastActionDetail?.type === 'force-acquire' && lastActionDetail?.tileIndex === tile.index) {
+          addText(tile.index, 'Acquired!', 'acquired');
+        } else {
+          addText(tile.index, 'Traded!', 'traded');
+        }
+      }
+
+      // Festival active: turns left went from 0 (or undefined) to > 0
+      if (tile.festivalTurns && tile.festivalTurns > 0 && (!prevTile || !prevTile.festivalTurns)) {
+        addText(tile.index, 'Festival! 🎉', 'festival');
       }
 
       // Upgrade: houses count increased
@@ -992,7 +1088,7 @@ export const MonopolyTable: React.FC<MonopolyTableProps> = ({
     prevBoardForFloatingTextRef.current = monopolyBoard;
     prevPlayersForFloatingTextRef.current = players;
     prevMonopolyColorGroupsRef.current = { ...monopolyColorGroups };
-  }, [monopolyBoard, players, gameState, visualPositions, monopolyColorGroups]);
+  }, [monopolyBoard, players, gameState, visualPositions, monopolyColorGroups, lastActionDetail]);
 
   // Mouse drag panning handlers
   const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -1136,6 +1232,12 @@ export const MonopolyTable: React.FC<MonopolyTableProps> = ({
     }
   }, [isAnimating, onAnimationStateChange]);
 
+  useEffect(() => {
+    if (onVisualPositionsChange) {
+      onVisualPositionsChange(visualPositions);
+    }
+  }, [visualPositions, onVisualPositionsChange]);
+
   // Auto-open Build/Mortgage panel when landing on owned properties
   useEffect(() => {
     if (gameState === 'playing' && monopolyPhase === 'end_turn' && activePlayer?.id === playerId && !isAnimating) {
@@ -1186,6 +1288,24 @@ export const MonopolyTable: React.FC<MonopolyTableProps> = ({
     }
     prevBoardForBuyDetectRef.current = monopolyBoard;
   }, [monopolyBoard, gameState, activePlayer, playerId, monopolyColorGroups]);
+
+  // Synchronize player status ('managing', 'trading', or null) with the server safely without loops
+  const lastSentStatusRef = useRef<'managing' | 'trading' | null>(null);
+  useEffect(() => {
+    if (gameState !== 'playing') return;
+
+    let status: 'managing' | 'trading' | null = null;
+    if (isBuildManagerOpen) {
+      status = 'managing';
+    } else if (isTradeEditorOpen) {
+      status = 'trading';
+    }
+
+    if (status !== lastSentStatusRef.current) {
+      lastSentStatusRef.current = status;
+      onMonopolyAction('set-player-status', status);
+    }
+  }, [isBuildManagerOpen, isTradeEditorOpen, gameState, onMonopolyAction]);
 
   // Clean up timers on unmount
   useEffect(() => {
@@ -1261,6 +1381,15 @@ export const MonopolyTable: React.FC<MonopolyTableProps> = ({
       );
     }
     if (tile.type === 'parking') {
+      if (rules?.ruleset === 'Get Rich') {
+        return (
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+            <span style={{ fontSize: '1.25rem' }}>✈️</span>
+            <span style={{ fontSize: '0.55rem', fontWeight: 900, color: '#3b82f6' }}>AIRPORT</span>
+            <span style={{ fontSize: '0.42rem', color: '#64748b', fontWeight: 'bold' }}>PAY $100 TO FLY</span>
+          </div>
+        );
+      }
       return (
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
           <span style={{ fontSize: '1.25rem' }}>🚗</span>
@@ -1270,6 +1399,15 @@ export const MonopolyTable: React.FC<MonopolyTableProps> = ({
       );
     }
     if (tile.type === 'gotojail') {
+      if (rules?.ruleset === 'Get Rich') {
+        return (
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+            <span style={{ fontSize: '1.25rem' }}>🎉</span>
+            <span style={{ fontSize: '0.55rem', fontWeight: 900, color: '#d97706' }}>FESTIVAL</span>
+            <span style={{ fontSize: '0.42rem', color: '#64748b', fontWeight: 'bold' }}>BOOST RENT x2</span>
+          </div>
+        );
+      }
       return (
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
           <span style={{ fontSize: '1.25rem' }}>👮</span>
@@ -1281,7 +1419,7 @@ export const MonopolyTable: React.FC<MonopolyTableProps> = ({
     if (tile.type === 'chance') {
       return (
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
-          <span style={{ fontSize: '1.75rem', color: '#ef4444', fontWeight: 950 }}>❓</span>
+          <span className="premium-emoji-shake" style={{ fontSize: '1.75rem', color: '#ef4444', fontWeight: 950, display: 'inline-block' }}>❓</span>
           <span style={{ fontSize: '0.55rem', fontWeight: 800, color: '#ef4444' }}>CHANCE</span>
         </div>
       );
@@ -1289,7 +1427,7 @@ export const MonopolyTable: React.FC<MonopolyTableProps> = ({
     if (tile.type === 'chest') {
       return (
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
-          <span style={{ fontSize: '1.5rem' }}>🧰</span>
+          <span className="premium-emoji-shake" style={{ fontSize: '1.5rem', display: 'inline-block' }}>🧰</span>
           <span style={{ fontSize: '0.45rem', fontWeight: 800, color: '#3b82f6', textAlign: 'center', lineHeight: 1.1 }}>COMMUNITY CHEST</span>
         </div>
       );
@@ -1298,7 +1436,7 @@ export const MonopolyTable: React.FC<MonopolyTableProps> = ({
       return (
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
           <span style={{ fontSize: '1.25rem' }}>🚂</span>
-          <span style={{ fontSize: '0.5rem', fontWeight: 800, textAlign: 'center', lineHeight: 1.1 }}>{tile.name}</span>
+          <span style={{ fontSize: '0.5rem', fontWeight: 800, textAlign: 'center', lineHeight: 1.1, color: '#0f172a' }}>{tile.name}</span>
         </div>
       );
     }
@@ -1307,17 +1445,17 @@ export const MonopolyTable: React.FC<MonopolyTableProps> = ({
       return (
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
           <span style={{ fontSize: '1.25rem' }}>{isElectric ? '⚡' : '🚰'}</span>
-          <span style={{ fontSize: '0.5rem', fontWeight: 800, textAlign: 'center', lineHeight: 1.1 }}>{tile.name}</span>
+          <span style={{ fontSize: '0.5rem', fontWeight: 800, textAlign: 'center', lineHeight: 1.1, color: '#0f172a' }}>{tile.name}</span>
         </div>
       );
     }
     if (tile.type === 'tax') {
       const isIncome = tile.name.includes('Income');
       return (
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', width: '100%' }}>
           <span style={{ fontSize: '1.25rem' }}>{isIncome ? '💸' : '💎'}</span>
-          <span style={{ fontSize: '0.55rem', fontWeight: 800, color: '#ef4444' }}>{tile.name}</span>
-          <span style={{ fontSize: '0.5rem', color: '#ef4444', fontWeight: 'bold' }}>Pay ${tile.price}</span>
+          <span style={{ fontSize: '0.55rem', fontWeight: 800, color: '#ef4444', textAlign: 'center', width: '100%', display: 'block' }}>{tile.name}</span>
+          <span style={{ fontSize: '0.5rem', color: '#ef4444', fontWeight: 'bold', textAlign: 'center', width: '100%', display: 'block' }}>Pay ${tile.price}</span>
         </div>
       );
     }
@@ -1428,7 +1566,7 @@ export const MonopolyTable: React.FC<MonopolyTableProps> = ({
                   ))}
 
                   {/* 3D Special Keep-For-Later Cards */}
-                  {((p.getOutOfJailCards || 0) > 0 || (p.freeTollCards || 0) > 0) && (
+                  {((p.getOutOfJailCards || 0) > 0 || (p.freeTollCards || 0) > 0 || (p.oddEvenCards || 0) > 0 || (p.angelCards || 0) > 0) && (
                     <div className="table-3d-jailcard-stack">
                       {Array.from({ length: p.getOutOfJailCards || 0 }).map((_, cIdx) => (
                         <div 
@@ -1450,6 +1588,28 @@ export const MonopolyTable: React.FC<MonopolyTableProps> = ({
                           }}
                         >
                           <div className="card-face-mini">Free<br/>Toll</div>
+                        </div>
+                      ))}
+                      {Array.from({ length: p.oddEvenCards || 0 }).map((_, cIdx) => (
+                        <div 
+                          key={`oddeven_${cIdx}`} 
+                          className="table-3d-card odd-even-card"
+                          style={{
+                            transform: `translate3d(16px, 0, ${cIdx * 3}px) rotateZ(${cIdx % 2 === 0 ? 4 : -4}deg) rotateX(15deg)`
+                          }}
+                        >
+                          <div className="card-face-mini">Odd<br/>Even</div>
+                        </div>
+                      ))}
+                      {Array.from({ length: p.angelCards || 0 }).map((_, cIdx) => (
+                        <div 
+                          key={`angel_${cIdx}`} 
+                          className="table-3d-card angel-card"
+                          style={{
+                            transform: `translate3d(24px, 0, ${cIdx * 3}px) rotateZ(${cIdx % 2 === 0 ? -4 : 4}deg) rotateX(15deg)`
+                          }}
+                        >
+                          <div className="card-face-mini">Angel</div>
                         </div>
                       ))}
                     </div>
@@ -1517,6 +1677,7 @@ export const MonopolyTable: React.FC<MonopolyTableProps> = ({
           ))}
 
           <div className="monopoly-board-grid">
+            {/* Board-wide dimming overlay removed so selectable tiles render at full original brightness */}
             
             {/* Render 40 board spaces */}
             {monopolyBoard.map((tile, idx) => {
@@ -1540,23 +1701,379 @@ export const MonopolyTable: React.FC<MonopolyTableProps> = ({
               const hasMonopoly = !!monopolyOwner;
               const glowColor = getPlayerColor(monopolyOwner);
 
+              // Interactive highlighting for trade selection / views
+              let isInteractive = true;
+              let customHighlightStyle: React.CSSProperties = {};
+              
+              if (tradeBoardSelectionMode) {
+                const targetPlayer = players.find(p => p.id === tradeTargetId);
+                const isTradable = !isUpgradedGroup(tile) && (tile.type === 'property' || tile.type === 'railroad' || tile.type === 'utility');
+                
+                if (tradeBoardSelectionMode === 'me') {
+                  const isOwnedByMe = tile.owner === playerId && isTradable;
+                  isInteractive = isOwnedByMe;
+                  if (isOwnedByMe) {
+                    const isSelected = offeredProperties.includes(idx);
+                    customHighlightStyle = {
+                      boxShadow: isSelected 
+                        ? 'inset 0 0 15px rgba(16, 185, 129, 0.9), 0 0 12px rgba(16, 185, 129, 0.9)' 
+                        : 'inset 0 0 5px rgba(255, 255, 255, 0.3)',
+                      border: '3.5px solid #10b981',
+                      background: isSelected ? '#ecfdf5' : undefined,
+                      cursor: 'pointer',
+                      opacity: 1,
+                      zIndex: 95,
+                      transform: 'translateZ(3px)'
+                    };
+                  } else {
+                    customHighlightStyle = {
+                      opacity: 0.55,
+                      pointerEvents: 'none'
+                    };
+                  }
+                } else if (tradeBoardSelectionMode === 'them' && targetPlayer) {
+                  const isOwnedByThem = tile.owner === targetPlayer.id && isTradable;
+                  isInteractive = isOwnedByThem;
+                  if (isOwnedByThem) {
+                    const isSelected = demandedProperties.includes(idx);
+                    customHighlightStyle = {
+                      boxShadow: isSelected 
+                        ? 'inset 0 0 15px rgba(59, 130, 246, 0.9), 0 0 12px rgba(59, 130, 246, 0.9)' 
+                        : 'inset 0 0 5px rgba(255, 255, 255, 0.3)',
+                      border: '3.5px solid #3b82f6',
+                      background: isSelected ? '#eff6ff' : undefined,
+                      cursor: 'pointer',
+                      opacity: 1,
+                      zIndex: 95,
+                      transform: 'translateZ(3px)'
+                    };
+                  } else {
+                    customHighlightStyle = {
+                      opacity: 0.55,
+                      pointerEvents: 'none'
+                    };
+                  }
+                }
+              } else if (incomingTradeViewBoardMode && activeTrade) {
+                const isOfferedByThem = activeTrade.senderProperties.includes(idx);
+                const isDemandedByThem = activeTrade.receiverProperties.includes(idx);
+                
+                if (isOfferedByThem) {
+                  customHighlightStyle = {
+                    boxShadow: 'inset 0 0 20px rgba(16, 185, 129, 0.9), 0 0 15px rgba(16, 185, 129, 0.9)',
+                    border: '4px solid #10b981',
+                    background: '#ecfdf5',
+                    opacity: 1,
+                    zIndex: 95,
+                    transform: 'translateZ(3px)'
+                  };
+                } else if (isDemandedByThem) {
+                  customHighlightStyle = {
+                    boxShadow: 'inset 0 0 20px rgba(239, 68, 68, 0.9), 0 0 15px rgba(239, 68, 68, 0.9)',
+                    border: '4px solid #ef4444',
+                    background: '#fef2f2',
+                    opacity: 1,
+                    zIndex: 95,
+                    transform: 'translateZ(3px)'
+                  };
+                } else {
+                  customHighlightStyle = {
+                    opacity: 0.55,
+                    pointerEvents: 'none'
+                  };
+                }
+              } else if (!isAnimating && monopolyPhase === 'airport_selection' && activePlayer?.id === playerId) {
+                const isEligible = (rules?.ruleset === 'Get Rich' || tile.type !== 'gotojail') && tile.index !== activePlayer.position;
+                isInteractive = isEligible;
+                if (isEligible) {
+                  customHighlightStyle = {
+                    boxShadow: 'inset 0 0 15px rgba(59, 130, 246, 0.8), 0 0 10px rgba(59, 130, 246, 0.8)',
+                    border: '3.5px solid #3b82f6',
+                    cursor: 'pointer',
+                    opacity: 1,
+                    zIndex: 95,
+                    transform: 'translateZ(3px)'
+                  };
+                } else {
+                  customHighlightStyle = {
+                    opacity: 0.55,
+                    pointerEvents: 'none'
+                  };
+                }
+              } else if (!isAnimating && monopolyPhase === 'festival_selection' && activePlayer?.id === playerId) {
+                const isOwnProperty = (tile.type === 'property' || tile.type === 'railroad' || tile.type === 'utility') && tile.owner === playerId;
+                isInteractive = isOwnProperty;
+                if (isOwnProperty) {
+                  customHighlightStyle = {
+                    boxShadow: 'inset 0 0 15px rgba(245, 158, 11, 0.8), 0 0 10px rgba(245, 158, 11, 0.8)',
+                    border: '3.5px solid #f59e0b',
+                    cursor: 'pointer',
+                    opacity: 1,
+                    zIndex: 95,
+                    transform: 'translateZ(3px)'
+                  };
+                } else {
+                  customHighlightStyle = {
+                    opacity: 0.55,
+                    pointerEvents: 'none'
+                  };
+                }
+              }
+
+              let getRichStyle: React.CSSProperties = {};
+              if (rules?.ruleset === 'Get Rich') {
+                if (tile.type === 'parking') {
+                  getRichStyle = {
+                    background: 'linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%)',
+                    border: '2.5px solid #0284c7',
+                  };
+                } else if (tile.type === 'gotojail') {
+                  getRichStyle = {
+                    background: 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)',
+                    border: '2.5px solid #d97706',
+                  };
+                }
+              }
+
               return (
                 <div 
                   key={tile.index} 
-                  className={`monopoly-tile ${isCorner ? 'corner-tile' : 'side-tile'} ${isProp ? 'property-tile' : ''} ${sideClass} ${isHorizontal ? 'horizontal-tile' : 'vertical-tile'} ${idx === 10 ? 'jail-space' : ''} ${activeLandedTile?.index === idx ? 'highlighted' : ''} ${hasMonopoly ? 'monopoly-glow' : ''}`}
+                  className={`monopoly-tile ${isCorner ? 'corner-tile' : 'side-tile'} ${isProp ? 'property-tile' : ''} ${sideClass} ${isHorizontal ? 'horizontal-tile' : 'vertical-tile'} ${idx === 10 ? 'jail-space' : ''} tile-${tile.type} ${activeLandedTile?.index === idx ? 'highlighted' : ''} ${hasMonopoly ? 'monopoly-glow' : ''}`}
                   style={{
                     gridRow: row,
                     gridColumn: col,
                     ['--monopoly-glow-color' as any]: glowColor,
                     ['--tile-owner-tint' as any]: getPlayerColorTint(tile.owner),
-                    border: tile.owner ? `3.5px solid ${ownerColor}` : undefined
+                    border: tile.owner ? `3.5px solid ${ownerColor}` : undefined,
+                    ...getRichStyle,
+                    ...customHighlightStyle
                   }}
                   onClick={() => {
-                    if (tile.type === 'property' || tile.type === 'railroad' || tile.type === 'utility') {
-                      setSelectedDeedIndex(idx);
+                    if (tradeBoardSelectionMode) {
+                      if (tradeBoardSelectionMode === 'me') {
+                        if (tile.owner === playerId && !isUpgradedGroup(tile)) {
+                          setOfferedProperties(prev => 
+                            prev.includes(idx) ? prev.filter(i => i !== idx) : [...prev, idx]
+                          );
+                          sfx.playTick();
+                        }
+                      } else if (tradeBoardSelectionMode === 'them') {
+                        const targetPlayer = players.find(p => p.id === tradeTargetId);
+                        if (targetPlayer && tile.owner === targetPlayer.id && !isUpgradedGroup(tile)) {
+                          setDemandedProperties(prev => 
+                            prev.includes(idx) ? prev.filter(i => i !== idx) : [...prev, idx]
+                          );
+                          sfx.playTick();
+                        }
+                      }
+                    } else if (incomingTradeViewBoardMode) {
+                      // No-op during incoming trade visualization
+                    } else if (!isAnimating && monopolyPhase === 'airport_selection' && activePlayer?.id === playerId) {
+                      const isEligible = (rules?.ruleset === 'Get Rich' || tile.type !== 'gotojail') && tile.index !== activePlayer.position;
+                      if (isEligible) {
+                        onMonopolyAction('airport-fly', { targetIndex: idx });
+                        sfx.playTick();
+                      }
+                    } else if (!isAnimating && monopolyPhase === 'festival_selection' && activePlayer?.id === playerId) {
+                      const isOwnProperty = (tile.type === 'property' || tile.type === 'railroad' || tile.type === 'utility') && tile.owner === playerId;
+                      if (isOwnProperty) {
+                        onMonopolyAction('festival-select', idx);
+                        sfx.playTick();
+                      }
+                    } else {
+                      if (tile.type === 'property' || tile.type === 'railroad' || tile.type === 'utility') {
+                        setSelectedDeedIndex(idx);
+                      }
                     }
                   }}
                 >
+                  {/* Click overlay for board selection/view modes to prevent any inner elements from blocking hits */}
+                  {(tradeBoardSelectionMode || 
+                    incomingTradeViewBoardMode || 
+                    (!isAnimating && monopolyPhase === 'airport_selection' && activePlayer?.id === playerId) || 
+                    (!isAnimating && monopolyPhase === 'festival_selection' && activePlayer?.id === playerId)) && (
+                    <div 
+                      style={{
+                        position: 'absolute',
+                        top: 0,
+                        left: 0,
+                        width: '100%',
+                        height: '100%',
+                        zIndex: 98,
+                        transform: 'translateZ(5px)',
+                        cursor: isInteractive ? 'pointer' : 'default',
+                        pointerEvents: 'auto'
+                      }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (tradeBoardSelectionMode) {
+                          if (tradeBoardSelectionMode === 'me') {
+                            if (tile.owner === playerId && !isUpgradedGroup(tile)) {
+                              setOfferedProperties(prev => 
+                                prev.includes(idx) ? prev.filter(i => i !== idx) : [...prev, idx]
+                              );
+                              sfx.playTick();
+                            }
+                          } else if (tradeBoardSelectionMode === 'them') {
+                            const targetPlayer = players.find(p => p.id === tradeTargetId);
+                            if (targetPlayer && tile.owner === targetPlayer.id && !isUpgradedGroup(tile)) {
+                              setDemandedProperties(prev => 
+                                prev.includes(idx) ? prev.filter(i => i !== idx) : [...prev, idx]
+                              );
+                              sfx.playTick();
+                            }
+                          }
+                        } else if (!isAnimating && monopolyPhase === 'airport_selection' && activePlayer?.id === playerId) {
+                          const isEligible = (rules?.ruleset === 'Get Rich' || tile.type !== 'gotojail') && tile.index !== activePlayer.position;
+                          if (isEligible) {
+                            onMonopolyAction('airport-fly', { targetIndex: idx });
+                            sfx.playTick();
+                          }
+                        } else if (!isAnimating && monopolyPhase === 'festival_selection' && activePlayer?.id === playerId) {
+                          const isOwnProperty = (tile.type === 'property' || tile.type === 'railroad' || tile.type === 'utility') && tile.owner === playerId;
+                          if (isOwnProperty) {
+                            onMonopolyAction('festival-select', idx);
+                            sfx.playTick();
+                          }
+                        }
+                      }}
+                    />
+                  )}
+                  {/* Visual badges for trade interaction modes */}
+                  {tradeBoardSelectionMode && isInteractive && (() => {
+                    const isSelected = tradeBoardSelectionMode === 'me' 
+                      ? offeredProperties.includes(idx) 
+                      : demandedProperties.includes(idx);
+                    return (
+                      <div style={{
+                        position: 'absolute',
+                        top: '5px',
+                        right: '5px',
+                        background: isSelected ? (tradeBoardSelectionMode === 'me' ? '#10b981' : '#3b82f6') : 'rgba(255,255,255,0.8)',
+                        color: isSelected ? 'white' : '#64748b',
+                        width: '18px',
+                        height: '18px',
+                        borderRadius: '50%',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: '0.65rem',
+                        fontWeight: 'bold',
+                        border: '1.5px solid #0f172a',
+                        zIndex: 96,
+                        transform: 'translateZ(4px)'
+                      }}>
+                        {isSelected ? '✓' : '+'}
+                      </div>
+                    );
+                  })()}
+
+                  {/* Visual badges for Airport and Festival active player modes */}
+                  {!isAnimating && activePlayer?.id === playerId && (() => {
+                    if (monopolyPhase === 'airport_selection') {
+                      const isEligible = (rules?.ruleset === 'Get Rich' || tile.type !== 'gotojail') && tile.index !== activePlayer.position;
+                      if (isEligible) {
+                        return (
+                          <div style={{
+                            position: 'absolute',
+                            top: '5px',
+                            right: '5px',
+                            background: '#3b82f6',
+                            color: 'white',
+                            width: '18px',
+                            height: '18px',
+                            borderRadius: '50%',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontSize: '0.65rem',
+                            fontWeight: 'bold',
+                            border: '1.5px solid #0f172a',
+                            zIndex: 96,
+                            transform: 'translateZ(4px)'
+                          }}>
+                            ✈️
+                          </div>
+                        );
+                      }
+                    }
+                    if (monopolyPhase === 'festival_selection') {
+                      const isOwnProperty = (tile.type === 'property' || tile.type === 'railroad' || tile.type === 'utility') && tile.owner === playerId;
+                      if (isOwnProperty) {
+                        return (
+                          <div style={{
+                            position: 'absolute',
+                            top: '5px',
+                            right: '5px',
+                            background: '#f59e0b',
+                            color: 'white',
+                            width: '18px',
+                            height: '18px',
+                            borderRadius: '50%',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontSize: '0.65rem',
+                            fontWeight: 'bold',
+                            border: '1.5px solid #0f172a',
+                            zIndex: 96,
+                            transform: 'translateZ(4px)'
+                          }}>
+                            🎉
+                          </div>
+                        );
+                      }
+                    }
+                    return null;
+                  })()}
+
+                  {incomingTradeViewBoardMode && activeTrade && (() => {
+                    const isOfferedByThem = activeTrade.senderProperties.includes(idx);
+                    const isDemandedByThem = activeTrade.receiverProperties.includes(idx);
+                    if (isOfferedByThem) {
+                      return (
+                        <div style={{
+                          position: 'absolute',
+                          top: '5px',
+                          right: '5px',
+                          background: '#10b981',
+                          color: 'white',
+                          padding: '1px 4px',
+                          borderRadius: '4px',
+                          fontSize: '0.55rem',
+                          fontWeight: 'bold',
+                          border: '1.5px solid #0f172a',
+                          zIndex: 96,
+                          transform: 'translateZ(4px)',
+                          whiteSpace: 'nowrap'
+                        }}>
+                          GET
+                        </div>
+                      );
+                    }
+                    if (isDemandedByThem) {
+                      return (
+                        <div style={{
+                          position: 'absolute',
+                          top: '5px',
+                          right: '5px',
+                          background: '#ef4444',
+                          color: 'white',
+                          padding: '1px 4px',
+                          borderRadius: '4px',
+                          fontSize: '0.55rem',
+                          fontWeight: 'bold',
+                          border: '1.5px solid #0f172a',
+                          zIndex: 96,
+                          transform: 'translateZ(4px)',
+                          whiteSpace: 'nowrap'
+                        }}>
+                          GIVE
+                        </div>
+                      );
+                    }
+                    return null;
+                  })()}
                   {/* Property Color strip */}
                   {isProp && tile.color && (
                     <div className={`color-bar tile-group-${tile.color}`} style={{ position: 'relative' }}>
@@ -1587,9 +2104,9 @@ export const MonopolyTable: React.FC<MonopolyTableProps> = ({
                   <div className="tile-info-container">
                     {isProp ? (
                       <>
-                        <span className="tile-name">
+                        <div className="tile-name">
                           {tile.name}
-                        </span>
+                        </div>
                         {/* Price */}
                         {!tile.owner && tile.price && (
                           <span className="tile-price">${tile.price}</span>
@@ -1620,23 +2137,25 @@ export const MonopolyTable: React.FC<MonopolyTableProps> = ({
 
                   {/* Renders house and hotel models on property */}
                   {tile.houses > 0 && !tile.mortgaged && (
-                    <div className="tile-buildings-container">
+                    <div className={`tile-buildings-container ${tile.houses === 4 ? 'grid-layout' : ''}`}>
                       {tile.houses === 5 ? (
                         <div className="cube-3d hotel" style={{ ['--building-color' as any]: ownerColor }}>
-                          <div className="cube-face front" />
-                          <div className="cube-face back" />
-                          <div className="cube-face left" />
-                          <div className="cube-face right" />
-                          <div className="cube-face top" />
+                          <div className="cube-face face-bottom" />
+                          <div className="cube-face face-front" />
+                          <div className="cube-face face-back" />
+                          <div className="cube-face face-left" />
+                          <div className="cube-face face-right" />
+                          <div className="cube-face face-top" />
                         </div>
                       ) : (
                         Array.from({ length: tile.houses }).map((_, hIdx) => (
                           <div key={hIdx} className="cube-3d house" style={{ ['--building-color' as any]: ownerColor }}>
-                            <div className="cube-face front" />
-                            <div className="cube-face back" />
-                            <div className="cube-face left" />
-                            <div className="cube-face right" />
-                            <div className="cube-face top" />
+                            <div className="cube-face face-bottom" />
+                            <div className="cube-face face-front" />
+                            <div className="cube-face face-back" />
+                            <div className="cube-face face-left" />
+                            <div className="cube-face face-right" />
+                            <div className="cube-face face-top" />
                           </div>
                         ))
                       )}
@@ -1653,22 +2172,39 @@ export const MonopolyTable: React.FC<MonopolyTableProps> = ({
                     const color = getPlayerColor(p.id);
                     let pointerStyle: React.CSSProperties = {};
                     const offset = (pIdx - (arr.length - 1) / 2) * 12;
+                    let pointerTransform = 'translateZ(3px)';
                     
                     if (sideClass === 'bottom-row' || (sideClass === 'right-col' && tile.index === 10)) {
-                      pointerStyle = { bottom: '-15px', left: `calc(50% + ${offset}px)`, transform: 'rotate(180deg)' };
+                      pointerStyle = { bottom: '-15px', left: `calc(50% + ${offset}px)` };
+                      pointerTransform = 'rotate(180deg) translateZ(3px)';
                     } else if (sideClass === 'top-row' || (sideClass === 'left-col' && tile.index === 30)) {
                       pointerStyle = { top: '-15px', left: `calc(50% + ${offset}px)` };
+                      pointerTransform = 'translateZ(3px)';
                     } else if (sideClass === 'left-col' || (sideClass === 'bottom-row' && tile.index === 20)) {
-                      pointerStyle = { left: '-15px', top: `calc(50% + ${offset}px)`, transform: 'rotate(-90deg)' };
+                      pointerStyle = { left: '-15px', top: `calc(50% + ${offset}px)` };
+                      pointerTransform = 'rotate(-90deg) translateZ(3px)';
                     } else {
-                      pointerStyle = { right: '-15px', top: `calc(50% + ${offset}px)`, transform: 'rotate(90deg)' };
+                      pointerStyle = { right: '-15px', top: `calc(50% + ${offset}px)` };
+                      pointerTransform = 'rotate(90deg) translateZ(3px)';
                     }
 
                     // Adjust for exact corner pieces
-                    if (tile.index === 0) pointerStyle = { bottom: '-15px', left: `calc(50% + ${offset}px)`, transform: 'rotate(180deg)' };
-                    if (tile.index === 10) pointerStyle = { left: '-15px', top: `calc(50% + ${offset}px)`, transform: 'rotate(-90deg)' };
-                    if (tile.index === 20) pointerStyle = { top: '-15px', left: `calc(50% + ${offset}px)` };
-                    if (tile.index === 30) pointerStyle = { right: '-15px', top: `calc(50% + ${offset}px)`, transform: 'rotate(90deg)' };
+                    if (tile.index === 0) {
+                      pointerStyle = { bottom: '-15px', left: `calc(50% + ${offset}px)` };
+                      pointerTransform = 'rotate(180deg) translateZ(3px)';
+                    }
+                    if (tile.index === 10) {
+                      pointerStyle = { left: '-15px', top: `calc(50% + ${offset}px)` };
+                      pointerTransform = 'rotate(-90deg) translateZ(3px)';
+                    }
+                    if (tile.index === 20) {
+                      pointerStyle = { top: '-15px', left: `calc(50% + ${offset}px)` };
+                      pointerTransform = 'translateZ(3px)';
+                    }
+                    if (tile.index === 30) {
+                      pointerStyle = { right: '-15px', top: `calc(50% + ${offset}px)` };
+                      pointerTransform = 'rotate(90deg) translateZ(3px)';
+                    }
 
                     return (
                       <div 
@@ -1676,13 +2212,14 @@ export const MonopolyTable: React.FC<MonopolyTableProps> = ({
                         style={{
                           position: 'absolute',
                           ...pointerStyle,
+                          transform: pointerTransform,
                           width: '0', 
                           height: '0', 
                           borderLeft: '6px solid transparent',
                           borderRight: '6px solid transparent',
                           borderTop: `8px solid ${color}`,
                           filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.5))',
-                          zIndex: 20
+                          zIndex: 105
                         }}
                       />
                     );
@@ -1700,7 +2237,82 @@ export const MonopolyTable: React.FC<MonopolyTableProps> = ({
 
             {/* Central Board elements */}
             <div className="monopoly-board-center">
-              <div className="monopoly-logo">MONOPOLY</div>
+              {/* Central dimming overlay during trade selection / incoming trade views */}
+              {(tradeBoardSelectionMode || incomingTradeViewBoardMode) && (
+                <div 
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    background: 'rgba(15, 23, 42, 0.22)',
+                    zIndex: 89,
+                    pointerEvents: 'none',
+                    transform: 'translateZ(0.5px)'
+                  }}
+                />
+              )}
+              {/* Scrolling City Skyline Background */}
+              <div className="board-center-scrolling-city">
+                <div className="scrolling-city-diagonal-wrapper">
+                  <div className="scrolling-clouds-ribbon">
+                    <div className="clouds-panel">
+                      <span className="cloud-item c1" style={{ top: '35%', left: '5%', position: 'absolute' }}>☁️</span>
+                      <span className="cloud-item c2" style={{ top: '15%', left: '20%', position: 'absolute' }}>☁️</span>
+                      <span className="cloud-item c3" style={{ top: '45%', left: '35%', position: 'absolute' }}>☁️</span>
+                      <span className="cloud-item c4" style={{ top: '25%', left: '50%', position: 'absolute' }}>☁️</span>
+                      <span className="cloud-item c5" style={{ top: '40%', left: '65%', position: 'absolute' }}>☁️</span>
+                      <span className="cloud-item c6" style={{ top: '10%', left: '80%', position: 'absolute' }}>☁️</span>
+                      <span className="cloud-item c7" style={{ top: '30%', left: '90%', position: 'absolute' }}>☁️</span>
+                    </div>
+                    <div className="clouds-panel">
+                      <span className="cloud-item c1" style={{ top: '35%', left: '5%', position: 'absolute' }}>☁️</span>
+                      <span className="cloud-item c2" style={{ top: '15%', left: '20%', position: 'absolute' }}>☁️</span>
+                      <span className="cloud-item c3" style={{ top: '45%', left: '35%', position: 'absolute' }}>☁️</span>
+                      <span className="cloud-item c4" style={{ top: '25%', left: '50%', position: 'absolute' }}>☁️</span>
+                      <span className="cloud-item c5" style={{ top: '40%', left: '65%', position: 'absolute' }}>☁️</span>
+                      <span className="cloud-item c6" style={{ top: '10%', left: '80%', position: 'absolute' }}>☁️</span>
+                      <span className="cloud-item c7" style={{ top: '30%', left: '90%', position: 'absolute' }}>☁️</span>
+                    </div>
+                  </div>
+                  <div className="scrolling-city-ribbon">
+                    <svg className="city-svg-ribbon" viewBox="0 0 1000 120" fill="none" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none">
+                      <path d="M0 120 H1000 V80 H950 V95 H920 V85 H880 V90 H840 V75 H810 V95 H780 V70 H740 V85 H710 V60 H670 V85 H630 V80 H600 V95 H570 V85 H530 V90 H490 V75 H460 V95 H430 V70 H390 V85 H360 V60 H320 V85 H280 V80 H250 V95 H220 V85 H180 V90 H140 V75 H110 V95 H80 V70 H40 V85 H10 V60 Z" fill="#cbd5e1" opacity="0.4"/>
+                      <path d="M0 120 H1000 V95 H970 V105 H930 V100 H900 V105 H860 V90 H820 V105 H790 V95 H750 V102 H720 V90 H680 V105 H640 V95 H610 V105 H570 V100 H540 V105 H500 V90 H460 V105 H430 V95 H390 V102 H360 V90 H320 V105 H280 V95 H251 V105 H211 V100 H181 V105 H141 V90 H101 V105 H71 V95 H31 V102 H1 V90 Z" fill="#94a3b8" opacity="0.6"/>
+                      <path d="M0 120 H1000 V110 H990 V114 H960 V108 H940 V112 H910 V105 H880 V113 H850 V108 H830 V112 H800 V110 H770 V114 H740 V108 H720 V112 H690 V105 H660 V113 H630 V108 H610 V112 H580 V110 H550 V114 H520 V108 H500 V112 H470 V105 H440 V113 H410 V108 H390 V112 H360 V110 H330 V114 H300 V108 H280 V112 H250 V105 H220 V113 H190 V108 H170 V112 H140 V110 H110 V114 H80 V108 H60 V112 H30 V105 H0 Z" fill="#64748b" opacity="0.8"/>
+                    </svg>
+                    <svg className="city-svg-ribbon" viewBox="0 0 1000 120" fill="none" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none">
+                      <path d="M0 120 H1000 V80 H950 V95 H920 V85 H880 V90 H840 V75 H810 V95 H780 V70 H740 V85 H710 V60 H670 V85 H630 V80 H600 V95 H570 V85 H530 V90 H490 V75 H460 V95 H430 V70 H390 V85 H360 V60 H320 V85 H280 V80 H250 V95 H220 V85 H180 V90 H140 V75 H110 V95 H80 V70 H40 V85 H10 V60 Z" fill="#cbd5e1" opacity="0.4"/>
+                      <path d="M0 120 H1000 V95 H970 V105 H930 V100 H900 V105 H860 V90 H820 V105 H790 V95 H750 V102 H720 V90 H680 V105 H640 V95 H610 V105 H570 V100 H540 V105 H500 V90 H460 V105 H430 V95 H390 V102 H360 V90 H320 V105 H280 V95 H251 V105 H211 V100 H181 V105 H141 V90 H101 V105 H71 V95 H31 V102 H1 V90 Z" fill="#94a3b8" opacity="0.6"/>
+                      <path d="M0 120 H1000 V110 H990 V114 H960 V108 H940 V112 H910 V105 H880 V113 H850 V108 H830 V112 H800 V110 H770 V114 H740 V108 H720 V112 H690 V105 H660 V113 H630 V108 H610 V112 H580 V110 H550 V114 H520 V108 H500 V112 H470 V105 H440 V113 H410 V108 H390 V112 H360 V110 H330 V114 H300 V108 H280 V112 H250 V105 H220 V113 H190 V108 H170 V112 H140 V110 H110 V114 H80 V108 H60 V112 H30 V105 H0 Z" fill="#64748b" opacity="0.8"/>
+                    </svg>
+                  </div>
+                  <div className="scrolling-trees-ribbon">
+                    <div className="trees-panel">
+                      <div className="city-tree-sway t1" style={{ bottom: '15%', left: '5%', position: 'absolute' }}>🌳</div>
+                      <div className="city-tree-sway t2" style={{ bottom: '30%', left: '15%', position: 'absolute' }}>🌲</div>
+                      <div className="city-tree-sway t3" style={{ bottom: '10%', left: '28%', position: 'absolute' }}>🌳</div>
+                      <div className="city-tree-sway t4" style={{ bottom: '25%', left: '40%', position: 'absolute' }}>🌲</div>
+                      <div className="city-tree-sway t5" style={{ bottom: '15%', left: '52%', position: 'absolute' }}>🌳</div>
+                      <div className="city-tree-sway t1" style={{ bottom: '35%', left: '65%', position: 'absolute' }}>🌲</div>
+                      <div className="city-tree-sway t2" style={{ bottom: '12%', left: '78%', position: 'absolute' }}>🌳</div>
+                      <div className="city-tree-sway t3" style={{ bottom: '28%', left: '90%', position: 'absolute' }}>🌲</div>
+                    </div>
+                    <div className="trees-panel">
+                      <div className="city-tree-sway t1" style={{ bottom: '15%', left: '5%', position: 'absolute' }}>🌳</div>
+                      <div className="city-tree-sway t2" style={{ bottom: '30%', left: '15%', position: 'absolute' }}>🌲</div>
+                      <div className="city-tree-sway t3" style={{ bottom: '10%', left: '28%', position: 'absolute' }}>🌳</div>
+                      <div className="city-tree-sway t4" style={{ bottom: '25%', left: '40%', position: 'absolute' }}>🌲</div>
+                      <div className="city-tree-sway t5" style={{ bottom: '15%', left: '52%', position: 'absolute' }}>🌳</div>
+                      <div className="city-tree-sway t1" style={{ bottom: '35%', left: '65%', position: 'absolute' }}>🌲</div>
+                      <div className="city-tree-sway t2" style={{ bottom: '12%', left: '78%', position: 'absolute' }}>🌳</div>
+                      <div className="city-tree-sway t3" style={{ bottom: '28%', left: '90%', position: 'absolute' }}>🌲</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="monopoly-logo">{rules?.ruleset === 'Get Rich' ? 'GET RICH!' : 'MONOPOLY'}</div>
               
               {/* 3D Physical Chance Deck Stack */}
               <div className="monopoly-deck-slot chance" style={{ border: 'none', background: 'transparent', transformStyle: 'preserve-3d' }}>
@@ -1731,7 +2343,7 @@ export const MonopolyTable: React.FC<MonopolyTableProps> = ({
                     }}
                   >
                     <div className="card-back-design">
-                      <span>📦</span>
+                      <span>🧰</span>
                       <span className="card-back-text">COMMUNITY CHEST</span>
                     </div>
                   </div>
@@ -1757,14 +2369,14 @@ export const MonopolyTable: React.FC<MonopolyTableProps> = ({
                 }}
               >
                 <div className="card-back-design">
-                  <span>{flyingCard.type === 'chance' ? '❓' : '📦'}</span>
+                  <span>{flyingCard.type === 'chance' ? '❓' : '🧰'}</span>
                   <span className="card-back-text">{flyingCard.type === 'chance' ? 'CHANCE' : 'COMMUNITY CHEST'}</span>
                 </div>
               </div>
             )}
 
-            {/* Standing Upright Player Tokens */}
-            {players.map(p => {
+            {/* Standing Upright Player Tokens (hidden during board selection/view modes) */}
+            {(!tradeBoardSelectionMode && !incomingTradeViewBoardMode) && players.map(p => {
               if (p.bankrupt) return null;
               
               // Use fanning/offsets if multiple players stand on same space
@@ -1806,6 +2418,13 @@ export const MonopolyTable: React.FC<MonopolyTableProps> = ({
                         } as any}
                       >
                         ▼
+                      </div>
+                    )}
+
+                    {/* Floating player status label (Trading... / Managing...) */}
+                    {p.status && (
+                      <div className={`player-status-badge ${p.status}`}>
+                        {p.status === 'managing' ? '🛠️ Managing...' : '🤝 Trading...'}
                       </div>
                     )}
 
@@ -1941,8 +2560,10 @@ export const MonopolyTable: React.FC<MonopolyTableProps> = ({
                 <AvatarSVG config={p.avatar} size={30} />
               </div>
               <div className="corner-card-details">
-                <div className="corner-card-name">
-                  {p.name} {p.id === playerId ? '(You)' : ''}
+                <div className="corner-card-name" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span>{p.name} {p.id === playerId ? '(You)' : ''}</span>
+                  {p.status === 'managing' && <span className="corner-status-pill managing">🛠️ Managing</span>}
+                  {p.status === 'trading' && <span className="corner-status-pill trading">🤝 Trading</span>}
                 </div>
                 <div className="corner-card-money" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <span>${displayMoney[p.id] !== undefined ? displayMoney[p.id] : p.money}</span>
@@ -1956,6 +2577,12 @@ export const MonopolyTable: React.FC<MonopolyTableProps> = ({
                 <div className="corner-card-badges">
                   {p.inJail && <span className="jail-badge">🚨 JAIL</span>}
                   {p.getOutOfJailCards > 0 && <span className="card-badge">🔓 x{p.getOutOfJailCards}</span>}
+                  {rules?.ruleset === 'Get Rich' && p.oddEvenCards !== undefined && p.oddEvenCards > 0 && (
+                    <span className="card-badge" style={{ background: '#7c3aed' }}>🎯 x{p.oddEvenCards}</span>
+                  )}
+                  {rules?.ruleset === 'Get Rich' && p.angelCards !== undefined && p.angelCards > 0 && (
+                    <span className="card-badge" style={{ background: '#10b981' }}>😇 x{p.angelCards}</span>
+                  )}
                 </div>
               </div>
             </div>
@@ -1999,13 +2626,106 @@ export const MonopolyTable: React.FC<MonopolyTableProps> = ({
                     )}
                   </div>
                 ) : (
-                  <button 
-                    className="btn-roll-red roll-glow-animation" 
-                    onClick={() => onMonopolyAction('roll-dice')}
-                    style={{ padding: '10px 24px', borderRadius: '12px', fontWeight: 900, fontSize: '0.9rem' }}
-                  >
-                    🎲 Roll Dice
-                  </button>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    {rules.ruleset === 'Get Rich' && (activePlayer.oddEvenCards || 0) > 0 && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', alignItems: 'center' }}>
+                        <span style={{ fontSize: '0.6rem', fontWeight: 'bold', color: '#cbd5e1' }}>INFLUENCE ROLL</span>
+                        <div style={{ display: 'flex', gap: '4px' }}>
+                          <button
+                            type="button"
+                            className={`btn-odd-even ${oddEvenChoice === 'odd' ? 'active' : ''}`}
+                            style={{
+                              padding: '4px 8px',
+                              borderRadius: '6px',
+                              fontSize: '0.65rem',
+                              fontWeight: 900,
+                              border: oddEvenChoice === 'odd' ? '1.5px solid #a78bfa' : '1.5px solid #475569',
+                              background: oddEvenChoice === 'odd' ? 'linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%)' : '#1e293b',
+                              color: 'white',
+                              cursor: 'pointer',
+                              textTransform: 'uppercase'
+                            }}
+                            onClick={() => setOddEvenChoice(prev => prev === 'odd' ? null : 'odd')}
+                          >
+                            Odd
+                          </button>
+                          <button
+                            type="button"
+                            className={`btn-odd-even ${oddEvenChoice === 'even' ? 'active' : ''}`}
+                            style={{
+                              padding: '4px 8px',
+                              borderRadius: '6px',
+                              fontSize: '0.65rem',
+                              fontWeight: 900,
+                              border: oddEvenChoice === 'even' ? '1.5px solid #a78bfa' : '1.5px solid #475569',
+                              background: oddEvenChoice === 'even' ? 'linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%)' : '#1e293b',
+                              color: 'white',
+                              cursor: 'pointer',
+                              textTransform: 'uppercase'
+                            }}
+                            onClick={() => setOddEvenChoice(prev => prev === 'even' ? null : 'even')}
+                          >
+                            Even
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                    {rules.ruleset === 'Get Rich' ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+                        <button 
+                          type="button"
+                          className="btn-roll-red roll-glow-animation" 
+                          onMouseDown={handlePowerBarStart}
+                          onTouchStart={handlePowerBarStart}
+                          onMouseUp={handlePowerBarRelease}
+                          onTouchEnd={handlePowerBarRelease}
+                          style={{ 
+                            padding: '10px 24px', 
+                            borderRadius: '12px', 
+                            fontWeight: 900, 
+                            fontSize: '0.9rem',
+                            cursor: 'pointer',
+                            userSelect: 'none',
+                            touchAction: 'none'
+                          }}
+                        >
+                          {isPressing ? '🔥 RELEASE' : '🎲 Hold to Roll'}
+                        </button>
+                        {/* Power Bar visual */}
+                        <div style={{
+                          width: '120px',
+                          height: '8px',
+                          background: '#1e293b',
+                          borderRadius: '4px',
+                          border: '1.5px solid rgba(255,255,255,0.2)',
+                          overflow: 'hidden',
+                          position: 'relative'
+                        }}>
+                          <div style={{
+                            width: `${powerValue}%`,
+                            height: '100%',
+                            background: powerValue <= 33 
+                              ? 'linear-gradient(to right, #10b981 0%, #059669 100%)' 
+                              : powerValue <= 66 
+                              ? 'linear-gradient(to right, #eab308 0%, #ca8a04 100%)' 
+                              : 'linear-gradient(to right, #ef4444 0%, #dc2626 100%)'
+                          }} />
+                        </div>
+                        <div style={{ fontSize: '0.62rem', color: '#94a3b8', fontWeight: 800 }}>
+                          Power: {powerValue}% ({powerValue <= 33 ? 'Low: 1-4' : powerValue <= 66 ? 'Mid: 5-8' : 'High: 9-12'})
+                        </div>
+                      </div>
+                    ) : (
+                      <button 
+                        type="button"
+                        className="btn-roll-red roll-glow-animation" 
+                        onClick={() => onMonopolyAction('roll-dice')}
+                        style={{ padding: '10px 24px', borderRadius: '12px', fontWeight: 900, fontSize: '0.9rem' }}
+                      >
+                        🎲 Roll Dice
+                      </button>
+                    )}
+                  </div>
                 )
               ) : monopolyPhase === 'end_turn' && !isAnimating ? (
                 <button 
@@ -2099,7 +2819,7 @@ export const MonopolyTable: React.FC<MonopolyTableProps> = ({
       {/* Chance/Chest card drawn popup */}
       {!isAnimating && monopolyPhase === 'card_drawn' && currentCard && (
         <div className={`drawn-card-popup ${cardType === 'chest' ? 'chest' : ''}`}>
-          <div className="card-header-icon">{cardType === 'chest' ? '📦' : '❓'}</div>
+          <div className="card-header-icon">{cardType === 'chest' ? '🧰' : '❓'}</div>
           <div className="card-title-text">{cardType === 'chest' ? 'Community Chest' : 'Chance'}</div>
           <div className="card-body-text">"{currentCard.text}"</div>
           
@@ -2167,10 +2887,431 @@ export const MonopolyTable: React.FC<MonopolyTableProps> = ({
         </div>
       )}
 
+      {/* ============================================================ */}
+      {/* GET RICH: Festival — choose property to double rent           */}
+      {/* ============================================================ */}
+
+      {!isAnimating && monopolyPhase === 'festival_selection' && activePlayer?.id === playerId && (
+        <div style={{
+          position: 'fixed',
+          top: '80px',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          zIndex: 1000,
+          background: 'rgba(15, 23, 42, 0.95)',
+          border: '2.5px solid #f59e0b',
+          borderRadius: '16px',
+          padding: '16px 24px',
+          boxShadow: '0 20px 40px rgba(0,0,0,0.5)',
+          color: 'white',
+          textAlign: 'center',
+          backdropFilter: 'blur(8px)',
+          width: '90%',
+          maxWidth: '480px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '10px'
+        }}>
+          <div style={{ fontSize: '1.2rem', fontWeight: 900, letterSpacing: '1px', color: '#f59e0b', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+            <span>🎉</span> FESTIVAL BOOSTER SELECTOR
+          </div>
+          <div style={{ fontSize: '0.85rem', color: '#e2e8f0' }}>
+            Click one of your properties on the board to <strong style={{ color: '#f59e0b' }}>double its rent</strong> for 3 turns!
+          </div>
+          <div style={{
+            display: 'flex',
+            justifyContent: 'space-around',
+            background: 'rgba(255,255,255,0.06)',
+            padding: '8px',
+            borderRadius: '8px',
+            fontSize: '0.8rem',
+            fontWeight: 'bold',
+            border: '1px solid rgba(255,255,255,0.1)'
+          }}>
+            <div>Properties Owned: <span style={{ color: '#f59e0b' }}>{monopolyBoard.filter(t => (t.type === 'property' || t.type === 'railroad' || t.type === 'utility') && t.owner === playerId).length}</span></div>
+          </div>
+          <button
+            className="btn-secondary"
+            style={{
+              width: '100%',
+              padding: '10px 0',
+              fontWeight: 'bold',
+              borderRadius: '8px',
+              fontSize: '0.9rem',
+              marginTop: '4px',
+              border: 'none',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}
+            onClick={() => onMonopolyAction('festival-skip')}
+          >
+            Skip (No boost)
+          </button>
+        </div>
+      )}
+
+      {!isAnimating && monopolyPhase === 'festival_selection' && activePlayer?.id !== playerId && (
+        <div className="drawn-card-popup" style={{ borderColor: '#f59e0b', background: 'white', height: 'auto' }}>
+          <div className="card-header-icon">🎉</div>
+          <div className="card-title-text" style={{ color: '#d97706' }}>Festival!</div>
+          <div style={{ fontSize: '0.85rem', color: '#64748b', fontWeight: 600 }}>
+            {activePlayer?.name} is choosing a property to boost...
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================ */}
+      {/* GET RICH: Airport — choose destination tile                   */}
+      {/* ============================================================ */}
+
+      {!isAnimating && monopolyPhase === 'airport_selection' && activePlayer?.id === playerId && (
+        <div style={{
+          position: 'fixed',
+          top: '80px',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          zIndex: 1000,
+          background: 'rgba(15, 23, 42, 0.95)',
+          border: '2.5px solid #3b82f6',
+          borderRadius: '16px',
+          padding: '16px 24px',
+          boxShadow: '0 20px 40px rgba(0,0,0,0.5)',
+          color: 'white',
+          textAlign: 'center',
+          backdropFilter: 'blur(8px)',
+          width: '90%',
+          maxWidth: '480px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '10px'
+        }}>
+          <div style={{ fontSize: '1.2rem', fontWeight: 900, letterSpacing: '1px', color: '#3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+            <span>✈️</span> AIRPORT DESTINATION SELECTOR
+          </div>
+          <div style={{ fontSize: '0.85rem', color: '#e2e8f0' }}>
+            Click any tile on the board to fly there! (Cost: <strong style={{ color: '#fbbf24' }}>$100</strong>)
+          </div>
+          <div style={{
+            display: 'flex',
+            justifyContent: 'space-around',
+            background: 'rgba(255,255,255,0.06)',
+            padding: '8px',
+            borderRadius: '8px',
+            fontSize: '0.8rem',
+            fontWeight: 'bold',
+            border: '1px solid rgba(255,255,255,0.1)'
+          }}>
+            <div>Your Cash: <span style={{ color: '#10b981' }}>${activePlayer.money}</span></div>
+          </div>
+          <button
+            className="btn-secondary"
+            style={{
+              width: '100%',
+              padding: '10px 0',
+              fontWeight: 'bold',
+              borderRadius: '8px',
+              fontSize: '0.9rem',
+              marginTop: '4px',
+              border: 'none',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}
+            onClick={() => onMonopolyAction('airport-skip')}
+          >
+            Skip (Stay here)
+          </button>
+        </div>
+      )}
+
+      {!isAnimating && monopolyPhase === 'airport_selection' && activePlayer?.id !== playerId && (
+        <div className="drawn-card-popup" style={{ borderColor: '#3b82f6', background: 'white', height: 'auto' }}>
+          <div className="card-header-icon">✈️</div>
+          <div className="card-title-text" style={{ color: '#1d4ed8' }}>Airport</div>
+          <div style={{ fontSize: '0.85rem', color: '#64748b', fontWeight: 600 }}>
+            {activePlayer?.name} is choosing a destination...
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================ */}
+      {/* GET RICH: Angel Card — skip rent decision                     */}
+      {/* ============================================================ */}
+      {!isAnimating && monopolyPhase === 'use_angel_rent' && activePlayer?.id === playerId && (() => {
+        const pr = pendingRent;
+        const rentText = pr ? ` $${pr.amount}` : '';
+        return (
+          <div
+            className="drawn-card-popup"
+            style={{ borderColor: '#a78bfa', background: 'white', height: 'auto', width: '320px' }}
+          >
+            <div className="card-header-icon">😇</div>
+            <div className="card-title-text" style={{ color: '#7c3aed' }}>Angel Card</div>
+            <div style={{ fontSize: '0.88rem', color: '#64748b', fontWeight: 600, marginBottom: '6px' }}>
+              You have an <strong>Angel Card</strong>! Use it to skip paying{rentText} rent entirely?
+            </div>
+            <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginBottom: '14px' }}>
+              (You still own the card after use if you decline)
+            </div>
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button
+                className="btn-primary"
+                style={{ flexGrow: 1, padding: '10px', background: 'linear-gradient(135deg, #a78bfa 0%, #7c3aed 100%)' }}
+                onClick={() => onMonopolyAction('use-angel-rent')}
+              >
+                😇 Use Angel Card
+              </button>
+              <button
+                className="btn-secondary"
+                style={{ flexGrow: 1, padding: '10px' }}
+                onClick={() => onMonopolyAction('decline-angel-rent')}
+              >
+                Pay Rent
+              </button>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ============================================================ */}
+      {/* GET RICH: Angel Card — block force acquisition               */}
+      {/* ============================================================ */}
+      {!isAnimating && monopolyPhase === 'use_angel_force' && (() => {
+        const pfa = pendingForceAcquire;
+        if (!pfa) return null;
+        const faTile = monopolyBoard[pfa.tileIndex];
+        if (!faTile) return null;
+        const isOwner = faTile.owner === playerId;
+        const isAcquirer = pfa.byId === playerId;
+        if (isOwner) {
+          return (
+            <div
+              className="drawn-card-popup"
+              style={{ borderColor: '#a78bfa', background: 'white', height: 'auto', width: '330px' }}
+            >
+              <div className="card-header-icon">😇</div>
+              <div className="card-title-text" style={{ color: '#7c3aed' }}>Block Acquisition?</div>
+              <div style={{ fontSize: '0.85rem', color: '#64748b', fontWeight: 600, marginBottom: '8px' }}>
+                <strong>{players.find(p => p.id === pfa.byId)?.name}</strong> wants to force-acquire{' '}
+                <strong>{faTile.name}</strong> for <strong>${pfa.worth}</strong>.<br />
+                Use your Angel Card to block this?
+              </div>
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <button
+                  className="btn-primary"
+                  style={{ flexGrow: 1, padding: '10px', background: 'linear-gradient(135deg, #a78bfa 0%, #7c3aed 100%)' }}
+                  onClick={() => onMonopolyAction('use-angel-force')}
+                >
+                  😇 Block It
+                </button>
+                <button
+                  className="btn-secondary"
+                  style={{ flexGrow: 1, padding: '10px' }}
+                  onClick={() => onMonopolyAction('decline-angel-force')}
+                >
+                  Allow
+                </button>
+              </div>
+            </div>
+          );
+        }
+        if (isAcquirer) {
+          return (
+            <div className="drawn-card-popup" style={{ borderColor: '#a78bfa', background: 'white', height: 'auto' }}>
+              <div className="card-header-icon">😇</div>
+              <div className="card-title-text" style={{ color: '#7c3aed' }}>Angel Card!</div>
+              <div style={{ fontSize: '0.85rem', color: '#64748b', fontWeight: 600 }}>
+                {players.find(p => p.id === faTile.owner)?.name} is deciding whether to block your acquisition...
+              </div>
+            </div>
+          );
+        }
+        return null;
+      })()}
+
+      {/* ============================================================ */}
+      {/* GET RICH: Force Acquire Decision                              */}
+      {/* ============================================================ */}
+      {!isAnimating && monopolyPhase === 'force_acquire_decision' && (() => {
+        const pfa = pendingForceAcquire;
+        if (!pfa) return null;
+        const faTile = monopolyBoard[pfa.tileIndex];
+        if (!faTile) return null;
+        const prevOwnerName = players.find(p => p.id === faTile.owner)?.name || 'Owner';
+        const isAcquirer = pfa.byId === playerId;
+        if (isAcquirer) {
+          return (
+            <div
+              className="drawn-card-popup"
+              style={{ borderColor: '#ef4444', background: 'white', height: 'auto', width: '330px' }}
+            >
+              <div className="card-header-icon">💼</div>
+              <div className="card-title-text" style={{ color: '#dc2626' }}>Force Acquire?</div>
+              <div style={{ fontSize: '0.85rem', color: '#64748b', fontWeight: 600, marginBottom: '6px' }}>
+                Force-acquire <strong>{faTile.name}</strong> from <strong>{prevOwnerName}</strong>?
+              </div>
+              <div style={{ fontSize: '1.1rem', fontWeight: 900, color: '#dc2626', marginBottom: '14px' }}>
+                Total cost: ${pfa.worth}
+              </div>
+              <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginBottom: '14px' }}>
+                Hotels cannot be force-acquired. Your cash: <strong>${activePlayer?.money}</strong>
+              </div>
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <button
+                  className="btn-primary"
+                  style={{ flexGrow: 1, padding: '10px', background: 'linear-gradient(135deg, #ef4444 0%, #b91c1c 100%)' }}
+                  onClick={() => onMonopolyAction('force-acquire')}
+                >
+                  💼 Acquire!
+                </button>
+                <button
+                  className="btn-secondary"
+                  style={{ flexGrow: 1, padding: '10px' }}
+                  onClick={() => onMonopolyAction('decline-force-acquire')}
+                >
+                  Pass
+                </button>
+              </div>
+            </div>
+          );
+        }
+        return (
+          <div className="drawn-card-popup" style={{ borderColor: '#ef4444', background: 'white', height: 'auto' }}>
+            <div className="card-header-icon">💼</div>
+            <div className="card-title-text" style={{ color: '#dc2626' }}>Force Acquire</div>
+            <div style={{ fontSize: '0.85rem', color: '#64748b', fontWeight: 600 }}>
+              {players.find(p => p.id === pfa.byId)?.name} is deciding whether to acquire {faTile.name}...
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ============================================================ */}
+      {/* GET RICH: Landed Build — instant build on own property       */}
+      {/* ============================================================ */}
+      {monopolyPhase === 'landed_build' && activePlayer?.id === playerId && (() => {
+        const landedTile = monopolyBoard[activePlayer.position];
+        if (!landedTile || landedTile.type !== 'property') return null;
+        return (
+          <div
+            className="drawn-card-popup"
+            style={{ borderColor: '#3b82f6', background: 'white', height: 'auto', width: '320px' }}
+          >
+            <div className="card-header-icon">🏗️</div>
+            <div className="card-title-text" style={{ color: '#1d4ed8' }}>Build Instantly!</div>
+            <div style={{ fontSize: '0.85rem', color: '#64748b', fontWeight: 600, marginBottom: '6px' }}>
+              You landed on your own <strong>{landedTile.name}</strong>!
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: '#475569', marginBottom: '8px' }}>
+              <span>Current: {landedTile.houses < 5 ? `${landedTile.houses} House(s)` : '🏨 Hotel'}</span>
+              <span>Unit Price: <strong>${landedTile.housePrice}</strong></span>
+            </div>
+            
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '14px' }}>
+              {[1, 2, 3, 4, 5].map(target => {
+                const isHotel = target === 5;
+                const label = isHotel ? '🏨 Hotel' : `🏠 ${target} House${target > 1 ? 's' : ''}`;
+                
+                // Check if target is already reached or exceeded
+                const alreadyReached = landedTile.houses >= target;
+                
+                // Check max houses allowed for this landing
+                const allowedForLanding = target <= (landedBuildMaxHouses ?? 4);
+                
+                // Cost to reach target
+                const countNeeded = target - landedTile.houses;
+                const cost = countNeeded * (landedTile.housePrice || 0);
+                
+                // Can build this option?
+                let clickable = false;
+                let reason = '';
+                
+                if (isAnimating) {
+                  reason = 'Building...';
+                } else if (alreadyReached) {
+                  reason = 'Already reached';
+                } else if (!allowedForLanding) {
+                  reason = 'Requires landing again';
+                } else if (activePlayer.money < cost) {
+                  reason = `Need $${cost}`;
+                } else {
+                  if (isHotel) {
+                    if (landedTile.houses === 4 && (landedBuildMaxHouses ?? 4) === 5) {
+                      clickable = true;
+                    } else {
+                      reason = 'Requires 4 houses & landing again';
+                    }
+                  } else {
+                    clickable = true;
+                  }
+                }
+                
+                return (
+                  <button
+                    key={target}
+                    className="btn-primary"
+                    disabled={!clickable}
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      padding: '8px 12px',
+                      fontSize: '0.8rem',
+                      background: clickable 
+                        ? (isHotel ? 'linear-gradient(135deg, #a78bfa 0%, #7c3aed 100%)' : 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)')
+                        : '#cbd5e1',
+                      color: clickable ? 'white' : '#64748b',
+                      border: 'none',
+                      borderRadius: '8px',
+                      cursor: clickable ? 'pointer' : 'not-allowed',
+                      opacity: clickable ? 1 : 0.6,
+                      boxShadow: 'none',
+                      textShadow: 'none'
+                    }}
+                    onClick={() => onMonopolyAction('landed-build', { tileIndex: landedTile.index, count: countNeeded })}
+                  >
+                    <span>{label}</span>
+                    <span style={{ fontSize: '0.72rem', fontWeight: 'bold' }}>
+                      {clickable ? `+$${cost}` : reason}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+            
+            <button
+              className="btn-secondary"
+              disabled={isAnimating}
+              style={{
+                width: '100%',
+                padding: '10px',
+                opacity: isAnimating ? 0.6 : 1,
+                cursor: isAnimating ? 'not-allowed' : 'pointer'
+              }}
+              onClick={() => onMonopolyAction('landed-build-done')}
+            >
+              Done / Pass
+            </button>
+          </div>
+        );
+      })()}
+      {monopolyPhase === 'landed_build' && activePlayer?.id !== playerId && (
+        <div className="drawn-card-popup" style={{ borderColor: '#3b82f6', background: 'white', height: 'auto' }}>
+          <div className="card-header-icon">🏗️</div>
+          <div className="card-title-text" style={{ color: '#1d4ed8' }}>Building...</div>
+          <div style={{ fontSize: '0.85rem', color: '#64748b', fontWeight: 600 }}>
+            {activePlayer?.name} is deciding whether to build...
+          </div>
+        </div>
+      )}
+
       {/* Deed Card View modal */}
       {selectedDeedIndex !== null && (
         <div className="deed-card-modal-backdrop" onClick={() => setSelectedDeedIndex(null)}>
-          <div className="deed-card" onClick={(e) => e.stopPropagation()}>
+          <div className="deed-card" style={{ width: '580px', padding: '16px', borderRadius: '8px' }} onClick={(e) => e.stopPropagation()}>
             {(() => {
               const tile = monopolyBoard[selectedDeedIndex];
               const isProp = tile.type === 'property';
@@ -2201,129 +3342,271 @@ export const MonopolyTable: React.FC<MonopolyTableProps> = ({
                 return 0;
               };
 
-              return (
-                <>
-                  {isProp && (
-                    <div className="deed-header">
-                      <div className={`deed-header-color tile-group-${tile.color}`} />
-                      <span className="deed-title">{tile.name}</span>
-                    </div>
-                  )}
-                  {isRail && (
-                    <div className="deed-header" style={{ background: '#cbd5e1' }}>
-                      <span style={{ fontSize: '1.75rem' }}>🚂</span>
-                      <div className="deed-title">{tile.name}</div>
-                    </div>
-                  )}
-                  {isUtil && (
-                    <div className="deed-header" style={{ background: '#cbd5e1' }}>
-                      <span style={{ fontSize: '1.75rem' }}>💡</span>
-                      <div className="deed-title">{tile.name}</div>
-                    </div>
-                  )}
+              const getRentMathBreakdown = () => {
+                if (!tile.owner) {
+                  return (
+                    <section style={{ display: 'block', padding: '8px', background: '#f8fafc', borderRadius: '6px', fontSize: '0.7rem', color: '#64748b', border: '1px solid #e2e8f0', marginTop: '10px', borderBottom: 'none' }}>
+                      ℹ️ <strong>Unowned property</strong> has no active rent.
+                    </section>
+                  );
+                }
+                if (tile.mortgaged) {
+                  return (
+                    <section style={{ display: 'block', padding: '8px', background: 'rgba(239, 68, 68, 0.04)', borderRadius: '6px', fontSize: '0.7rem', color: '#ef4444', border: '1px dashed #ef4444', marginTop: '10px', borderBottom: 'none' }}>
+                      ⚠️ <strong>Mortgaged property</strong> has no active rent ($0).
+                    </section>
+                  );
+                }
 
-                  <div className="deed-rents">
-                    {tile.owner && (
-                      <div className="current-rent-indicator" style={{
-                        background: tile.mortgaged ? 'rgba(239, 68, 68, 0.08)' : 'rgba(16, 185, 129, 0.08)',
-                        border: tile.mortgaged ? '1px dashed #ef4444' : '1px dashed #10b981',
-                        borderRadius: '8px',
-                        padding: '10px 12px',
-                        marginBottom: '14px',
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        fontSize: '0.8rem',
-                        fontWeight: 'bold',
-                        color: tile.mortgaged ? '#ef4444' : '#10b981',
-                        boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.02)'
-                      }}>
-                        <span>Total Current Rent:</span>
-                        <strong style={{ fontSize: '1.05rem', fontFamily: 'monospace' }}>
-                          {tile.mortgaged ? '$0 (Mortgaged)' : `$${getCurrentRent()}`}
-                        </strong>
+                const ownerName = players.find(p => p.id === tile.owner)?.name || 'Owner';
+
+                if (isProp) {
+                  const isMonopoly = tile.color ? monopolyColorGroups[tile.color] === tile.owner : false;
+                  const baseRent = tile.rent?.[0] || 0;
+                  if (tile.houses === 0) {
+                    if (isMonopoly) {
+                      return (
+                        <section style={{ display: 'block', padding: '8px', background: 'rgba(16, 185, 129, 0.04)', borderRadius: '6px', fontSize: '0.7rem', color: '#0f172a', border: '1px solid rgba(16, 185, 129, 0.2)', marginTop: '10px', borderBottom: 'none' }}>
+                          <span style={{ fontWeight: 'bold', color: '#10b981', display: 'block', marginBottom: '4px' }}>📊 Rent Calculation Math:</span>
+                          <span style={{ display: 'block', margin: '2px 0' }}>• Base Rent: <strong>${baseRent}</strong></span>
+                          <span style={{ display: 'block', margin: '2px 0' }}>• Group Status: <strong>Monopoly Owned (+100%)</strong></span>
+                          <span style={{ borderTop: '1px dashed rgba(16, 185, 129, 0.2)', display: 'block', marginTop: '4px', paddingTop: '4px', fontWeight: 'bold' }}>
+                            Total Rent = ${baseRent} × 2 = ${baseRent * 2}
+                          </span>
+                        </section>
+                      );
+                    } else {
+                      return (
+                        <section style={{ display: 'block', padding: '8px', background: '#f8fafc', borderRadius: '6px', fontSize: '0.7rem', color: '#0f172a', border: '1px solid #e2e8f0', marginTop: '10px', borderBottom: 'none' }}>
+                          <span style={{ fontWeight: 'bold', color: '#64748b', display: 'block', marginBottom: '4px' }}>📊 Rent Calculation Math:</span>
+                          <span style={{ display: 'block', margin: '2px 0' }}>• Base Rent: <strong>${baseRent}</strong></span>
+                          <span style={{ display: 'block', margin: '2px 0' }}>• Group Status: <strong>No Monopoly</strong></span>
+                          <span style={{ borderTop: '1px dashed #e2e8f0', display: 'block', marginTop: '4px', paddingTop: '4px', fontWeight: 'bold' }}>
+                            Total Rent = ${baseRent}
+                          </span>
+                        </section>
+                      );
+                    }
+                  } else {
+                    const houseText = tile.houses === 5 ? 'Hotel' : `${tile.houses} House${tile.houses > 1 ? 's' : ''}`;
+                    const rentWithHouses = tile.rent?.[tile.houses] || 0;
+                    return (
+                      <section style={{ display: 'block', padding: '8px', background: 'rgba(16, 185, 129, 0.04)', borderRadius: '6px', fontSize: '0.7rem', color: '#0f172a', border: '1px solid rgba(16, 185, 129, 0.2)', marginTop: '10px', borderBottom: 'none' }}>
+                        <span style={{ fontWeight: 'bold', color: '#10b981', display: 'block', marginBottom: '4px' }}>📊 Rent Calculation Math:</span>
+                        <span style={{ display: 'block', margin: '2px 0' }}>• Upgrades: <strong>{houseText}</strong></span>
+                        <span style={{ borderTop: '1px dashed rgba(16, 185, 129, 0.2)', display: 'block', marginTop: '4px', paddingTop: '4px', fontWeight: 'bold' }}>
+                          Total Rent = ${rentWithHouses}
+                        </span>
+                      </section>
+                    );
+                  }
+                }
+
+                if (isRail) {
+                  const railCount = monopolyBoard.filter(t => t.type === 'railroad' && t.owner === tile.owner).length;
+                  const calculatedRent = tile.rent?.[Math.min(railCount - 1, 3)] || 25;
+                  return (
+                    <section style={{ display: 'block', padding: '8px', background: 'rgba(16, 185, 129, 0.04)', borderRadius: '6px', fontSize: '0.7rem', color: '#0f172a', border: '1px solid rgba(16, 185, 129, 0.2)', marginTop: '10px', borderBottom: 'none' }}>
+                      <span style={{ fontWeight: 'bold', color: '#10b981', display: 'block', marginBottom: '4px' }}>📊 Rent Calculation Math:</span>
+                      <span style={{ display: 'block', margin: '2px 0' }}>• Railroads owned by {ownerName}: <strong>{railCount} of 4</strong></span>
+                      <span style={{ display: 'block', margin: '2px 0' }}>• Formula: <strong>$25 × 2^(N-1)</strong></span>
+                      <span style={{ borderTop: '1px dashed rgba(16, 185, 129, 0.2)', display: 'block', marginTop: '4px', paddingTop: '4px', fontWeight: 'bold' }}>
+                        Total Rent = ${calculatedRent}
+                      </span>
+                    </section>
+                  );
+                }
+
+                if (isUtil) {
+                  const utilCount = monopolyBoard.filter(t => t.type === 'utility' && t.owner === tile.owner).length;
+                  const diceSum = dice[0] + dice[1];
+                  const mult = utilCount === 2 ? 10 : 4;
+                  return (
+                    <section style={{ display: 'block', padding: '8px', background: 'rgba(16, 185, 129, 0.04)', borderRadius: '6px', fontSize: '0.7rem', color: '#0f172a', border: '1px solid rgba(16, 185, 129, 0.2)', marginTop: '10px', borderBottom: 'none' }}>
+                      <span style={{ fontWeight: 'bold', color: '#10b981', display: 'block', marginBottom: '4px' }}>📊 Rent Calculation Math:</span>
+                      <span style={{ display: 'block', margin: '2px 0' }}>• Utilities owned by {ownerName}: <strong>{utilCount} of 2</strong></span>
+                      <span style={{ display: 'block', margin: '2px 0' }}>• Dice Sum: <strong>{diceSum}</strong> <span style={{ color: '#64748b' }}>({dice[0]} + {dice[1]})</span></span>
+                      <span style={{ display: 'block', margin: '2px 0' }}>• Multiplier: <strong>{mult}x</strong></span>
+                      <span style={{ borderTop: '1px dashed rgba(16, 185, 129, 0.2)', display: 'block', marginTop: '4px', paddingTop: '4px', fontWeight: 'bold' }}>
+                        Total Rent = {diceSum} × {mult} = ${diceSum * mult}
+                      </span>
+                    </section>
+                  );
+                }
+
+                return null;
+              };
+
+              return (
+                <div style={{ display: 'flex', gap: '24px', alignItems: 'stretch' }}>
+                  {/* Left Column: Core Classical Deed Card */}
+                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', border: '2px solid #0f172a', padding: '12px', background: '#fff', borderRadius: '4px' }}>
+                    {/* Header */}
+                    {isProp && (
+                      <div className="deed-header" style={{ border: 'none', padding: '0 0 10px 0' }}>
+                        <div className={`deed-header-color tile-group-${tile.color}`} style={{ border: '2px solid #0f172a', borderRadius: '2px' }} />
+                        <span className="deed-title" style={{ fontSize: '1.2rem', color: '#0f172a' }}>{tile.name}</span>
                       </div>
                     )}
-
-                    {isProp && tile.rent && (
-                      <>
-                        <div><span>Rent:</span> <strong>${tile.rent[0]}</strong></div>
-                        <div><span>With Monopoly:</span> <strong>${tile.rent[0] * 2}</strong></div>
-                        <div><span>With 1 House:</span> <strong>${tile.rent[1]}</strong></div>
-                        <div><span>With 2 Houses:</span> <strong>${tile.rent[2]}</strong></div>
-                        <div><span>With 3 Houses:</span> <strong>${tile.rent[3]}</strong></div>
-                        <div><span>With 4 Houses:</span> <strong>${tile.rent[4]}</strong></div>
-                        <div><span>With Hotel:</span> <strong>${tile.rent[5]}</strong></div>
-                        <div style={{ marginTop: '10px' }}><span>House Cost:</span> <strong>${tile.housePrice}</strong></div>
-                        <div><span>Mortgage Value:</span> <strong>${tile.mortgageValue}</strong></div>
-                      </>
-                    )}
-                    {isRail && tile.rent && (
-                      <>
-                        <div><span>Rent (1 owned):</span> <strong>$25</strong></div>
-                        <div><span>Rent (2 owned):</span> <strong>$50</strong></div>
-                        <div><span>Rent (3 owned):</span> <strong>$100</strong></div>
-                        <div><span>Rent (4 owned):</span> <strong>$200</strong></div>
-                        <div style={{ marginTop: '10px' }}><span>Mortgage Value:</span> <strong>${tile.mortgageValue}</strong></div>
-                      </>
+                    {isRail && (
+                      <div className="deed-header" style={{ background: '#cbd5e1', border: 'none', padding: '10px 10px 14px 10px', borderRadius: '4px', textAlign: 'center' }}>
+                        <span style={{ fontSize: '1.75rem' }}>🚂</span>
+                        <div className="deed-title" style={{ fontSize: '1.1rem', color: '#0f172a', marginTop: '6px' }}>{tile.name}</div>
+                      </div>
                     )}
                     {isUtil && (
-                      <>
-                        <div style={{ fontSize: '0.65rem', marginBottom: '8px' }}>
-                          If 1 Utility is owned, rent is 4 times amount shown on dice.
-                        </div>
-                        <div style={{ fontSize: '0.65rem', marginBottom: '8px' }}>
-                          If 2 Utilities are owned, rent is 10 times amount shown on dice.
-                        </div>
-                        <div style={{ marginTop: '10px' }}><span>Mortgage Value:</span> <strong>${tile.mortgageValue}</strong></div>
-                      </>
-                    )}
-
-                    {tile.owner && (
-                      <div style={{ marginTop: '10px', fontSize: '0.7rem', color: '#64748b' }}>
-                        Owner: {players.find(p => p.id === tile.owner)?.name || 'Unknown'} {tile.mortgaged ? '(Mortgaged)' : ''}
+                      <div className="deed-header" style={{ background: '#cbd5e1', border: 'none', padding: '10px 10px 14px 10px', borderRadius: '4px', textAlign: 'center' }}>
+                        <span style={{ fontSize: '1.75rem' }}>💡</span>
+                        <div className="deed-title" style={{ fontSize: '1.1rem', color: '#0f172a', marginTop: '6px' }}>{tile.name}</div>
                       </div>
                     )}
+
+                    {/* Rent Listings */}
+                    <div className="deed-rents" style={{ flex: 1, borderTop: '2px solid #0f172a', paddingTop: '10px', marginTop: '10px' }}>
+                      {isProp && tile.rent && (
+                        <section style={{ display: 'block', borderBottom: 'none', padding: 0 }}>
+                          <div><span>Rent:</span> <strong>${tile.rent[0]}</strong></div>
+                          <div><span>With Monopoly:</span> <strong>${tile.rent[0] * 2}</strong></div>
+                          <div><span>With 1 House:</span> <strong>${tile.rent[1]}</strong></div>
+                          <div><span>With 2 Houses:</span> <strong>${tile.rent[2]}</strong></div>
+                          <div><span>With 3 Houses:</span> <strong>${tile.rent[3]}</strong></div>
+                          <div><span>With 4 Houses:</span> <strong>${tile.rent[4]}</strong></div>
+                          <div><span>With Hotel:</span> <strong>${tile.rent[5]}</strong></div>
+                          <div style={{ marginTop: '10px' }}><span>House Cost:</span> <strong>${tile.housePrice}</strong></div>
+                          <div><span>Mortgage Value:</span> <strong>${tile.mortgageValue}</strong></div>
+                        </section>
+                      )}
+                      {isRail && tile.rent && (
+                        <section style={{ display: 'block', borderBottom: 'none', padding: 0 }}>
+                          <div><span>Rent (1 owned):</span> <strong>$25</strong></div>
+                          <div><span>Rent (2 owned):</span> <strong>$50</strong></div>
+                          <div><span>Rent (3 owned):</span> <strong>$100</strong></div>
+                          <div><span>Rent (4 owned):</span> <strong>$200</strong></div>
+                          <div style={{ marginTop: '10px' }}><span>Mortgage Value:</span> <strong>${tile.mortgageValue}</strong></div>
+                        </section>
+                      )}
+                      {isUtil && (
+                        <section style={{ display: 'block', borderBottom: 'none', padding: 0 }}>
+                          <p style={{ margin: '0 0 6px 0', fontSize: '0.7rem', color: '#64748b', lineHeight: '1.4' }}>
+                            If 1 Utility is owned, rent is 4 times amount shown on dice.
+                          </p>
+                          <p style={{ margin: '0 0 6px 0', fontSize: '0.7rem', color: '#64748b', lineHeight: '1.4' }}>
+                            If 2 Utilities are owned, rent is 10 times amount shown on dice.
+                          </p>
+                          <div style={{ marginTop: '10px' }}><span>Mortgage Value:</span> <strong>${tile.mortgageValue}</strong></div>
+                        </section>
+                      )}
+                    </div>
                   </div>
 
-                  {tile.owner && tile.owner !== playerId && (
-                    <button
-                      className="btn-gold"
-                      style={{
-                        width: '100%',
-                        padding: '6px',
-                        fontSize: '0.75rem',
-                        marginTop: '12px',
-                        fontWeight: 'bold',
-                        boxShadow: 'none'
-                      }}
-                      onClick={() => {
-                        setTradeTargetId(tile.owner!);
-                        setDemandedProperties([tile.index]);
-                        
-                        // Reset other fields for a clean start
-                        setOfferedProperties([]);
-                        setOfferedMoney(0);
-                        setOfferedJailCards(0);
-                        setDemandedMoney(0);
-                        setDemandedJailCards(0);
-                        
-                        setIsTradeEditorOpen(true);
-                        setSelectedDeedIndex(null);
-                      }}
-                    >
-                      🤝 Offer to Buy
-                    </button>
-                  )}
+                  {/* Right Column: Dynamic Info, Math Calculations, & Actions */}
+                  <div style={{ flex: 1.2, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', padding: '4px 0', textAlign: 'left' }}>
+                    <div>
+                      <h3 style={{ margin: '0 0 12px 0', fontSize: '0.95rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.5px', color: '#1e293b' }}>
+                        Live Status & Math
+                      </h3>
 
-                  <button 
-                    className="btn-primary" 
-                    style={{ width: '100%', padding: '6px', fontSize: '0.75rem', marginTop: '12px' }}
-                    onClick={() => setSelectedDeedIndex(null)}
-                  >
-                    Close
-                  </button>
-                </>
+                      {/* Owner status */}
+                      <div style={{
+                        background: '#f8fafc',
+                        border: '1px solid #e2e8f0',
+                        borderRadius: '8px',
+                        padding: '10px 12px',
+                        marginBottom: '10px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '4px'
+                      }}>
+                        <div style={{ fontSize: '0.65rem', color: '#64748b', textTransform: 'uppercase', fontWeight: 'bold' }}>Current Owner</div>
+                        <div style={{ fontSize: '0.85rem', color: '#0f172a', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <span>👤 {tile.owner ? (players.find(p => p.id === tile.owner)?.name || 'Unknown') : 'None (Available to Buy!)'}</span>
+                          {tile.owner && tile.mortgaged && (
+                            <span style={{ fontSize: '0.65rem', color: '#ef4444', background: 'rgba(239, 68, 68, 0.1)', padding: '1px 5px', borderRadius: '4px', fontWeight: 'bold' }}>MORTGAGED</span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Total current rent indicator */}
+                      {tile.owner && (
+                        <div style={{
+                          background: tile.mortgaged ? 'rgba(239, 68, 68, 0.08)' : 'rgba(16, 185, 129, 0.08)',
+                          border: tile.mortgaged ? '1px dashed #ef4444' : '1px dashed #10b981',
+                          borderRadius: '8px',
+                          padding: '10px 12px',
+                          marginBottom: '10px',
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          fontSize: '0.8rem',
+                          fontWeight: 'bold',
+                          color: tile.mortgaged ? '#ef4444' : '#10b981',
+                          boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.02)'
+                        }}>
+                          <span>Total Current Rent:</span>
+                          <strong style={{ fontSize: '1.1rem', fontFamily: 'monospace' }}>
+                            {tile.mortgaged ? '$0' : `$${getCurrentRent()}`}
+                          </strong>
+                        </div>
+                      )}
+
+                      {/* Rent math breakdown */}
+                      <div style={{ marginTop: '5px' }}>
+                        {getRentMathBreakdown()}
+                      </div>
+                    </div>
+
+                    {/* Buttons */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '16px' }}>
+                      {tile.owner && tile.owner !== playerId && (() => {
+                        const isMyTurn = activePlayer?.id === playerId;
+                        return (
+                          <button
+                            className="btn-gold"
+                            disabled={!isMyTurn}
+                            style={{
+                              width: '100%',
+                              padding: '10px',
+                              fontSize: '0.8rem',
+                              fontWeight: 'bold',
+                              boxShadow: 'none',
+                              borderRadius: '6px',
+                              opacity: isMyTurn ? 1 : 0.6,
+                              cursor: isMyTurn ? 'pointer' : 'not-allowed',
+                              background: isMyTurn ? undefined : '#cbd5e1',
+                              border: isMyTurn ? undefined : '1px solid #94a3b8',
+                              color: isMyTurn ? undefined : '#64748b'
+                            }}
+                            onClick={() => {
+                              if (!isMyTurn) return;
+                              setTradeTargetId(tile.owner!);
+                              setDemandedProperties([tile.index]);
+                              
+                              // Reset other fields for a clean start
+                              setOfferedProperties([]);
+                              setOfferedMoney(0);
+                              setOfferedJailCards(0);
+                              setDemandedMoney(0);
+                              setDemandedJailCards(0);
+                              
+                              setIsTradeEditorOpen(true);
+                              setSelectedDeedIndex(null);
+                            }}
+                          >
+                            {isMyTurn ? '🤝 Propose Trade / Buy' : '🤝 Propose Trade (Your Turn Only)'}
+                          </button>
+                        );
+                      })()}
+
+                      <button 
+                        className="btn-primary" 
+                        style={{ width: '100%', padding: '10px', fontSize: '0.8rem', borderRadius: '6px' }}
+                        onClick={() => setSelectedDeedIndex(null)}
+                      >
+                        Close Window
+                      </button>
+                    </div>
+                  </div>
+                </div>
               );
             })()}
           </div>
@@ -2383,12 +3666,12 @@ export const MonopolyTable: React.FC<MonopolyTableProps> = ({
                                 {canBuild && (
                                   <button 
                                     className="build-action-btn build-add"
-                                    disabled={tile.houses >= 5 || !isFullMonopoly || activePlayer?.id !== playerId || activePlayer?.money < (tile.housePrice || 0)}
+                                    disabled={rules?.ruleset === 'Get Rich' || tile.houses >= 5 || !isFullMonopoly || activePlayer?.id !== playerId || activePlayer?.money < (tile.housePrice || 0)}
                                     onClick={() => {
                                       onMonopolyAction('build-house', tile.index);
                                       sfx.playUpgrade();
                                     }}
-                                    title={!isFullMonopoly ? "Requires owning all properties of this color group (Monopoly Set)" : "Build House"}
+                                    title={rules?.ruleset === 'Get Rich' ? "Building is only allowed instantly upon landing on the property in Get Rich mode." : !isFullMonopoly ? "Requires owning all properties of this color group (Monopoly Set)" : "Build House"}
                                   >
                                     🏢 Build (+${tile.housePrice})
                                   </button>
@@ -2545,12 +3828,23 @@ export const MonopolyTable: React.FC<MonopolyTableProps> = ({
 
                 <div className="player-detail-section">
                   <h4 className="section-title">🔓 SPECIAL CARDS</h4>
-                  <div className="special-cards-container">
-                    {p.getOutOfJailCards > 0 ? (
+                  <div className="special-cards-container" style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    {p.getOutOfJailCards > 0 && (
                       <div className="detail-special-card jail-free">
                         🎟️ Get Out of Jail Free Card (x{p.getOutOfJailCards})
                       </div>
-                    ) : (
+                    )}
+                    {rules?.ruleset === 'Get Rich' && (p as any).oddEvenCards !== undefined && (p as any).oddEvenCards > 0 && (
+                      <div className="detail-special-card odd-even" style={{ background: '#7c3aed', color: 'white', padding: '6px 10px', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 600 }}>
+                        🎯 Odd/Even Card (x{(p as any).oddEvenCards})
+                      </div>
+                    )}
+                    {rules?.ruleset === 'Get Rich' && (p as any).angelCards !== undefined && (p as any).angelCards > 0 && (
+                      <div className="detail-special-card angel" style={{ background: '#10b981', color: 'white', padding: '6px 10px', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 600 }}>
+                        😇 Angel Card (x{(p as any).angelCards})
+                      </div>
+                    )}
+                    {p.getOutOfJailCards <= 0 && (!(rules?.ruleset === 'Get Rich') || (((p as any).oddEvenCards || 0) <= 0 && ((p as any).angelCards || 0) <= 0)) && (
                       <span className="detail-empty">No special cards</span>
                     )}
                   </div>
@@ -2960,7 +4254,7 @@ export const MonopolyTable: React.FC<MonopolyTableProps> = ({
       })()}
 
       {/* Propose Trade Editor Modal */}
-      {isTradeEditorOpen && tradeTargetId && (() => {
+      {isTradeEditorOpen && tradeTargetId && !tradeBoardSelectionMode && (() => {
         const targetPlayer = players.find(p => p.id === tradeTargetId);
         const me = players.find(p => p.id === playerId);
         if (!targetPlayer || !me) return null;
@@ -2969,6 +4263,7 @@ export const MonopolyTable: React.FC<MonopolyTableProps> = ({
         const targetProperties = monopolyBoard.filter(t => t.owner === targetPlayer.id);
 
         const isUpgradedGroup = (tile: TileState) => {
+          if (rules?.ruleset === 'Get Rich') return false;
           if (tile.type !== 'property' || !tile.color) return false;
           return monopolyBoard.filter(t => t.color === tile.color).some(t => t.houses > 0);
         };
@@ -3070,7 +4365,16 @@ export const MonopolyTable: React.FC<MonopolyTableProps> = ({
 
                   {/* Properties checklist */}
                   <div>
-                    <label style={{ fontSize: '0.75rem', display: 'block', marginBottom: '6px', color: 'var(--text-muted)' }}>PROPERTIES</label>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                      <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 'bold' }}>PROPERTIES</label>
+                      <button
+                        className="btn-gold"
+                        style={{ padding: '2px 8px', fontSize: '0.65rem', borderRadius: '4px', boxShadow: 'none', margin: 0 }}
+                        onClick={() => setTradeBoardSelectionMode('me')}
+                      >
+                        🗺️ Choose from Board
+                      </button>
+                    </div>
                     {myProperties.length === 0 ? (
                       <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>No properties owned</span>
                     ) : (
@@ -3147,7 +4451,16 @@ export const MonopolyTable: React.FC<MonopolyTableProps> = ({
 
                   {/* Properties checklist */}
                   <div>
-                    <label style={{ fontSize: '0.75rem', display: 'block', marginBottom: '6px', color: 'var(--text-muted)' }}>PROPERTIES</label>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                      <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 'bold' }}>PROPERTIES</label>
+                      <button
+                        className="btn-gold"
+                        style={{ padding: '2px 8px', fontSize: '0.65rem', borderRadius: '4px', boxShadow: 'none', margin: 0 }}
+                        onClick={() => setTradeBoardSelectionMode('them')}
+                      >
+                        🗺️ Choose from Board
+                      </button>
+                    </div>
                     {targetProperties.length === 0 ? (
                       <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>No properties owned</span>
                     ) : (
@@ -3280,21 +4593,9 @@ export const MonopolyTable: React.FC<MonopolyTableProps> = ({
       })()}
 
       {/* Incoming Trade Proposal Modal */}
-      {activeTrade && activeTrade.receiverId === playerId && activeTrade.status === 'pending' && (() => {
+      {activeTrade && activeTrade.receiverId === playerId && activeTrade.status === 'pending' && !incomingTradeViewBoardMode && (() => {
         const sender = players.find(p => p.id === activeTrade.senderId);
         if (!sender) return null;
-
-        const handleCounterOffer = () => {
-          setTradeTargetId(activeTrade.senderId);
-          setOfferedProperties(activeTrade.receiverProperties);
-          setOfferedMoney(activeTrade.receiverMoney);
-          setOfferedJailCards(activeTrade.receiverJailCards);
-          setDemandedProperties(activeTrade.senderProperties);
-          setDemandedMoney(activeTrade.senderMoney);
-          setDemandedJailCards(activeTrade.senderJailCards);
-          setIsTradeEditorOpen(true);
-          onMonopolyAction('trade-counter');
-        };
 
         return (
           <div className="deed-card-modal-backdrop">
@@ -3373,14 +4674,18 @@ export const MonopolyTable: React.FC<MonopolyTableProps> = ({
               </div>
 
               {/* Action buttons */}
-              <div style={{ display: 'flex', gap: '10px' }}>
-                <button className="btn-primary" style={{ flexGrow: 1, padding: '12px 0' }} onClick={() => onMonopolyAction('trade-accept')}>
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                <button className="btn-primary" style={{ flex: '1 1 30%', padding: '10px 0' }} onClick={() => onMonopolyAction('trade-accept')}>
                   Accept
                 </button>
-                <button className="btn-secondary" style={{ flexGrow: 1, padding: '12px 0', background: 'linear-gradient(135deg, #fbbf24 0%, #d97706 100%)', boxShadow: 'none' }} onClick={handleCounterOffer}>
-                  Counter
+                <button 
+                  className="btn-gold" 
+                  style={{ flex: '1 1 30%', padding: '10px 0', boxShadow: 'none' }} 
+                  onClick={() => setIncomingTradeViewBoardMode(true)}
+                >
+                  👁️ View Board
                 </button>
-                <button className="btn-secondary" style={{ flexGrow: 1, padding: '12px 0' }} onClick={() => onMonopolyAction('trade-decline')}>
+                <button className="btn-secondary" style={{ flex: '1 1 30%', padding: '10px 0' }} onClick={() => onMonopolyAction('trade-decline')}>
                   Decline
                 </button>
               </div>
@@ -3412,6 +4717,146 @@ export const MonopolyTable: React.FC<MonopolyTableProps> = ({
                 Cancel Offer
               </button>
             </div>
+          </div>
+        );
+      })()}
+
+      {/* Floating HUD Panel for Trade Board Selection Mode */}
+      {tradeBoardSelectionMode && (() => {
+        const targetPlayer = players.find(p => p.id === tradeTargetId);
+        if (!targetPlayer) return null;
+        
+        const selectionTitle = tradeBoardSelectionMode === 'me' ? 'YOUR OFFER (GIVE)' : 'YOUR DEMAND (GET)';
+        const count = tradeBoardSelectionMode === 'me' ? offeredProperties.length : demandedProperties.length;
+        const worth = (tradeBoardSelectionMode === 'me' ? offeredProperties : demandedProperties)
+          .reduce((sum, idx) => sum + (monopolyBoard[idx]?.price || 0), 0);
+
+        return (
+          <div style={{
+            position: 'fixed',
+            top: '80px',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: 1000,
+            background: 'rgba(15, 23, 42, 0.95)',
+            border: '2px solid var(--primary, #fbbf24)',
+            borderRadius: '16px',
+            padding: '16px 24px',
+            boxShadow: '0 20px 40px rgba(0,0,0,0.5)',
+            color: 'white',
+            textAlign: 'center',
+            backdropFilter: 'blur(8px)',
+            width: '90%',
+            maxWidth: '480px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '10px'
+          }}>
+            <div style={{ fontSize: '1.2rem', fontWeight: 900, letterSpacing: '1px', color: 'var(--primary, #fbbf24)' }}>
+              🗺️ SELECT FROM BOARD
+            </div>
+            <div style={{ fontSize: '0.85rem', color: '#e2e8f0' }}>
+              Click properties owned by <strong>{tradeBoardSelectionMode === 'me' ? 'you' : targetPlayer.name}</strong> to toggle selection
+            </div>
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-around',
+              background: 'rgba(255,255,255,0.06)',
+              padding: '8px',
+              borderRadius: '8px',
+              fontSize: '0.8rem',
+              fontWeight: 'bold',
+              border: '1px solid rgba(255,255,255,0.1)'
+            }}>
+              <div>Mode: <span style={{ color: tradeBoardSelectionMode === 'me' ? '#10b981' : '#3b82f6' }}>{selectionTitle}</span></div>
+              <div>Selected: <span style={{ color: 'var(--primary, #fbbf24)' }}>{count}</span> (${worth})</div>
+            </div>
+            <button
+              className="btn-primary"
+              style={{
+                width: '100%',
+                padding: '10px 0',
+                fontWeight: 'bold',
+                borderRadius: '8px',
+                fontSize: '0.9rem',
+                marginTop: '4px'
+              }}
+              onClick={() => setTradeBoardSelectionMode(null)}
+            >
+              Done (Return to Trade)
+            </button>
+          </div>
+        );
+      })()}
+
+      {/* Floating HUD Panel for Incoming Trade Board View Mode */}
+      {incomingTradeViewBoardMode && activeTrade && (() => {
+        const sender = players.find(p => p.id === activeTrade.senderId);
+        if (!sender) return null;
+
+        return (
+          <div style={{
+            position: 'fixed',
+            top: '80px',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: 1000,
+            background: 'rgba(15, 23, 42, 0.95)',
+            border: '2px solid var(--primary, #fbbf24)',
+            borderRadius: '16px',
+            padding: '16px 24px',
+            boxShadow: '0 20px 40px rgba(0,0,0,0.5)',
+            color: 'white',
+            textAlign: 'center',
+            backdropFilter: 'blur(8px)',
+            width: '90%',
+            maxWidth: '480px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '10px'
+          }}>
+            <div style={{ fontSize: '1.2rem', fontWeight: 900, letterSpacing: '1px', color: 'var(--primary, #fbbf24)' }}>
+              👁️ VIEWING PROPOSED TRADE
+            </div>
+            <div style={{ fontSize: '0.85rem', color: '#e2e8f0' }}>
+              Visualizing the assets in the proposal from <strong>{sender.name}</strong> on the board
+            </div>
+            
+            <div style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '6px',
+              background: 'rgba(255,255,255,0.06)',
+              padding: '10px',
+              borderRadius: '8px',
+              fontSize: '0.75rem',
+              textAlign: 'left',
+              border: '1px solid rgba(255,255,255,0.1)'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ display: 'inline-block', width: '12px', height: '12px', background: '#10b981', borderRadius: '3px', boxShadow: '0 0 8px #10b981' }} />
+                <span><strong>Properties you will receive</strong> ({activeTrade.senderProperties.length} properties)</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ display: 'inline-block', width: '12px', height: '12px', background: '#ef4444', borderRadius: '3px', boxShadow: '0 0 8px #ef4444' }} />
+                <span><strong>Properties you will give</strong> ({activeTrade.receiverProperties.length} properties)</span>
+              </div>
+            </div>
+
+            <button
+              className="btn-primary"
+              style={{
+                width: '100%',
+                padding: '10px 0',
+                fontWeight: 'bold',
+                borderRadius: '8px',
+                fontSize: '0.9rem',
+                marginTop: '4px'
+              }}
+              onClick={() => setIncomingTradeViewBoardMode(false)}
+            >
+              Return to Trade Proposal
+            </button>
           </div>
         );
       })()}

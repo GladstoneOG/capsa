@@ -254,6 +254,7 @@ io.on('connection', (socket) => {
       ],
       rules: type === 'monopoly' ? {
         pointsToWin: 0,
+        ruleset: 'Default',
         turnDuration: 30
       } : type === 'uno' ? {
         pointsToWin: 250,
@@ -326,6 +327,7 @@ io.on('connection', (socket) => {
     room.players.push(newPlayer);
     socket.join(code);
 
+    socket.emit('room-joined', { roomCode: code, room: getPublicRoomState(room) });
     emitRoomUpdated(code, room);
     console.log(`User ${playerName} joined room ${code}`);
 
