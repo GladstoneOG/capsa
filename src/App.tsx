@@ -43,6 +43,9 @@ interface Player {
   rollCount?: number;
   doublesRolled?: boolean;
   netWorth?: number;
+  oddEvenCards?: number;
+  angelCards?: number;
+  freeTollCards?: number;
 }
 
 interface ChatMessage {
