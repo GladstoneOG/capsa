@@ -3561,14 +3561,9 @@ export default function App() {
       return;
     }
 
-    const hasPosChanged = prevMultiplayerPlayersRef.current && players.some((p: any) => {
-      const prevP = prevMultiplayerPlayersRef.current.find((pl: any) => pl.id === p.id);
-      return prevP && prevP.position !== p.position;
-    });
-
     prevMultiplayerPlayersRef.current = players;
 
-    if (isMonopolyAnimating || hasPosChanged) return;
+    if (isMonopolyAnimating) return;
 
     if (lastBotSyncRoomStateRef.current) {
       const roomState = lastBotSyncRoomStateRef.current;
@@ -3597,15 +3592,10 @@ export default function App() {
     let targetBotPlayer: Player | null = null;
 
     if (gameType === 'monopoly') {
-      const hasPosChanged = prevSingleplayerPlayersRef.current && players.some(p => {
-        const prevP = prevSingleplayerPlayersRef.current.find((pl: any) => pl.id === p.id);
-        return prevP && prevP.position !== p.position;
-      });
-
       prevSingleplayerBoardRef.current = monopolyBoard;
       prevSingleplayerPlayersRef.current = players;
 
-      if ((monopolyPhase as string) === 'rolling_animation' || hasPosChanged) {
+      if ((monopolyPhase as string) === 'rolling_animation') {
         return;
       }
 

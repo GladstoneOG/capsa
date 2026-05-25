@@ -185,7 +185,7 @@ export const GameTable: React.FC<GameTableProps> = ({
   const [hasActionedThisTurn, setHasActionedThisTurn] = useState<boolean>(false);
   useEffect(() => {
     setHasActionedThisTurn(false);
-  }, [turnIndex, activePlay]);
+  }, [turnIndex, activePlay, gameState]);
 
   // Refs to capture freshest hand/selected states without re-binding event listeners
   const localHandRef = useRef<Card[]>(localHand);
