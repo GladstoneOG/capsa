@@ -72,19 +72,19 @@ interface RoomRules {
 const INDONESIAN_NAMES = ['Aris', 'Budi', 'Candra', 'Dewi', 'Eko', 'Fitri', 'Giri', 'Hadi', 'Indra', 'Joko', 'Kartika', 'Laras', 'Mega', 'Nugroho', 'Putri', 'Rian', 'Siti', 'Taufik', 'Utami', 'Wulan'];
 const BOT_NAMES = [
   // Indonesian Names
-  'Budi Bot', 'Siti Bot', 'Joko Bot', 'Dewi Bot', 'Agus Bot', 
-  'Sari Bot', 'Rudi Bot', 'Ani Bot', 'Aris Bot', 'Dewo Bot', 
-  'Fitri Bot', 'Mega Bot', 'Candra Bot', 'Nugroho Bot', 'Putri Bot', 
-  'Taufik Bot', 'Wulan Bot', 'Hendra Bot', 'Bambang Bot', 'Slamet Bot', 
-  'Kartini Bot', 'Surya Bot', 'Guntur Bot', 'Indah Bot', 'Ratna Bot', 
-  'Wira Bot', 'Eko Bot', 'Yanto Bot', 'Rian Bot', 'Laras Bot', 
+  'Budi Bot', 'Siti Bot', 'Joko Bot', 'Dewi Bot', 'Agus Bot',
+  'Sari Bot', 'Rudi Bot', 'Ani Bot', 'Aris Bot', 'Dewo Bot',
+  'Fitri Bot', 'Mega Bot', 'Candra Bot', 'Nugroho Bot', 'Putri Bot',
+  'Taufik Bot', 'Wulan Bot', 'Hendra Bot', 'Bambang Bot', 'Slamet Bot',
+  'Kartini Bot', 'Surya Bot', 'Guntur Bot', 'Indah Bot', 'Ratna Bot',
+  'Wira Bot', 'Eko Bot', 'Yanto Bot', 'Rian Bot', 'Laras Bot',
   'Giri Bot', 'Hadi Bot', 'Indra Bot', 'Kartika Bot', 'Utami Bot',
   // Western Names
-  'Alex Bot', 'Emma Bot', 'Liam Bot', 'Olivia Bot', 'Noah Bot', 
-  'Sophia Bot', 'Logan Bot', 'Ava Bot', 'Lucas Bot', 'Mia Bot', 
-  'Ethan Bot', 'Isabella Bot', 'Jackson Bot', 'Charlotte Bot', 'Oliver Bot', 
-  'Amelia Bot', 'James Bot', 'Harper Bot', 'Benjamin Bot', 'Evelyn Bot', 
-  'Leo Bot', 'Lily Bot', 'Max Bot', 'Zoe Bot', 'Sam Bot', 
+  'Alex Bot', 'Emma Bot', 'Liam Bot', 'Olivia Bot', 'Noah Bot',
+  'Sophia Bot', 'Logan Bot', 'Ava Bot', 'Lucas Bot', 'Mia Bot',
+  'Ethan Bot', 'Isabella Bot', 'Jackson Bot', 'Charlotte Bot', 'Oliver Bot',
+  'Amelia Bot', 'James Bot', 'Harper Bot', 'Benjamin Bot', 'Evelyn Bot',
+  'Leo Bot', 'Lily Bot', 'Max Bot', 'Zoe Bot', 'Sam Bot',
   'Grace Bot', 'Jack Bot', 'Ruby Bot', 'Toby Bot', 'Chloe Bot'
 ];
 const PLAYER_SESSION_STORAGE_KEY = 'capsa_player_session_id';
@@ -112,7 +112,7 @@ export default function App() {
     if (saved) {
       try {
         return JSON.parse(saved);
-      } catch (e) {}
+      } catch (e) { }
     }
     return getRandomAvatar();
   });
@@ -179,9 +179,9 @@ export default function App() {
 
   const toggleFullscreen = useCallback(() => {
     if (!document.fullscreenElement) {
-      document.documentElement.requestFullscreen().catch(() => {});
+      document.documentElement.requestFullscreen().catch(() => { });
     } else {
-      document.exitFullscreen().catch(() => {});
+      document.exitFullscreen().catch(() => { });
     }
   }, []);
 
@@ -773,7 +773,7 @@ export default function App() {
     if (botTimerRef.current) clearTimeout(botTimerRef.current);
 
     const isMovingOrWillMoveOrBuilding = roomState.gameType === 'monopoly' && (
-      isMonopolyAnimating || 
+      isMonopolyAnimating ||
       roomState.monopolyPhase === 'rolling_animation' ||
       (roomState.players || []).some((p: any) => {
         const localP = (stateRef.current.players || []).find((lp: any) => lp.id === p.id);
@@ -1231,8 +1231,8 @@ export default function App() {
     if (currentPlayers.length < 2) {
       const existingNames = currentPlayers.map((p) => p.name);
       const unusedNames = BOT_NAMES.filter((n) => !existingNames.includes(n));
-      const botName = unusedNames.length > 0 
-        ? unusedNames[Math.floor(Math.random() * unusedNames.length)] 
+      const botName = unusedNames.length > 0
+        ? unusedNames[Math.floor(Math.random() * unusedNames.length)]
         : `Bot ${currentPlayers.length + 1}`;
       const botAvatar = botAvatars[currentPlayers.length % botAvatars.length];
       currentPlayers.push({
@@ -1908,7 +1908,7 @@ export default function App() {
       setPlayers(freshPlayers);
       setMonopolyBoard(nextBoard);
     };
-    
+
     if (tile.type === 'go') {
       setEndTurnPhaseSingle(player, playersList);
       updatePlayersAndBoard(playersList, boardList);
@@ -2154,7 +2154,7 @@ export default function App() {
 
     setMonopolyActiveDebt(null);
     setEndTurnPhaseSingle(debtor, nextPlayers);
-    
+
     const freshPlayers = updateNetWorthLocal(nextPlayers, boardList);
     setPlayers(freshPlayers);
     setMonopolyBoard(boardList);
@@ -2184,7 +2184,7 @@ export default function App() {
       const oldPos = updatedPlayer.position || 0;
       const target = card.target;
       updatedPlayer.position = target;
-      
+
       let passGoText = '';
       if (target < oldPos) {
         updatedPlayer.money = (updatedPlayer.money || 0) + 200;
@@ -2404,8 +2404,8 @@ export default function App() {
     while (currentPlayers.length < 4) {
       const existingNames = currentPlayers.map((p) => p.name);
       const unusedNames = BOT_NAMES.filter((n) => !existingNames.includes(n));
-      const botName = unusedNames.length > 0 
-        ? unusedNames[Math.floor(Math.random() * unusedNames.length)] 
+      const botName = unusedNames.length > 0
+        ? unusedNames[Math.floor(Math.random() * unusedNames.length)]
         : `Bot ${currentPlayers.length + 1}`;
       const botAvatar = botAvatars[currentPlayers.length % botAvatars.length];
       currentPlayers.push({
@@ -2526,26 +2526,26 @@ export default function App() {
     const limit = rules.turnLimit ? Number(rules.turnLimit) : 0;
     if (limit > 0 && currentTurnCount >= limit) {
       setGameState('gameover');
-      
+
       const activePlayers = nextPlayers.filter(p => !p.bankrupt);
       activePlayers.sort((a, b) => (b.netWorth || 0) - (a.netWorth || 0));
       const winner = activePlayers[0];
-      
+
       ioToSystemChat(`⏱️ Turn limit of ${limit} reached!`);
       ioToSystemChat(`🏆 ${winner.name} wins with a net worth of $${winner.netWorth || 0}! 🏆`);
-      
+
       const sortedAll = [...nextPlayers];
       sortedAll.sort((a, b) => {
         if (a.bankrupt && !b.bankrupt) return 1;
         if (!a.bankrupt && b.bankrupt) return -1;
         return (b.netWorth || 0) - (a.netWorth || 0);
       });
-      
+
       const rankedPlayers = nextPlayers.map(p => {
         const rank = sortedAll.findIndex(sa => sa.id === p.id) + 1;
         return { ...p, finishRank: rank, score: p.netWorth || 0 };
       });
-      
+
       setPlayers(rankedPlayers);
       return true;
     }
@@ -2554,7 +2554,7 @@ export default function App() {
 
   const handleMonopolyActionSingle = (action: string, payload?: any) => {
     if (isMonopolyAnimating && action !== 'leave' && action !== 'end-turn') return;
-    
+
     const {
       players: currentPlayers,
       turnIndex: currentTurnIdx,
@@ -2614,7 +2614,7 @@ export default function App() {
 
       const sum = d1! + d2!;
       const isDoubles = d1! === d2!;
-      
+
       setMonopolyDice([d1!, d2!]);
       setMonopolyRollId(Math.random().toString(36).substring(2, 9));
       setIsMonopolyAnimating(true);
@@ -2626,7 +2626,7 @@ export default function App() {
           monopolyChanceDeck: freshChanceDeck,
           monopolyChestDeck: freshChestDeck
         } = stateRef.current;
-        
+
         const freshPlayer = freshPlayers[currentTurnIdx];
         if (!freshPlayer || freshPlayer.bankrupt) {
           setIsMonopolyAnimating(false);
@@ -2652,7 +2652,7 @@ export default function App() {
           updatedPlayer.position = 10;
           updatedPlayer.rollCount = 0;
           updatedPlayer.doublesRolled = false;
-          
+
           ioToSystemChat(`👮 ${updatedPlayer.name} rolled doubles 3 times and is sent directly to JAIL!`);
           setEndTurnPhaseSingle(updatedPlayer, updatedPlayers);
           updatePlayersAndBoard(updatedPlayers, freshBoard);
@@ -2683,7 +2683,7 @@ export default function App() {
       const d2 = Math.floor(Math.random() * 6) + 1;
       const sum = d1 + d2;
       const isDoubles = d1 === d2;
-      
+
       setMonopolyDice([d1, d2]);
       setMonopolyRollId(Math.random().toString(36).substring(2, 9));
       setIsMonopolyAnimating(true);
@@ -2826,7 +2826,7 @@ export default function App() {
         resumeAfterAuctionSingle(currentPlayer, currentPlayers, currentBoard);
       } else {
         const bidders = currentPlayers.filter(p => !p.bankrupt).map(p => p.id);
-        
+
         if (bidders.length === 0) {
           ioToSystemChat(`🎲 No other bidders available. Auction ended.`);
           resumeAfterAuctionSingle(currentPlayer, currentPlayers, currentBoard);
@@ -2951,7 +2951,7 @@ export default function App() {
 
     else if (action === 'declare-bankruptcy') {
       if (currentPhase !== 'bankrupt_decision' || !currentActiveDebt) return;
-      
+
       const debtor = currentPlayer;
       const recipient = currentActiveDebt.to === 'bank' ? null : currentPlayers.find(p => p.id === currentActiveDebt.to);
 
@@ -2987,7 +2987,7 @@ export default function App() {
         const winner = activePlayers[0];
         setGameState('gameover');
         ioToSystemChat(`🏆 ${winner.name} is the last tycoon standing! Victory is theirs! 🏆`);
-        
+
         const rankedPlayers = nextPlayers.map(p => {
           if (p.id === winner.id) {
             return { ...p, finishRank: 1, score: p.netWorth! };
@@ -3005,11 +3005,11 @@ export default function App() {
             break;
           }
         }
-        
-        const updatedPlayersWithReset = nextPlayers.map((p, idx) => 
+
+        const updatedPlayersWithReset = nextPlayers.map((p, idx) =>
           idx === nextTurn ? { ...p, rollCount: 0, doublesRolled: false } : p
         );
-        
+
         setTurnIndex(nextTurn);
         setMonopolyPhase('roll');
         updatePlayersAndBoard(updatedPlayersWithReset, nextBoard);
@@ -3019,7 +3019,7 @@ export default function App() {
     else if (action === 'end-turn') {
       let nextTurn = currentTurnIdx;
       const n = currentPlayers.length;
-      
+
       // Decrement festivalTurns for ending player's tiles
       const boardAfterFestival = currentBoard.map(tile =>
         tile.owner === currentPlayer.id && (tile as any).festivalTurns > 0
@@ -3224,10 +3224,10 @@ export default function App() {
       if (!lbTile || lbTile.type !== 'property' || lbTile.owner !== currentPlayer.id || lbTile.mortgaged) return;
       const maxHouses = monopolyLandedBuildMaxHouses !== undefined ? monopolyLandedBuildMaxHouses : 4;
       if (lbTile.houses + count > maxHouses) return;
-      
+
       const totalPrice = (lbTile.housePrice || 0) * count;
       if (currentPlayer.money! < totalPrice) return;
-      
+
       const nextPlayers = currentPlayers.map(p =>
         p.id === currentPlayer.id ? { ...p, money: p.money! - totalPrice } : p
       );
@@ -3252,7 +3252,7 @@ export default function App() {
       const bid = payload.bid;
       const bidderId = auctionState.bidders[auctionState.activeBidderIndex];
       const bidder = currentPlayers.find(p => p.id === bidderId);
-      
+
       if (bidder && bid > auctionState.highestBid && bidder.money! >= bid) {
         if (auctionState.bidders.length === 1) {
           const tile = currentBoard[auctionState.tileIndex];
@@ -3269,10 +3269,10 @@ export default function App() {
               }
               return t;
             });
-            
+
             ioToSystemChat(`🏆 ${bidder.name} won the auction and bought ${tile.name} for $${bid}!`);
             setMonopolyAuctionState(null);
-            
+
             const activePlayerFresh = updatedPlayers[currentTurnIdx];
             resumeAfterAuctionSingle(activePlayerFresh, updatedPlayers, updatedBoard);
           }
@@ -3295,11 +3295,11 @@ export default function App() {
 
       const bidderId = auctionState.bidders[auctionState.activeBidderIndex];
       const bidder = currentPlayers.find(p => p.id === bidderId);
-      
+
       if (bidder) {
         ioToSystemChat(`❌ ${bidder.name} passed in auction.`);
         const nextBidders = auctionState.bidders.filter((id: string) => id !== bidderId);
-        
+
         if (nextBidders.length === 0) {
           ioToSystemChat(`🎲 Auction ended. No one bought ${currentBoard[auctionState.tileIndex].name}.`);
           setMonopolyAuctionState(null);
@@ -3309,12 +3309,12 @@ export default function App() {
           if (nextActiveIndex >= nextBidders.length) {
             nextActiveIndex = 0;
           }
-          
+
           if (nextBidders.length === 1 && auctionState.highestBidder !== null) {
             const winnerId = auctionState.highestBidder;
             const winner = currentPlayers.find(p => p.id === winnerId);
             const tile = currentBoard[auctionState.tileIndex];
-            
+
             if (winner && tile) {
               const updatedPlayers = currentPlayers.map(p => {
                 if (p.id === winnerId) {
@@ -3328,10 +3328,10 @@ export default function App() {
                 }
                 return t;
               });
-              
+
               ioToSystemChat(`🏆 ${winner.name} won the auction and bought ${tile.name} for $${auctionState.highestBid}!`);
               setMonopolyAuctionState(null);
-              
+
               const activePlayerFresh = updatedPlayers[currentTurnIdx];
               resumeAfterAuctionSingle(activePlayerFresh, updatedPlayers, updatedBoard);
             }
@@ -3485,8 +3485,8 @@ export default function App() {
     while (currentPlayers.length < 4) {
       const existingNames = currentPlayers.map((p) => p.name);
       const unusedNames = BOT_NAMES.filter((n) => !existingNames.includes(n));
-      const botName = unusedNames.length > 0 
-        ? unusedNames[Math.floor(Math.random() * unusedNames.length)] 
+      const botName = unusedNames.length > 0
+        ? unusedNames[Math.floor(Math.random() * unusedNames.length)]
         : `Bot ${currentPlayers.length + 1}`;
       const botAvatar = botAvatars[currentPlayers.length % botAvatars.length];
 
@@ -4486,12 +4486,12 @@ export default function App() {
                   Sarang Judi
                 </h1>
               )}
-              <p className="menu-subtitle">Bikinan Johan tanpa AI</p>
+              <p className="menu-subtitle">Judol Gacor Anti Rungkad by Johan</p>
             </div>
 
             {/* Highly Prominent & Scalable Game Mode Cards Selector */}
             <div className="mode-selector-dashboard">
-              <div 
+              <div
                 className={`mode-card ${gameType === 'capsa' ? 'active active-capsa' : ''}`}
                 onClick={() => {
                   setGameType('capsa');
@@ -4503,7 +4503,7 @@ export default function App() {
                 <div className="mode-card-desc">Indonesian 13-card game. High-stakes card strategy.</div>
               </div>
 
-              <div 
+              <div
                 className={`mode-card ${gameType === 'uno' ? 'active active-uno' : ''}`}
                 onClick={() => {
                   setGameType('uno');
@@ -4515,7 +4515,7 @@ export default function App() {
                 <div className="mode-card-desc">Wild cards, house rules, stacks, and intense fast-play.</div>
               </div>
 
-              <div 
+              <div
                 className={`mode-card ${gameType === 'monopoly' ? 'active active-monopoly' : ''}`}
                 onClick={() => {
                   setGameType('monopoly');
@@ -4613,9 +4613,9 @@ export default function App() {
                 fontSize: '2rem',
                 background: gameType === 'monopoly'
                   ? 'linear-gradient(to right, #10b981, #059669)'
-                  : gameType === 'uno' 
-                  ? 'linear-gradient(to right, #60a5fa, #4ade80)' 
-                  : 'linear-gradient(to right, #a78bfa, #fbbf24)', 
+                  : gameType === 'uno'
+                    ? 'linear-gradient(to right, #60a5fa, #4ade80)'
+                    : 'linear-gradient(to right, #a78bfa, #fbbf24)',
                 WebkitBackgroundClip: 'text',
                 WebkitTextFillColor: 'transparent'
               }}>
@@ -5034,8 +5034,8 @@ export default function App() {
                     if (isSinglePlayer) {
                       const existing = players.map((p) => p.name);
                       const unusedNames = BOT_NAMES.filter((n) => !existing.includes(n));
-                      const botName = unusedNames.length > 0 
-                        ? unusedNames[Math.floor(Math.random() * unusedNames.length)] 
+                      const botName = unusedNames.length > 0
+                        ? unusedNames[Math.floor(Math.random() * unusedNames.length)]
                         : `Bot ${players.length + 1}`;
 
                       const botAvatars = [
