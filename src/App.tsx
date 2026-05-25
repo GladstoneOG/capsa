@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { io, type Socket } from 'socket.io-client';
-import { AvatarCreator, getRandomAvatar, DEFAULT_AVATAR, AvatarSVG } from './components/AvatarCreator';
+import { AvatarCreator, getRandomAvatar, AvatarSVG } from './components/AvatarCreator';
 import type { AvatarConfig } from './components/AvatarCreator';
 import { GameTable } from './components/GameTable';
 import { checkCombination, dealCards, getBotPlay, contains3Diamonds } from './utils/gameLogic';
@@ -2491,7 +2491,7 @@ export default function App() {
     socketRef.current?.emit('monopoly-action', { roomCode, action, payload });
   }, [isMonopolyAnimating, roomCode]);
 
-  const checkTurnLimitSingle = (nextPlayers: Player[], nextBoard: TileState[], currentTurnCount: number) => {
+  const checkTurnLimitSingle = (nextPlayers: Player[], currentTurnCount: number) => {
     const limit = rules.turnLimit ? Number(rules.turnLimit) : 0;
     if (limit > 0 && currentTurnCount >= limit) {
       setGameState('gameover');
@@ -2986,7 +2986,7 @@ export default function App() {
       setMonopolyTurnCount(nextTurnCount);
 
       // Check turn limit
-      const limitReached = checkTurnLimitSingle(currentPlayers, boardAfterFestival, nextTurnCount);
+      const limitReached = checkTurnLimitSingle(currentPlayers, nextTurnCount);
       if (limitReached) {
         return;
       }
