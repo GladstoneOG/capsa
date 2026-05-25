@@ -1,0 +1,59 @@
+I will search for the Chance cards definition in `src/utils/monopolyLogic.ts` to retrieve the complete list of Chance card IDs.
+
+Searched for "LOCAL_CHANCE_CARDS"
+
+I will view lines 71 to 105 of `src/utils/monopolyLogic.ts` to extract the full list of Chance cards and their corresponding IDs.
+
+I will view lines 71 to 105 of `src/utils/monopolyLogic.ts` using the correct absolute path to retrieve the Chance cards list.
+
+Viewed monopolyLogic.ts:71-105
+
+Here is the complete list of **Chance** card IDs, text descriptions, and actions that you can use with the `setnextcard chance <id>` command:
+
+### ✉️ Chance Card IDs (`chance`)
+
+| Card ID | Action / Type | Card Text |
+| :--- | :--- | :--- |
+| `ch_go` | `move` | Advance to GO (Collect $200) |
+| `ch_boardwalk` | `move` | Advance to Boardwalk |
+| `ch_illinois` | `move` | Advance to Illinois Avenue |
+| `ch_stcharles` | `move` | Advance to St. Charles Place |
+| `ch_railroad` | `nearest_railroad` | Advance to nearest Railroad |
+| `ch_utility` | `nearest_utility` | Advance to nearest Utility (multiplier rent) |
+| `ch_dividend` | `give_money` | Bank pays you dividend of $50 |
+| `ch_jail_free` | `jail_free` | Get Out of Jail Free card |
+| `ch_back3` | `back_spaces` | Go Back 3 Spaces |
+| `ch_goto_jail` | `goto_jail` | Go directly to Jail |
+| `ch_repairs` | `repairs` | Property repairs ($25/house, $100/hotel) |
+| `ch_speeding` | `take_money` | Speeding fine $15 |
+| `ch_reading` | `move` | Take a trip to Reading Railroad |
+| `ch_chairman` | `pay_each` | Elected Chairman of the Board. Pay each player $50 |
+| `ch_odd_even` | `give_odd_even` | **Get Rich Exclusive**: Odd/Even Card |
+| `ch_angel` | `give_angel` | **Get Rich Exclusive**: Angel Card |
+
+---
+
+### 📦 Community Chest Card IDs (`chest`)
+
+For your convenience, here is also the list of **Community Chest** card IDs that you can use with `setnextcard chest <id>`:
+
+| Card ID | Action / Type | Card Text |
+| :--- | :--- | :--- |
+| `cc_go` | `move` | Advance to GO (Collect $200) |
+| `cc_bank_error` | `give_money` | Bank error in your favor. Collect $200 |
+| `cc_doctor` | `take_money` | Doctor's fees. Pay $50 |
+| `cc_sale` | `give_money` | From sale of stock you get $50 |
+| `cc_jail_free` | `jail_free` | Get Out of Jail Free card |
+| `cc_goto_jail` | `goto_jail` | Go directly to Jail |
+| `cc_holiday` | `give_money` | Holiday fund matures. Receive $100 |
+| `cc_tax_refund` | `give_money` | Income tax refund. Collect $20 |
+| `cc_birthday` | `collect_each` | It is your birthday. Collect $10 from every player |
+| `cc_life` | `give_money` | Life insurance matures. Collect $100 |
+| `cc_hospital` | `take_money` | Pay hospital fees of $100 |
+| `cc_school` | `take_money` | Pay school fees of $50 |
+| `cc_consultancy` | `give_money` | Receive $25 consultancy fee |
+| `cc_street_repairs`| `repairs` | Street repairs ($40/house, $115/hotel) |
+| `cc_beauty` | `give_money` | You win second prize in a beauty contest. Collect $10 |
+| `cc_inheritance` | `give_money` | You inherit $100 |
+| `cc_odd_even` | `give_odd_even` | **Get Rich Exclusive**: Odd/Even Card |
+| `cc_angel` | `give_angel` | **Get Rich Exclusive**: Angel Card |

@@ -556,14 +556,27 @@ function drawCard(room, player, type, diceSum, io) {
     allCards = allCards.filter(c => c.action !== 'give_odd_even' && c.action !== 'give_angel');
   }
 
-  let deck = type === 'chance' ? room.chanceDeck : room.chestDeck;
-  if (deck.length === 0) {
-    deck = shuffle(allCards);
-    if (type === 'chance') room.chanceDeck = deck;
-    else room.chestDeck = deck;
+  let card;
+  if (room.nextForcedCard && room.nextForcedCard.type === type) {
+    const forcedActionOrId = room.nextForcedCard.cardActionOrId;
+    const matched = allCards.find(c => c.id === forcedActionOrId || c.action === forcedActionOrId);
+    if (matched) {
+      card = matched;
+      addSystemChatMessage(room, io, `🔧 Dev Console: Forced next ${type} card.`);
+    }
+    delete room.nextForcedCard;
   }
 
-  const card = deck.pop();
+  if (!card) {
+    let deck = type === 'chance' ? room.chanceDeck : room.chestDeck;
+    if (deck.length === 0) {
+      deck = shuffle(allCards);
+      if (type === 'chance') room.chanceDeck = deck;
+      else room.chestDeck = deck;
+    }
+    card = deck.pop();
+  }
+
   room.currentCard = card;
   room.cardType = type;
   room.monopolyPhase = 'card_drawn';
@@ -840,6 +853,120 @@ function handleBankruptcyResolution(room, player, io) {
   broadcastGameUpdate(room, io);
 }
 
+function handleDevCommand(room, payload, io) {
+  const { commandStr } = payload;
+  if (!commandStr) return;
+
+  const parts = commandStr.trim().split(/\s+/);
+  const cmd = parts[0].toLowerCase();
+  const args = parts.slice(1);
+
+  addSystemChatMessage(room, io, `🔧 Dev Console executed: "${commandStr}"`);
+
+  switch (cmd) {
+    case 'setmoney': {
+      if (args.length < 2) return;
+      const targetSearch = args[0].toLowerCase();
+      const amount = parseInt(args[1], 10);
+      if (isNaN(amount)) return;
+
+      const targetPlayer = room.players.find(p => p.id === args[0] || p.name.toLowerCase().includes(targetSearch));
+      if (targetPlayer) {
+        targetPlayer.money = amount;
+        addSystemChatMessage(room, io, `🔧 Dev Console: Set ${targetPlayer.name}'s money to $${amount}.`);
+        broadcastGameUpdate(room, io);
+      }
+      break;
+    }
+    case 'setroll': {
+      if (args.length < 2) return;
+      const d1 = parseInt(args[0], 10);
+      const d2 = parseInt(args[1], 10);
+      if (isNaN(d1) || isNaN(d2) || d1 < 1 || d1 > 6 || d2 < 1 || d2 > 6) return;
+
+      room.nextForcedRoll = [d1, d2];
+      addSystemChatMessage(room, io, `🔧 Dev Console: Next dice roll forced to [${d1}, ${d2}].`);
+      break;
+    }
+    case 'setnextcard': {
+      if (args.length < 2) return;
+      const type = args[0].toLowerCase();
+      const cardActionOrId = args[1].toLowerCase();
+      if (type !== 'chance' && type !== 'chest') return;
+
+      room.nextForcedCard = { type, cardActionOrId };
+      addSystemChatMessage(room, io, `🔧 Dev Console: Next ${type} card forced to match "${cardActionOrId}".`);
+      break;
+    }
+    case 'teleport': {
+      if (args.length < 2) return;
+      const targetSearch = args[0].toLowerCase();
+      const tileIndex = parseInt(args[1], 10);
+      if (isNaN(tileIndex) || tileIndex < 0 || tileIndex > 39) return;
+
+      const targetPlayer = room.players.find(p => p.id === args[0] || p.name.toLowerCase().includes(targetSearch));
+      if (targetPlayer) {
+        targetPlayer.position = tileIndex;
+        addSystemChatMessage(room, io, `🔧 Dev Console: Teleported ${targetPlayer.name} to ${room.monopolyBoard[tileIndex].name} (${tileIndex}).`);
+        broadcastGameUpdate(room, io);
+      }
+      break;
+    }
+    case 'addcard': {
+      if (args.length < 2) return;
+      const targetSearch = args[0].toLowerCase();
+      const cardType = args[1].toLowerCase();
+
+      const targetPlayer = room.players.find(p => p.id === args[0] || p.name.toLowerCase().includes(targetSearch));
+      if (targetPlayer) {
+        if (cardType === 'angel') {
+          targetPlayer.angelCards = (targetPlayer.angelCards || 0) + 1;
+          addSystemChatMessage(room, io, `🔧 Dev Console: Gave 1 Angel card to ${targetPlayer.name}.`);
+        } else if (cardType === 'odd_even') {
+          targetPlayer.oddEvenCards = (targetPlayer.oddEvenCards || 0) + 1;
+          addSystemChatMessage(room, io, `🔧 Dev Console: Gave 1 Odd/Even card to ${targetPlayer.name}.`);
+        }
+        broadcastGameUpdate(room, io);
+      }
+      break;
+    }
+    case 'bankrupt': {
+      if (args.length < 1) return;
+      const targetSearch = args[0].toLowerCase();
+
+      const targetPlayer = room.players.find(p => p.id === args[0] || p.name.toLowerCase().includes(targetSearch));
+      if (targetPlayer && !targetPlayer.bankrupt) {
+        targetPlayer.bankrupt = true;
+        room.monopolyBoard.forEach(t => {
+          if (t.owner === targetPlayer.id) {
+            t.owner = null;
+            t.houses = 0;
+          }
+        });
+        addSystemChatMessage(room, io, `☠️ Dev Console: Bankrupted ${targetPlayer.name}. All their properties are released.`);
+        
+        const activeOthers = room.players.filter(p => !p.bankrupt);
+        if (activeOthers.length <= 1) {
+          room.gameState = 'gameover';
+        } else {
+          const activePlayer = room.players[room.turnIndex];
+          if (activePlayer.id === targetPlayer.id) {
+            let nextTurn = room.turnIndex;
+            for (let i = 0; i < room.players.length; i++) {
+              nextTurn = (nextTurn + 1) % room.players.length;
+              if (!room.players[nextTurn].bankrupt) break;
+            }
+            room.turnIndex = nextTurn;
+            room.monopolyPhase = 'roll';
+          }
+        }
+        broadcastGameUpdate(room, io);
+      }
+      break;
+    }
+  }
+}
+
 export function handleAction(room, socket, action, payload, io) {
   if (room.monopolyPhase === 'rolling_animation') return;
 
@@ -856,8 +983,16 @@ export function handleAction(room, socket, action, payload, io) {
     'trade-decline',
     'trade-cancel',
     'trade-counter',
-    'set-player-status'
+    'set-player-status',
+    'dev-command'
   ].includes(action);
+
+  if (action === 'dev-command') {
+    const sender = room.players.find(p => p.id === socket.id);
+    if (!sender || !sender.isHost) return;
+    handleDevCommand(room, payload, io);
+    return;
+  }
 
   if (!bypassTurnAuth) {
     // Authorization: check if this player owns the turn
@@ -900,8 +1035,15 @@ export function handleAction(room, socket, action, payload, io) {
           attempts++;
         } while (attempts < 200);
       } else {
-        d1 = Math.floor(Math.random() * 6) + 1;
-        d2 = Math.floor(Math.random() * 6) + 1;
+        if (room.nextForcedRoll) {
+          d1 = room.nextForcedRoll[0];
+          d2 = room.nextForcedRoll[1];
+          delete room.nextForcedRoll;
+          addSystemChatMessage(room, io, `🔧 Dev Console: Applied forced roll [${d1}, ${d2}].`);
+        } else {
+          d1 = Math.floor(Math.random() * 6) + 1;
+          d2 = Math.floor(Math.random() * 6) + 1;
+        }
       }
       
       room.dice = [d1, d2];
@@ -1062,8 +1204,16 @@ export function handleAction(room, socket, action, payload, io) {
     case 'roll-jail-doubles': {
       if (room.monopolyPhase !== 'roll' || !player.inJail) return;
 
-      const d1 = Math.floor(Math.random() * 6) + 1;
-      const d2 = Math.floor(Math.random() * 6) + 1;
+      let d1, d2;
+      if (room.nextForcedRoll) {
+        d1 = room.nextForcedRoll[0];
+        d2 = room.nextForcedRoll[1];
+        delete room.nextForcedRoll;
+        addSystemChatMessage(room, io, `🔧 Dev Console: Applied forced jail roll [${d1}, ${d2}].`);
+      } else {
+        d1 = Math.floor(Math.random() * 6) + 1;
+        d2 = Math.floor(Math.random() * 6) + 1;
+      }
       room.dice = [d1, d2];
       room.rollId = Math.random().toString(36).substring(2, 9);
       player.lastRoll = [d1, d2];

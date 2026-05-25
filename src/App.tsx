@@ -236,6 +236,14 @@ export default function App() {
   const [monopolyLandedBuildMaxHouses, setMonopolyLandedBuildMaxHouses] = useState<number>(4);
   const [monopolyTurnCount, setMonopolyTurnCount] = useState<number>(0);
   const [showConfetti, setShowConfetti] = useState<boolean>(false);
+
+  // Developer Console State
+  const [showDevConsole, setShowDevConsole] = useState<boolean>(false);
+  const [devConsoleCommand, setDevConsoleCommand] = useState<string>('');
+  const [devConsoleLogs, setDevConsoleLogs] = useState<string[]>([
+    'Welcome to Monopoly Dev Console!',
+    'Type "help" for a list of available commands.',
+  ]);
   const [unoDiscardPile, setUnoDiscardPile] = useState<UnoCard[]>([]);
   const [unoDrawPile, setUnoDrawPile] = useState<UnoCard[]>([]);
   const botDrawnRef = useRef<Record<string, boolean>>({});
@@ -274,6 +282,8 @@ export default function App() {
   const lastBotSyncRoomStateRef = useRef<any>(null);
   const triggerBotLogicForMultiplayerRef = useRef<any>(null);
   const botSyncFallbackTimerRef = useRef<any>(null);
+  const nextForcedRollRef = useRef<[number, number] | null>(null);
+  const nextForcedCardRef = useRef<{ type: 'chance' | 'chest'; cardIdOrAction: string } | null>(null);
   const prevSingleplayerBoardRef = useRef<any>(null);
   const prevSingleplayerPlayersRef = useRef<any>(null);
   const prevMultiplayerPlayersRef = useRef<any>(null);
@@ -410,6 +420,228 @@ export default function App() {
       appContainer.scrollTop = 0;
     }
   }, [screen]);
+
+  // Developer Console Command Execution
+  const executeLocalDevCommand = (commandStr: string) => {
+    if (!commandStr.trim()) return;
+
+    const parts = commandStr.trim().split(/\s+/);
+    const cmd = parts[0].toLowerCase();
+    const args = parts.slice(1);
+
+    setDevConsoleLogs(prev => [...prev, `> ${commandStr}`]);
+
+    if (isSinglePlayer) {
+      switch (cmd) {
+        case 'help': {
+          setDevConsoleLogs(prev => [
+            ...prev,
+            'Available commands:',
+            '  setmoney <name|id> <amount> - Set player/bot money',
+            '  setroll <d1> <d2> - Force next dice roll (1-6)',
+            '  setnextcard <chance|chest> <action|id> - Force next Chance/Chest card',
+            '  teleport <name|id> <tile> - Teleport player (0-39)',
+            '  addcard <name|id> <angel|odd_even> - Give special consumable card',
+            '  bankrupt <name|id> - Bankrupt player immediately',
+            '  status - Show current game and player statuses',
+            '  help - Show this command list',
+          ]);
+          break;
+        }
+        case 'status': {
+          setDevConsoleLogs(prev => [
+            ...prev,
+            `Game Phase: ${monopolyPhase}`,
+            `Turn Index: ${turnIndex} (${players[turnIndex]?.name})`,
+            'Players:',
+            ...players.map(p => `  ${p.name} (${p.id}): $${p.money} (Pos: ${p.position}, Jail: ${p.inJail}, Bankrupt: ${p.bankrupt})`)
+          ]);
+          break;
+        }
+        case 'setmoney': {
+          if (args.length < 2) {
+            setDevConsoleLogs(prev => [...prev, 'Syntax: setmoney <name|id> <amount>']);
+            return;
+          }
+          const targetSearch = args[0].toLowerCase();
+          const amount = parseInt(args[1], 10);
+          if (isNaN(amount)) {
+            setDevConsoleLogs(prev => [...prev, 'Error: Amount must be a number']);
+            return;
+          }
+          const nextPlayers = players.map(p => {
+            if (p.id === args[0] || p.name.toLowerCase().includes(targetSearch)) {
+              setDevConsoleLogs(prev => [...prev, `Success: Set ${p.name}'s money to $${amount}`]);
+              ioToSystemChat(`🔧 Dev Console: Set ${p.name}'s money to $${amount}.`);
+              return { ...p, money: amount };
+            }
+            return p;
+          });
+          setPlayers(nextPlayers);
+          break;
+        }
+        case 'setroll': {
+          if (args.length < 2) {
+            setDevConsoleLogs(prev => [...prev, 'Syntax: setroll <d1> <d2>']);
+            return;
+          }
+          const d1 = parseInt(args[0], 10);
+          const d2 = parseInt(args[1], 10);
+          if (isNaN(d1) || isNaN(d2) || d1 < 1 || d1 > 6 || d2 < 1 || d2 > 6) {
+            setDevConsoleLogs(prev => [...prev, 'Error: Dice must be between 1 and 6']);
+            return;
+          }
+          nextForcedRollRef.current = [d1, d2];
+          setDevConsoleLogs(prev => [...prev, `Success: Forced next roll to [${d1}, ${d2}]`]);
+          ioToSystemChat(`🔧 Dev Console: Next dice roll forced to [${d1}, ${d2}].`);
+          break;
+        }
+        case 'setnextcard': {
+          if (args.length < 2) {
+            setDevConsoleLogs(prev => [...prev, 'Syntax: setnextcard <chance|chest> <cardActionOrId>']);
+            return;
+          }
+          const type = args[0].toLowerCase();
+          const cardActionOrId = args[1].toLowerCase();
+          if (type !== 'chance' && type !== 'chest') {
+            setDevConsoleLogs(prev => [...prev, 'Error: Type must be "chance" or "chest"']);
+            return;
+          }
+          nextForcedCardRef.current = { type: type as 'chance' | 'chest', cardIdOrAction: cardActionOrId };
+          setDevConsoleLogs(prev => [...prev, `Success: Forced next ${type} card to match "${cardActionOrId}"`]);
+          ioToSystemChat(`🔧 Dev Console: Next ${type} card forced to match "${cardActionOrId}".`);
+          break;
+        }
+        case 'teleport': {
+          if (args.length < 2) {
+            setDevConsoleLogs(prev => [...prev, 'Syntax: teleport <name|id> <tileIndex>']);
+            return;
+          }
+          const targetSearch = args[0].toLowerCase();
+          const tileIndex = parseInt(args[1], 10);
+          if (isNaN(tileIndex) || tileIndex < 0 || tileIndex > 39) {
+            setDevConsoleLogs(prev => [...prev, 'Error: TileIndex must be between 0 and 39']);
+            return;
+          }
+          const nextPlayers = players.map(p => {
+            if (p.id === args[0] || p.name.toLowerCase().includes(targetSearch)) {
+              setDevConsoleLogs(prev => [...prev, `Success: Teleported ${p.name} to tile ${tileIndex}`]);
+              ioToSystemChat(`🔧 Dev Console: Teleported ${p.name} to ${monopolyBoard[tileIndex]?.name} (${tileIndex}).`);
+              return { ...p, position: tileIndex };
+            }
+            return p;
+          });
+          setPlayers(nextPlayers);
+          break;
+        }
+        case 'addcard': {
+          if (args.length < 2) {
+            setDevConsoleLogs(prev => [...prev, 'Syntax: addcard <name|id> <angel|odd_even>']);
+            return;
+          }
+          const targetSearch = args[0].toLowerCase();
+          const cardType = args[1].toLowerCase();
+          const nextPlayers = players.map(p => {
+            if (p.id === args[0] || p.name.toLowerCase().includes(targetSearch)) {
+              if (cardType === 'angel') {
+                setDevConsoleLogs(prev => [...prev, `Success: Gave 1 Angel card to ${p.name}`]);
+                ioToSystemChat(`🔧 Dev Console: Gave 1 Angel card to ${p.name}.`);
+                return { ...p, angelCards: (p.angelCards || 0) + 1 };
+              } else if (cardType === 'odd_even') {
+                setDevConsoleLogs(prev => [...prev, `Success: Gave 1 Odd/Even card to ${p.name}`]);
+                ioToSystemChat(`🔧 Dev Console: Gave 1 Odd/Even card to ${p.name}.`);
+                return { ...p, oddEvenCards: (p.oddEvenCards || 0) + 1 };
+              } else {
+                setDevConsoleLogs(prev => [...prev, 'Error: Card type must be "angel" or "odd_even"']);
+              }
+            }
+            return p;
+          });
+          setPlayers(nextPlayers);
+          break;
+        }
+        case 'bankrupt': {
+          if (args.length < 1) {
+            setDevConsoleLogs(prev => [...prev, 'Syntax: bankrupt <name|id>']);
+            return;
+          }
+          const targetSearch = args[0].toLowerCase();
+          const targetPlayer = players.find(p => p.id === args[0] || p.name.toLowerCase().includes(targetSearch));
+          if (!targetPlayer || targetPlayer.bankrupt) {
+            setDevConsoleLogs(prev => [...prev, 'Error: Player not found or already bankrupt']);
+            return;
+          }
+          const nextPlayers = players.map(p => {
+            if (p.id === targetPlayer.id) {
+              return { ...p, bankrupt: true };
+            }
+            return p;
+          });
+          const nextBoard = monopolyBoard.map(t => {
+            if (t.owner === targetPlayer.id) {
+              return { ...t, owner: null, houses: 0 };
+            }
+            return t;
+          });
+          setPlayers(nextPlayers);
+          setMonopolyBoard(nextBoard);
+          setDevConsoleLogs(prev => [...prev, `Success: Bankrupted ${targetPlayer.name}`]);
+          ioToSystemChat(`☠️ Dev Console: Bankrupted ${targetPlayer.name}. All their properties are released.`);
+
+          const activeOthers = nextPlayers.filter(p => !p.bankrupt);
+          if (activeOthers.length <= 1) {
+            setGameState('gameover');
+          } else {
+            const activePlayer = nextPlayers[turnIndex];
+            if (activePlayer.id === targetPlayer.id) {
+              let nextTurn = turnIndex;
+              for (let i = 0; i < nextPlayers.length; i++) {
+                nextTurn = (nextTurn + 1) % nextPlayers.length;
+                if (!nextPlayers[nextTurn].bankrupt) break;
+              }
+              setTurnIndex(nextTurn);
+              setMonopolyPhase('roll');
+            }
+          }
+          break;
+        }
+        default: {
+          setDevConsoleLogs(prev => [...prev, `Error: Unknown command "${cmd}"`]);
+          break;
+        }
+      }
+    } else {
+      socketRef.current?.emit('monopoly-action', {
+        roomCode,
+        action: 'dev-command',
+        payload: { commandStr }
+      });
+      setDevConsoleLogs(prev => [...prev, `Sent command to server: "${commandStr}"`]);
+    }
+  };
+
+  // Toggle Dev Console key listener
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return;
+
+      if (e.key === '`') {
+        e.preventDefault();
+        
+        // Host verification for dev console toggle
+        const localPlayer = (players || []).find((p: any) => p.id === socketId || p.id === socketRef.current?.id);
+        const isHost = localPlayer?.isHost;
+        const canUseConsole = isSinglePlayer || isHost;
+        
+        if (screen === 'table' && gameType === 'monopoly' && gameState === 'playing' && canUseConsole) {
+          setShowDevConsole(prev => !prev);
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [screen, gameType, gameState, isSinglePlayer, players, socketId]);
 
   // ==================== Socket.io Handlers ====================
   const applyRoomStateFromServer = (room: any, nextScreen?: Screen) => {
@@ -2104,26 +2336,39 @@ export default function App() {
       if (!isGetRich) {
         allCards = allCards.filter(c => c.action !== 'give_odd_even' && c.action !== 'give_angel');
       }
-      const deck = tile.type === 'chance' ? chanceDeck : chestDeck;
-      const nextDeck = [...deck];
+
       let card: any;
-      if (nextDeck.length === 0) {
-        const refilled = shuffleLocalDeck(allCards);
-        card = refilled.pop()!;
-        if (tile.type === 'chance') setMonopolyChanceDeck(refilled);
-        else setMonopolyChestDeck(refilled);
-      } else {
-        // Filter out Get Rich exclusive cards from existing deck if needed
-        const filteredDeck = isGetRich ? nextDeck : nextDeck.filter(c => c.action !== 'give_odd_even' && c.action !== 'give_angel');
-        if (filteredDeck.length === 0) {
+      if (nextForcedCardRef.current && nextForcedCardRef.current.type === tile.type) {
+        const searchVal = nextForcedCardRef.current.cardIdOrAction;
+        const matched = allCards.find(c => c.id === searchVal || c.action === searchVal);
+        if (matched) {
+          card = matched;
+          ioToSystemChat(`🔧 Dev Console: Forced next ${tile.type} card to be "${card.text}".`);
+        }
+        nextForcedCardRef.current = null;
+      }
+
+      if (!card) {
+        const deck = tile.type === 'chance' ? chanceDeck : chestDeck;
+        const nextDeck = [...deck];
+        if (nextDeck.length === 0) {
           const refilled = shuffleLocalDeck(allCards);
           card = refilled.pop()!;
           if (tile.type === 'chance') setMonopolyChanceDeck(refilled);
           else setMonopolyChestDeck(refilled);
         } else {
-          card = filteredDeck.pop()!;
-          if (tile.type === 'chance') setMonopolyChanceDeck(filteredDeck);
-          else setMonopolyChestDeck(filteredDeck);
+          // Filter out Get Rich exclusive cards from existing deck if needed
+          const filteredDeck = isGetRich ? nextDeck : nextDeck.filter(c => c.action !== 'give_odd_even' && c.action !== 'give_angel');
+          if (filteredDeck.length === 0) {
+            const refilled = shuffleLocalDeck(allCards);
+            card = refilled.pop()!;
+            if (tile.type === 'chance') setMonopolyChanceDeck(refilled);
+            else setMonopolyChestDeck(refilled);
+          } else {
+            card = filteredDeck.pop()!;
+            if (tile.type === 'chance') setMonopolyChanceDeck(filteredDeck);
+            else setMonopolyChestDeck(filteredDeck);
+          }
         }
       }
       setMonopolyCurrentCard(card);
@@ -2664,8 +2909,15 @@ export default function App() {
           attempts++;
         } while (attempts < 200);
       } else {
-        d1 = Math.floor(Math.random() * 6) + 1;
-        d2 = Math.floor(Math.random() * 6) + 1;
+        if (nextForcedRollRef.current) {
+          d1 = nextForcedRollRef.current[0];
+          d2 = nextForcedRollRef.current[1];
+          nextForcedRollRef.current = null;
+          ioToSystemChat(`🔧 Dev Console: Applied forced roll [${d1}, ${d2}].`);
+        } else {
+          d1 = Math.floor(Math.random() * 6) + 1;
+          d2 = Math.floor(Math.random() * 6) + 1;
+        }
       }
 
       const sum = d1! + d2!;
@@ -2735,8 +2987,14 @@ export default function App() {
     else if (action === 'roll-jail-doubles') {
       if (currentPhase !== 'roll') return;
 
-      const d1 = Math.floor(Math.random() * 6) + 1;
-      const d2 = Math.floor(Math.random() * 6) + 1;
+      let d1 = Math.floor(Math.random() * 6) + 1;
+      let d2 = Math.floor(Math.random() * 6) + 1;
+      if (nextForcedRollRef.current) {
+        d1 = nextForcedRollRef.current[0];
+        d2 = nextForcedRollRef.current[1];
+        nextForcedRollRef.current = null;
+        ioToSystemChat(`🔧 Dev Console: Applied forced jail roll [${d1}, ${d2}].`);
+      }
       const sum = d1 + d2;
       const isDoubles = d1 === d2;
 
@@ -5203,37 +5461,74 @@ export default function App() {
       )}
 
       {screen === 'table' && gameType === 'monopoly' && (
-        <MonopolyTable
-          playerId={isSinglePlayer ? 'local_user' : socketId}
-          players={players as any}
-          turnIndex={turnIndex}
-          monopolyBoard={monopolyBoard}
-          dice={monopolyDice}
-          rollId={monopolyRollId}
-          monopolyPhase={monopolyPhase}
-          currentCard={monopolyCurrentCard}
-          cardType={monopolyCardType}
-          activeDebt={monopolyActiveDebt}
-          auctionState={monopolyAuctionState}
-          activeTrade={monopolyActiveTrade}
-          tradeRejectedName={monopolyTradeRejectedName}
-          gameState={gameState}
-          roomCode={roomCode}
-          isHost={players.find(pl => isSinglePlayer ? pl.id === 'local_user' : pl.id === socketId)?.isHost || false}
-          isSinglePlayer={isSinglePlayer}
-          rules={rules}
-          monopolyTurnCount={monopolyTurnCount}
-          lastActionDetail={monopolyLastActionDetail}
-          pendingForceAcquire={monopolyPendingForceAcquire}
-          pendingRent={monopolyPendingRent}
-          landedBuildMaxHouses={monopolyLandedBuildMaxHouses}
-          onMonopolyAction={isSinglePlayer ? handleMonopolyActionSingle : handleMonopolyActionMultiplayer}
-          onLeaveRoom={leaveRoom}
-          onRestartGame={isSinglePlayer ? restartSinglePlayerMonopolyGameRound : restartOnlineGame}
-          onAnimationStateChange={setIsMonopolyAnimating}
-          onVisualPositionsChange={(pos) => { visualPositionsRef.current = pos; }}
-          onToggleChat={() => setIsChatOpen(prev => !prev)}
-        />
+        <>
+          <MonopolyTable
+            playerId={isSinglePlayer ? 'local_user' : socketId}
+            players={players as any}
+            turnIndex={turnIndex}
+            monopolyBoard={monopolyBoard}
+            dice={monopolyDice}
+            rollId={monopolyRollId}
+            monopolyPhase={monopolyPhase}
+            currentCard={monopolyCurrentCard}
+            cardType={monopolyCardType}
+            activeDebt={monopolyActiveDebt}
+            auctionState={monopolyAuctionState}
+            activeTrade={monopolyActiveTrade}
+            tradeRejectedName={monopolyTradeRejectedName}
+            gameState={gameState}
+            roomCode={roomCode}
+            isHost={players.find(pl => isSinglePlayer ? pl.id === 'local_user' : pl.id === socketId)?.isHost || false}
+            isSinglePlayer={isSinglePlayer}
+            rules={rules}
+            monopolyTurnCount={monopolyTurnCount}
+            lastActionDetail={monopolyLastActionDetail}
+            pendingForceAcquire={monopolyPendingForceAcquire}
+            pendingRent={monopolyPendingRent}
+            landedBuildMaxHouses={monopolyLandedBuildMaxHouses}
+            onMonopolyAction={isSinglePlayer ? handleMonopolyActionSingle : handleMonopolyActionMultiplayer}
+            onLeaveRoom={leaveRoom}
+            onRestartGame={isSinglePlayer ? restartSinglePlayerMonopolyGameRound : restartOnlineGame}
+            onAnimationStateChange={setIsMonopolyAnimating}
+            onVisualPositionsChange={(pos) => { visualPositionsRef.current = pos; }}
+            onToggleChat={() => setIsChatOpen(prev => !prev)}
+          />
+
+          {showDevConsole && (
+            <div className="monopoly-dev-console-overlay" onClick={() => setShowDevConsole(false)}>
+              <div className="monopoly-dev-console" onClick={(e) => e.stopPropagation()}>
+                <div className="monopoly-dev-console-header">
+                  <span>💻 DEVELOPER CONSOLE</span>
+                  <button className="monopoly-dev-console-close" onClick={() => setShowDevConsole(false)}>✕</button>
+                </div>
+                <div className="monopoly-dev-console-body">
+                  <div className="monopoly-dev-console-logs">
+                    {devConsoleLogs.map((log, index) => (
+                      <div key={index} className="monopoly-dev-console-log-line">{log}</div>
+                    ))}
+                  </div>
+                  <form onSubmit={(e) => {
+                    e.preventDefault();
+                    executeLocalDevCommand(devConsoleCommand);
+                    setDevConsoleCommand('');
+                  }}>
+                    <div className="monopoly-dev-console-input-wrapper">
+                      <span className="monopoly-dev-console-prompt">&gt;</span>
+                      <input
+                        type="text"
+                        className="monopoly-dev-console-input"
+                        placeholder="Enter dev command... (e.g. help)"
+                        value={devConsoleCommand}
+                        onChange={(e) => setDevConsoleCommand(e.target.value)}
+                        autoFocus
+                      />
+                    </div>
+                  </form>
+                </div>
+              </div>
+            </div>
+          )}
+        </>
       )}
 
       {screen !== 'menu' && (
