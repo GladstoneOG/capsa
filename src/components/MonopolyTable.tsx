@@ -72,6 +72,7 @@ interface MonopolyTableProps {
   pendingRent?: any | null;
   landedBuildMaxHouses?: number;
   monopolyTurnCount?: number;
+  tradeRejectedName?: string | null;
 }
 
 // Maps board index to grid row and column (1-indexed CSS Grid)
@@ -169,6 +170,7 @@ export const MonopolyTable: React.FC<MonopolyTableProps> = ({
   pendingRent = null,
   landedBuildMaxHouses = 4,
   monopolyTurnCount = 0,
+  tradeRejectedName = null
 }) => {
   const [selectedDeedIndex, setSelectedDeedIndex] = useState<number | null>(null);
   const [tradeBoardSelectionMode, setTradeBoardSelectionMode] = useState<'me' | 'them' | null>(null);
@@ -5020,6 +5022,30 @@ export const MonopolyTable: React.FC<MonopolyTableProps> = ({
           </div>
         );
       })()}
+
+      {/* Trade Rejected Popup */}
+      {tradeRejectedName && (
+        <div className="deed-card-modal-backdrop" style={{ background: 'rgba(0,0,0,0.3)', backdropFilter: 'blur(3px)', zIndex: 1100 }}>
+          <div 
+            className="player-detail-modal" 
+            style={{ 
+              maxWidth: '360px', 
+              padding: '24px 16px', 
+              textAlign: 'center', 
+              border: '2px solid #ef4444', 
+              boxShadow: '0 20px 25px -5px rgba(239, 68, 68, 0.25), 0 10px 10px -5px rgba(239, 68, 68, 0.25)' 
+            }}
+          >
+            <div style={{ fontSize: '3rem', marginBottom: '12px' }}>❌</div>
+            <h3 style={{ fontWeight: 900, fontSize: '1.4rem', color: '#ef4444', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+              Offer Declined
+            </h3>
+            <p style={{ fontSize: '0.95rem', color: 'var(--text-primary)', fontWeight: '500', lineHeight: '1.4' }}>
+              <strong>{tradeRejectedName}</strong> declined your trade offer.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Floating HUD Panel for Trade Board Selection Mode */}
       {tradeBoardSelectionMode && (() => {

@@ -227,6 +227,7 @@ export default function App() {
   const [monopolyActiveDebt, setMonopolyActiveDebt] = useState<any | null>(null);
   const [monopolyAuctionState, setMonopolyAuctionState] = useState<any | null>(null);
   const [monopolyActiveTrade, setMonopolyActiveTrade] = useState<any | null>(null);
+  const [monopolyTradeRejectedName, setMonopolyTradeRejectedName] = useState<string | null>(null);
   const [monopolyChanceDeck, setMonopolyChanceDeck] = useState<any[]>([]);
   const [monopolyChestDeck, setMonopolyChestDeck] = useState<any[]>([]);
   const [monopolyLastActionDetail, setMonopolyLastActionDetail] = useState<any | null>(null);
@@ -272,6 +273,7 @@ export default function App() {
   const avatarRef = useRef<AvatarConfig>(avatar);
   const lastBotSyncRoomStateRef = useRef<any>(null);
   const triggerBotLogicForMultiplayerRef = useRef<any>(null);
+  const botSyncFallbackTimerRef = useRef<any>(null);
   const prevSingleplayerBoardRef = useRef<any>(null);
   const prevSingleplayerPlayersRef = useRef<any>(null);
   const prevMultiplayerPlayersRef = useRef<any>(null);
@@ -385,6 +387,7 @@ export default function App() {
   useEffect(() => {
     return () => {
       if (botTimerRef.current) clearTimeout(botTimerRef.current);
+      if (botSyncFallbackTimerRef.current) clearTimeout(botSyncFallbackTimerRef.current);
       if (socketRef.current) socketRef.current.disconnect();
     };
   }, []);
@@ -692,6 +695,14 @@ export default function App() {
     socket.on('bot-coordinator-sync', (room) => {
       triggerBotLogicForMultiplayerRef.current?.(room);
     });
+
+    // Trade offer decline notification listener (online mode)
+    socket.on('monopoly-trade-rejected', ({ receiverName }) => {
+      setMonopolyTradeRejectedName(receiverName);
+      setTimeout(() => {
+        setMonopolyTradeRejectedName(null);
+      }, 2000);
+    });
   };
 
   const createOnlineRoom = () => {
@@ -798,11 +809,25 @@ export default function App() {
 
     if (isMovingOrWillMoveOrBuilding) {
       lastBotSyncRoomStateRef.current = roomState;
+      if (botSyncFallbackTimerRef.current) {
+        clearTimeout(botSyncFallbackTimerRef.current);
+      }
+      botSyncFallbackTimerRef.current = setTimeout(() => {
+        if (lastBotSyncRoomStateRef.current === roomState) {
+          console.warn('[BOT COORD] Fallback sync timer fired! Clearing lastBotSyncRoomState and forcing bot decision.');
+          lastBotSyncRoomStateRef.current = null;
+          triggerBotLogicForMultiplayer(roomState);
+        }
+      }, 3000);
       return;
     }
 
     if (roomState.gameType === 'monopoly') {
       lastBotSyncRoomStateRef.current = null;
+      if (botSyncFallbackTimerRef.current) {
+        clearTimeout(botSyncFallbackTimerRef.current);
+        botSyncFallbackTimerRef.current = null;
+      }
     }
 
     const { players: rPlayers, turnIndex: rTurnIdx, gameState: rGameSt } = roomState;
@@ -2206,6 +2231,7 @@ export default function App() {
     };
 
     if (card.action === 'move') {
+      setIsMonopolyAnimating(true);
       const oldPos = updatedPlayer.position || 0;
       const target = card.target;
       updatedPlayer.position = target;
@@ -2243,6 +2269,7 @@ export default function App() {
     }
 
     if (card.action === 'goto_jail') {
+      setIsMonopolyAnimating(true);
       updatedPlayer.position = 10;
       updatedPlayer.inJail = true;
       updatedPlayer.jailTurns = 0;
@@ -2255,6 +2282,7 @@ export default function App() {
     }
 
     if (card.action === 'back_spaces') {
+      setIsMonopolyAnimating(true);
       const oldPos = updatedPlayer.position || 0;
       const nextPos = (oldPos - card.amount + 40) % 40;
       updatedPlayer.position = nextPos;
@@ -2264,6 +2292,7 @@ export default function App() {
     }
 
     if (card.action === 'nearest_railroad') {
+      setIsMonopolyAnimating(true);
       const pos = updatedPlayer.position || 0;
       const rrPositions = [5, 15, 25, 35];
       let nextRR = rrPositions.find(p => p > pos);
@@ -2295,6 +2324,7 @@ export default function App() {
     }
 
     if (card.action === 'nearest_utility') {
+      setIsMonopolyAnimating(true);
       const pos = updatedPlayer.position || 0;
       const utilPositions = [12, 28];
       let nextUtil = utilPositions.find(p => p > pos);
@@ -3467,6 +3497,15 @@ export default function App() {
       if (!activeTrade) return;
       const receiver = currentPlayers.find(p => p.id === activeTrade.receiverId);
       ioToSystemChat(`❌ Trade offer declined${receiver ? ` by ${receiver.name}` : ''}.`);
+      
+      // If the local player is the proposer, trigger the decline popup (offline mode)
+      if (activeTrade.senderId === 'local_user') {
+        setMonopolyTradeRejectedName(receiver?.name || 'Opponent');
+        setTimeout(() => {
+          setMonopolyTradeRejectedName(null);
+        }, 2000);
+      }
+      
       setMonopolyActiveTrade(null);
     }
 
@@ -5177,6 +5216,7 @@ export default function App() {
           activeDebt={monopolyActiveDebt}
           auctionState={monopolyAuctionState}
           activeTrade={monopolyActiveTrade}
+          tradeRejectedName={monopolyTradeRejectedName}
           gameState={gameState}
           roomCode={roomCode}
           isHost={players.find(pl => isSinglePlayer ? pl.id === 'local_user' : pl.id === socketId)?.isHost || false}

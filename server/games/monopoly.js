@@ -1741,6 +1741,13 @@ export function handleAction(room, socket, action, payload, io) {
 
       const receiver = room.players.find(p => p.id === receiverId);
       addSystemChatMessage(room, io, `❌ Trade offer declined${receiver ? ` by ${receiver.name}` : ''}.`);
+
+      // Notify the proposer that their trade offer was declined
+      const proposerSocket = io.sockets.sockets.get(senderId);
+      if (proposerSocket) {
+        proposerSocket.emit('monopoly-trade-rejected', { receiverName: receiver ? receiver.name : 'Opponent' });
+      }
+
       room.activeTrade = null;
       broadcastGameUpdate(room, io);
       break;
