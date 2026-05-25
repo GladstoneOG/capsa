@@ -6,6 +6,24 @@ import * as capsaEngine from './games/capsa.js';
 import * as unoEngine from './games/uno.js';
 import * as monopolyEngine from './games/monopoly.js';
 
+const BOT_NAMES = [
+  // Indonesian Names
+  'Budi Bot', 'Siti Bot', 'Joko Bot', 'Dewi Bot', 'Agus Bot', 
+  'Sari Bot', 'Rudi Bot', 'Ani Bot', 'Aris Bot', 'Dewo Bot', 
+  'Fitri Bot', 'Mega Bot', 'Candra Bot', 'Nugroho Bot', 'Putri Bot', 
+  'Taufik Bot', 'Wulan Bot', 'Hendra Bot', 'Bambang Bot', 'Slamet Bot', 
+  'Kartini Bot', 'Surya Bot', 'Guntur Bot', 'Indah Bot', 'Ratna Bot', 
+  'Wira Bot', 'Eko Bot', 'Yanto Bot', 'Rian Bot', 'Laras Bot', 
+  'Giri Bot', 'Hadi Bot', 'Indra Bot', 'Kartika Bot', 'Utami Bot',
+  // Western Names
+  'Alex Bot', 'Emma Bot', 'Liam Bot', 'Olivia Bot', 'Noah Bot', 
+  'Sophia Bot', 'Logan Bot', 'Ava Bot', 'Lucas Bot', 'Mia Bot', 
+  'Ethan Bot', 'Isabella Bot', 'Jackson Bot', 'Charlotte Bot', 'Oliver Bot', 
+  'Amelia Bot', 'James Bot', 'Harper Bot', 'Benjamin Bot', 'Evelyn Bot', 
+  'Leo Bot', 'Lily Bot', 'Max Bot', 'Zoe Bot', 'Sam Bot', 
+  'Grace Bot', 'Jack Bot', 'Ruby Bot', 'Toby Bot', 'Chloe Bot'
+];
+
 const app = express();
 app.use(cors());
 
@@ -366,10 +384,12 @@ io.on('connection', (socket) => {
     const requestingPlayer = room.players.find(p => p.id === socket.id);
     if (!requestingPlayer?.isHost) return;
 
-    const botNames = ['Budi Bot', 'Siti Bot', 'Joko Bot', 'Dewi Bot', 'Agus Bot', 'Sari Bot', 'Rudi Bot', 'Ani Bot'];
     // Find unused bot name
     const existingNames = room.players.map(p => p.name);
-    const botName = botNames.find(n => !existingNames.includes(n)) || `Bot ${room.players.length + 1}`;
+    const unusedNames = BOT_NAMES.filter(n => !existingNames.includes(n));
+    const botName = unusedNames.length > 0 
+      ? unusedNames[Math.floor(Math.random() * unusedNames.length)] 
+      : `Bot ${room.players.length + 1}`;
 
     const botAvatars = [
       { skinColor: '#FFDBAC', hairStyle: 'spiky', hairColor: '#1A1A1A', expression: 'cool', clothesColor: '#2F855A' },
@@ -472,7 +492,6 @@ io.on('connection', (socket) => {
       unoEngine.startRound(room, io);
     } else {
       // Auto-fill empty slots with bots up to 4 players for Capsa Banting
-      const botNames = ['Budi Bot', 'Siti Bot', 'Joko Bot', 'Dewi Bot'];
       const botAvatars = [
         { skinColor: '#FFDBAC', hairStyle: 'spiky', hairColor: '#1A1A1A', expression: 'cool', clothesColor: '#2F855A' },
         { skinColor: '#F1C27D', hairStyle: 'bob', hairColor: '#E5C158', expression: 'smile', clothesColor: '#6B46C1' },
@@ -482,7 +501,10 @@ io.on('connection', (socket) => {
 
       while (room.players.length < 4) {
         const existingNames = room.players.map(p => p.name);
-        const botName = botNames.find(n => !existingNames.includes(n)) || `Bot ${room.players.length + 1}`;
+        const unusedNames = BOT_NAMES.filter(n => !existingNames.includes(n));
+        const botName = unusedNames.length > 0 
+          ? unusedNames[Math.floor(Math.random() * unusedNames.length)] 
+          : `Bot ${room.players.length + 1}`;
         const botAvatar = botAvatars[room.players.length % botAvatars.length];
         
         const bot = {

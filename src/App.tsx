@@ -70,6 +70,23 @@ interface RoomRules {
 }
 
 const INDONESIAN_NAMES = ['Aris', 'Budi', 'Candra', 'Dewi', 'Eko', 'Fitri', 'Giri', 'Hadi', 'Indra', 'Joko', 'Kartika', 'Laras', 'Mega', 'Nugroho', 'Putri', 'Rian', 'Siti', 'Taufik', 'Utami', 'Wulan'];
+const BOT_NAMES = [
+  // Indonesian Names
+  'Budi Bot', 'Siti Bot', 'Joko Bot', 'Dewi Bot', 'Agus Bot', 
+  'Sari Bot', 'Rudi Bot', 'Ani Bot', 'Aris Bot', 'Dewo Bot', 
+  'Fitri Bot', 'Mega Bot', 'Candra Bot', 'Nugroho Bot', 'Putri Bot', 
+  'Taufik Bot', 'Wulan Bot', 'Hendra Bot', 'Bambang Bot', 'Slamet Bot', 
+  'Kartini Bot', 'Surya Bot', 'Guntur Bot', 'Indah Bot', 'Ratna Bot', 
+  'Wira Bot', 'Eko Bot', 'Yanto Bot', 'Rian Bot', 'Laras Bot', 
+  'Giri Bot', 'Hadi Bot', 'Indra Bot', 'Kartika Bot', 'Utami Bot',
+  // Western Names
+  'Alex Bot', 'Emma Bot', 'Liam Bot', 'Olivia Bot', 'Noah Bot', 
+  'Sophia Bot', 'Logan Bot', 'Ava Bot', 'Lucas Bot', 'Mia Bot', 
+  'Ethan Bot', 'Isabella Bot', 'Jackson Bot', 'Charlotte Bot', 'Oliver Bot', 
+  'Amelia Bot', 'James Bot', 'Harper Bot', 'Benjamin Bot', 'Evelyn Bot', 
+  'Leo Bot', 'Lily Bot', 'Max Bot', 'Zoe Bot', 'Sam Bot', 
+  'Grace Bot', 'Jack Bot', 'Ruby Bot', 'Toby Bot', 'Chloe Bot'
+];
 const PLAYER_SESSION_STORAGE_KEY = 'capsa_player_session_id';
 
 function getOrCreatePlayerSessionId() {
@@ -1110,10 +1127,20 @@ export default function App() {
       lastPlay: null,
     };
 
+    const availableNames = BOT_NAMES.filter(n => n !== (playerName || 'Player'));
+    const selectedNames: string[] = [];
+    while (selectedNames.length < 3 && availableNames.length > 0) {
+      const idx = Math.floor(Math.random() * availableNames.length);
+      selectedNames.push(availableNames.splice(idx, 1)[0]);
+    }
+    while (selectedNames.length < 3) {
+      selectedNames.push(`Bot ${selectedNames.length + 1}`);
+    }
+
     const bots: Player[] = [
       {
         id: 'bot_1',
-        name: 'Siti Bot',
+        name: selectedNames[0],
         avatar: { skinColor: '#FFDBAC', hairStyle: 'spiky', hairColor: '#1A1A1A', expression: 'cool', clothesColor: '#2F855A' },
         isHost: false,
         isReady: true,
@@ -1125,7 +1152,7 @@ export default function App() {
       },
       {
         id: 'bot_2',
-        name: 'Budi Bot',
+        name: selectedNames[1],
         avatar: { skinColor: '#F1C27D', hairStyle: 'bob', hairColor: '#E5C158', expression: 'smile', clothesColor: '#6B46C1' },
         isHost: false,
         isReady: true,
@@ -1137,7 +1164,7 @@ export default function App() {
       },
       {
         id: 'bot_3',
-        name: 'Joko Bot',
+        name: selectedNames[2],
         avatar: { skinColor: '#E0AC69', hairStyle: 'short', hairColor: '#B83B1D', expression: 'excited', clothesColor: '#C53030' },
         isHost: false,
         isReady: true,
@@ -1194,7 +1221,6 @@ export default function App() {
     sfx.playDeal();
 
     const currentPlayers = [...players];
-    const botNames = ['Budi Bot', 'Siti Bot', 'Joko Bot', 'Dewi Bot', 'Aris Bot', 'Dewo Bot', 'Fitri Bot'];
     const botAvatars = [
       { skinColor: '#FFDBAC', hairStyle: 'spiky', hairColor: '#1A1A1A', expression: 'cool', clothesColor: '#2F855A' },
       { skinColor: '#F1C27D', hairStyle: 'bob', hairColor: '#E5C158', expression: 'smile', clothesColor: '#6B46C1' },
@@ -1204,7 +1230,10 @@ export default function App() {
     // Ensure at least 2 players
     if (currentPlayers.length < 2) {
       const existingNames = currentPlayers.map((p) => p.name);
-      const botName = botNames.find((n) => !existingNames.includes(n)) || `Bot ${currentPlayers.length + 1}`;
+      const unusedNames = BOT_NAMES.filter((n) => !existingNames.includes(n));
+      const botName = unusedNames.length > 0 
+        ? unusedNames[Math.floor(Math.random() * unusedNames.length)] 
+        : `Bot ${currentPlayers.length + 1}`;
       const botAvatar = botAvatars[currentPlayers.length % botAvatars.length];
       currentPlayers.push({
         id: `bot_${Math.random()}`,
@@ -2366,7 +2395,6 @@ export default function App() {
     sfx.playDeal();
 
     const currentPlayers = [...players];
-    const botNames = ['Budi Bot', 'Siti Bot', 'Joko Bot', 'Dewi Bot'];
     const botAvatars = [
       { skinColor: '#FFDBAC', hairStyle: 'spiky', hairColor: '#1A1A1A', expression: 'cool', clothesColor: '#2F855A' },
       { skinColor: '#F1C27D', hairStyle: 'bob', hairColor: '#E5C158', expression: 'smile', clothesColor: '#6B46C1' },
@@ -2375,7 +2403,10 @@ export default function App() {
 
     while (currentPlayers.length < 4) {
       const existingNames = currentPlayers.map((p) => p.name);
-      const botName = botNames.find((n) => !existingNames.includes(n)) || `Bot ${currentPlayers.length + 1}`;
+      const unusedNames = BOT_NAMES.filter((n) => !existingNames.includes(n));
+      const botName = unusedNames.length > 0 
+        ? unusedNames[Math.floor(Math.random() * unusedNames.length)] 
+        : `Bot ${currentPlayers.length + 1}`;
       const botAvatar = botAvatars[currentPlayers.length % botAvatars.length];
       currentPlayers.push({
         id: `bot_${Math.random()}`,
@@ -3430,7 +3461,6 @@ export default function App() {
 
     // Auto-fill empty slots with bots up to 4 players
     const currentPlayers = [...players];
-    const botNames = ['Budi Bot', 'Siti Bot', 'Joko Bot', 'Dewi Bot'];
     const botAvatars = [
       { skinColor: '#FFDBAC', hairStyle: 'spiky', hairColor: '#1A1A1A', expression: 'cool', clothesColor: '#2F855A' },
       { skinColor: '#F1C27D', hairStyle: 'bob', hairColor: '#E5C158', expression: 'smile', clothesColor: '#6B46C1' },
@@ -3439,7 +3469,10 @@ export default function App() {
 
     while (currentPlayers.length < 4) {
       const existingNames = currentPlayers.map((p) => p.name);
-      const botName = botNames.find((n) => !existingNames.includes(n)) || `Bot ${currentPlayers.length + 1}`;
+      const unusedNames = BOT_NAMES.filter((n) => !existingNames.includes(n));
+      const botName = unusedNames.length > 0 
+        ? unusedNames[Math.floor(Math.random() * unusedNames.length)] 
+        : `Bot ${currentPlayers.length + 1}`;
       const botAvatar = botAvatars[currentPlayers.length % botAvatars.length];
 
       currentPlayers.push({
@@ -4793,11 +4826,11 @@ export default function App() {
                   style={{ background: 'linear-gradient(135deg, #1d72b8 0%, #1e40af 100%)', boxShadow: 'none' }}
                   onClick={() => {
                     if (isSinglePlayer) {
-                      const botNames = gameType === 'uno'
-                        ? ['Budi Bot', 'Siti Bot', 'Joko Bot', 'Dewi Bot', 'Aris Bot', 'Dewo Bot', 'Fitri Bot', 'Mega Bot']
-                        : ['Budi Bot', 'Siti Bot', 'Joko Bot', 'Dewi Bot'];
                       const existing = players.map((p) => p.name);
-                      const botName = botNames.find((n) => !existing.includes(n)) || `Bot ${players.length + 1}`;
+                      const unusedNames = BOT_NAMES.filter((n) => !existing.includes(n));
+                      const botName = unusedNames.length > 0 
+                        ? unusedNames[Math.floor(Math.random() * unusedNames.length)] 
+                        : `Bot ${players.length + 1}`;
 
                       const botAvatars = [
                         { skinColor: '#FFDBAC', hairStyle: 'spiky', hairColor: '#1A1A1A', expression: 'cool', clothesColor: '#2F855A' },
