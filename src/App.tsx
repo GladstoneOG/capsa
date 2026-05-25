@@ -2297,6 +2297,7 @@ export default function App() {
         const sum = d1 + d2;
         const rent = sum * 10;
         setMonopolyDice([d1, d2]);
+        setMonopolyRollId(Math.random().toString(36).substring(2, 9));
         ioToSystemChat(`🎲 Rolled ${d1}+${d2}=${sum} for Utility multiplier rent.`);
         ioToSystemChat(`${updatedPlayer.name} landed on utility owned by ${owner.name} and owes 10x dice = $${rent}.`);
         triggerPaymentSingle(updatedPlayers, boardList, updatedPlayer, owner, rent);

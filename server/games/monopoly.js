@@ -662,8 +662,18 @@ function resolveCardAction(room, player, io, diceSum) {  // eslint-disable-line
       updateNetWorth(room, player.id);
     }
 
-    // Rent is 10x dice roll if owned
-    handleLandedAction(room, player, diceSum, io, true);
+    const tile = room.monopolyBoard[curr];
+    if (tile.owner !== null && tile.owner !== player.id && !tile.mortgaged) {
+      const d1 = Math.floor(Math.random() * 6) + 1;
+      const d2 = Math.floor(Math.random() * 6) + 1;
+      const sum = d1 + d2;
+      room.dice = [d1, d2];
+      room.rollId = Math.random().toString(36).substring(2, 9);
+      addSystemChatMessage(room, io, `🎲 Rolled ${d1}+${d2}=${sum} for Utility multiplier rent.`);
+      handleLandedAction(room, player, sum, io, true);
+    } else {
+      handleLandedAction(room, player, diceSum, io, true);
+    }
     return;
   }
 
