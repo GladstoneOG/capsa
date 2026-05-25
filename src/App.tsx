@@ -4572,6 +4572,11 @@ export default function App() {
                     placeholder="Enter 4-Letter Room Code"
                     value={roomCodeInput}
                     onChange={(e) => setRoomCodeInput(e.target.value.slice(0, 4))}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        joinOnlineRoom();
+                      }
+                    }}
                     maxLength={4}
                   />
                   <button className="btn-primary" onClick={joinOnlineRoom}>
