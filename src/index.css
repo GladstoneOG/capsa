@@ -2262,7 +2262,7 @@ input:checked + .slider:before {
     height: 100vh;
     height: 100dvh;
     overflow: hidden;
-    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+    padding: 0;
   }
 
   /* === MENU SCREEN â€” two-column layout === */
@@ -2778,10 +2778,14 @@ input:checked + .slider:before {
 
   /* === PLAYER HAND â€” with padding for FABs on sides === */
   .hand-controls-container {
-    padding: 0.1rem 13rem;
+    padding: 0.1rem 9rem;
     gap: 0;
     border-top: none;
     background: rgba(15, 23, 42, 0.85);
+    width: 100%;
+    max-width: 100vw;
+    box-sizing: border-box;
+    overflow: hidden;
   }
 
   .hand-scroller {
@@ -2825,12 +2829,12 @@ input:checked + .slider:before {
   }
 
   .fanned-card-wrapper {
-    margin-left: -17px;
+    margin-left: -25px;
   }
 
   .fanned-card-wrapper:hover {
     margin-right: 4px;
-    margin-left: -13px;
+    margin-left: -18px;
   }
 
   .playing-card.selected {
@@ -2838,7 +2842,7 @@ input:checked + .slider:before {
   }
 
   .player-hand-fan.is-dragging-active .fanned-card-wrapper {
-    margin-left: -17px !important;
+    margin-left: -25px !important;
   }
 
   /* Hide desktop inline controls on mobile */
