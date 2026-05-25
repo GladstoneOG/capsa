@@ -740,6 +740,44 @@ class SoundSynthesizer {
     playStrike(now, false);
     playStrike(now + 0.18, true);
   }
+
+  public playCountdownBeep(isRoll: boolean = false) {
+    if (this.isMuted) return;
+    const ctx = this.initCtx();
+    const now = ctx.currentTime;
+    if (!isRoll) {
+      // 3, 2, 1 beep sound: a clean, pure electronic chime
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(659.25, now); // E5
+      gain.gain.setValueAtTime(0.0, now);
+      gain.gain.linearRampToValueAtTime(0.18, now + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.28);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(now);
+      osc.stop(now + 0.28);
+    } else {
+      // ROLL! sound: an energetic, sweeping major chord that screams start!
+      const notes = [523.25, 659.25, 783.99, 1046.50, 1318.51]; // C5, E5, G5, C6, E6
+      notes.forEach((freq, idx) => {
+        const time = now + idx * 0.035;
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(freq, time);
+        gain.gain.setValueAtTime(0.0, time);
+        gain.gain.linearRampToValueAtTime(0.15, time + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.001, time + 0.55);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(time);
+        osc.stop(time + 0.55);
+      });
+    }
+  }
 }
+
 
 export const sfx = new SoundSynthesizer();

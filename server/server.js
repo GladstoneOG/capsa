@@ -255,7 +255,9 @@ io.on('connection', (socket) => {
       rules: type === 'monopoly' ? {
         pointsToWin: 0,
         ruleset: 'Default',
-        turnDuration: 30
+        turnDuration: 30,
+        startingCash: 1500,
+        turnLimit: 0
       } : type === 'uno' ? {
         pointsToWin: 250,
         turnDuration: 30,

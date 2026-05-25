@@ -3154,13 +3154,25 @@
 }
 
 /* ==================== 3D Floating Action Popups above Tiles ==================== */
-.tile-action-popup {
+.tile-action-popup-wrapper {
   position: absolute;
-  left: 50%;
-  top: 50%;
-  margin-left: -40px;
-  margin-top: -12px;
-  width: 80px;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 120;
+  transform-style: preserve-3d;
+}
+
+.tile-action-popup {
+  min-width: 80px;
+  width: max-content;
+  padding: 0 10px;
+  white-space: nowrap;
   height: 24px;
   color: white;
   font-family: 'Outfit', sans-serif;
@@ -3176,7 +3188,6 @@
   box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4);
   transform-style: preserve-3d;
   pointer-events: none;
-  z-index: 120;
   animation: tile-action-float 2.2s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
 }
 
@@ -3392,3 +3403,354 @@
   0% { opacity: 0.8; transform: scale(0.96); }
   100% { opacity: 1; transform: scale(1.04); }
 }
+
+/* ==================== Premium Intro Overlay & Transition ==================== */
+.monopoly-intro-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 1000;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.monopoly-intro-curtain-left,
+.monopoly-intro-curtain-right {
+  position: absolute;
+  top: 0;
+  width: 50.5%; /* Slightly overlap to avoid 1px gaps */
+  height: 100%;
+  background: linear-gradient(135deg, #065f46 0%, #022c22 100%);
+  border-right: 4px solid #fbbf24;
+  box-shadow: 0 0 40px rgba(0, 0, 0, 0.7);
+  z-index: 1001;
+  transform: scaleX(1);
+  transition: transform 1.2s cubic-bezier(0.77, 0, 0.175, 1);
+}
+
+.monopoly-intro-curtain-left {
+  left: 0;
+  transform-origin: left center;
+}
+
+.monopoly-intro-curtain-right {
+  right: 0;
+  transform-origin: right center;
+  border-right: none;
+  border-left: 4px solid #fbbf24;
+}
+
+.monopoly-intro-curtain-left.open,
+.monopoly-intro-curtain-right.open {
+  transform: scaleX(0);
+}
+
+.monopoly-intro-countdown-text {
+  font-family: 'Outfit', sans-serif;
+  font-size: 9rem;
+  font-weight: 900;
+  color: #ffffff;
+  text-shadow: 0 0 25px rgba(251, 191, 36, 0.85), 0 8px 16px rgba(0,0,0,0.6);
+  z-index: 1002;
+  animation: countdown-bounce-scale 0.8s cubic-bezier(0.175, 0.885, 0.32, 1.275) infinite;
+  text-transform: uppercase;
+}
+
+.monopoly-intro-countdown-text.roll-text {
+  font-size: 11rem;
+  color: #fbbf24;
+  text-shadow: 0 0 35px rgba(239, 68, 68, 0.95), 0 10px 22px rgba(0,0,0,0.8);
+  animation: roll-bounce-scale 0.8s cubic-bezier(0.175, 0.885, 0.32, 1.5) infinite;
+}
+
+@keyframes countdown-bounce-scale {
+  0% { transform: scale(0.3); opacity: 0; }
+  15% { transform: scale(1.1); opacity: 1; }
+  35% { transform: scale(1); }
+  80% { transform: scale(1); opacity: 1; }
+  100% { transform: scale(1.4); opacity: 0; }
+}
+
+@keyframes roll-bounce-scale {
+  0% { transform: scale(0.3) rotate(-10deg); opacity: 0; }
+  20% { transform: scale(1.15) rotate(5deg); opacity: 1; }
+  40% { transform: scale(1) rotate(-3deg); }
+  75% { transform: scale(1.08) rotate(3deg); opacity: 1; }
+  100% { transform: scale(1.6) rotate(10deg); opacity: 0; }
+}
+
+/* ==================== Rotating Sun Background Graphic ==================== */
+.background-sun-container {
+  position: absolute;
+  top: 15%;
+  left: 42%;
+  width: 90px;
+  height: 90px;
+  z-index: 1;
+  pointer-events: none;
+  filter: drop-shadow(0 0 20px rgba(253, 224, 71, 0.55));
+}
+
+.spinning-sun-svg {
+  width: 100%;
+  height: 100%;
+  animation: spin-sun 25s linear infinite;
+}
+
+@keyframes spin-sun {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* ==================== Highly Detailed 3D Table Bills ==================== */
+.table-bill.val-500 {
+  background: linear-gradient(135deg, #fed7aa 0%, #ffedd5 100%);
+  border-color: #9a3412;
+}
+.table-bill.val-500 .table-bill-inner { border-color: rgba(154, 52, 18, 0.4); }
+.table-bill.val-500 .table-bill-text,
+.table-bill.val-500 .table-bill-center-val,
+.table-bill.val-500 .table-bill-corner { color: #9a3412; }
+.table-bill.val-500 .table-bill-ellipse { background: #fff7ed; border-color: rgba(154, 52, 18, 0.5); }
+
+.table-bill.val-100 {
+  background: linear-gradient(135deg, #a7f3d0 0%, #ecfdf5 100%);
+  border-color: #065f46;
+}
+.table-bill.val-100 .table-bill-inner { border-color: rgba(6, 95, 70, 0.4); }
+.table-bill.val-100 .table-bill-text,
+.table-bill.val-100 .table-bill-center-val,
+.table-bill.val-100 .table-bill-corner { color: #065f46; }
+.table-bill.val-100 .table-bill-ellipse { background: #ecfdf5; border-color: rgba(6, 95, 70, 0.5); }
+
+.table-bill.val-50 {
+  background: linear-gradient(135deg, #fbcfe8 0%, #fdf2f8 100%);
+  border-color: #9d174d;
+}
+.table-bill.val-50 .table-bill-inner { border-color: rgba(157, 23, 77, 0.4); }
+.table-bill.val-50 .table-bill-text,
+.table-bill.val-50 .table-bill-center-val,
+.table-bill.val-50 .table-bill-corner { color: #9d174d; }
+.table-bill.val-50 .table-bill-ellipse { background: #fdf2f8; border-color: rgba(157, 23, 77, 0.5); }
+
+.table-bill.val-10 {
+  background: linear-gradient(135deg, #fef08a 0%, #fefce8 100%);
+  border-color: #854d0e;
+}
+.table-bill.val-10 .table-bill-inner { border-color: rgba(133, 77, 14, 0.4); }
+.table-bill.val-10 .table-bill-text,
+.table-bill.val-10 .table-bill-center-val,
+.table-bill.val-10 .table-bill-corner { color: #854d0e; }
+.table-bill.val-10 .table-bill-ellipse { background: #fefce8; border-color: rgba(133, 77, 14, 0.5); }
+
+.table-bill-inner {
+  position: absolute;
+  inset: 2px;
+  border: 0.5px solid transparent;
+  border-radius: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.table-bill-ellipse {
+  width: 28px;
+  height: 18px;
+  border-radius: 50%;
+  border: 0.5px solid transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: inset 0 1px 2px rgba(0,0,0,0.05);
+}
+
+.table-bill-center-val {
+  font-family: 'Outfit', sans-serif;
+  font-size: 0.55rem;
+  font-weight: 900;
+}
+
+.table-bill-corner {
+  position: absolute;
+  font-family: sans-serif;
+  font-size: 0.38rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.table-bill-corner.tl { top: 1px; left: 2px; }
+.table-bill-corner.tr { top: 1px; right: 2px; }
+.table-bill-corner.bl { bottom: 1px; left: 2px; }
+.table-bill-corner.br { bottom: 1px; right: 2px; }
+
+/* ==================== Mobile Adaptations & UI Overhaul ==================== */
+@media (max-width: 768px) {
+  /* 1. Scrollable, Viewport-Constrained Dialogs & Modals */
+  .player-detail-modal {
+    max-height: 90vh !important;
+    max-width: 95vw !important;
+    overflow-y: auto !important;
+  }
+
+  .build-manager-modal {
+    max-height: 90vh !important;
+    max-width: 95vw !important;
+    overflow-y: auto !important;
+    padding: 14px !important;
+  }
+
+  .deed-card {
+    max-height: 85vh !important;
+    max-width: 95vw !important;
+    overflow-y: auto !important;
+    width: auto !important;
+  }
+
+  .deed-card-layout {
+    flex-direction: column !important;
+    gap: 12px !important;
+  }
+
+  .drawn-card-popup {
+    max-height: 80vh !important;
+    max-width: 90vw !important;
+    overflow-y: auto !important;
+    width: 240px !important;
+    border-width: 6px !important;
+    padding: 15px !important;
+  }
+
+  /* 2. Scaled-Down UI - Corner Player Cards */
+  .corner-card {
+    width: 130px !important;
+    padding: 5px 8px !important;
+    gap: 5px !important;
+  }
+
+  .corner-card-header {
+    gap: 4px !important;
+  }
+
+  .corner-card-avatar-container {
+    width: 32px !important;
+    height: 32px !important;
+  }
+
+  .corner-card-name {
+    font-size: 0.65rem !important;
+    max-width: 70px !important;
+  }
+
+  .corner-card-money {
+    font-size: 0.72rem !important;
+  }
+
+  .corner-card-worth,
+  .corner-card-badges {
+    display: none !important; /* Hide secondary elements to fit mobile corners */
+  }
+
+  /* Corner card position offsets */
+  .corner-card.top-left { top: 8px !important; left: 8px !important; }
+  .corner-card.top-right { top: 8px !important; right: 8px !important; }
+  .corner-card.bottom-left { bottom: 8px !important; left: 8px !important; }
+  .corner-card.bottom-right { bottom: 8px !important; right: 8px !important; }
+
+  /* 3. Bottom Action Bar Scaling */
+  .monopoly-unified-hud-bottom {
+    padding: 8px 12px !important;
+    gap: 8px !important;
+    bottom: 8px !important;
+    max-width: 95vw !important;
+  }
+
+  /* Hide portfolio/list section on mobile as agreed in the plan */
+  .unified-hud-portfolio {
+    display: none !important;
+  }
+
+  /* Scaling buttons in bottom HUD */
+  .hud-btn {
+    padding: 8px 12px !important;
+    font-size: 0.75rem !important;
+    min-width: 75px !important;
+  }
+
+  .unified-hud-actions {
+    gap: 6px !important;
+  }
+
+  /* 4. Top Header Styling */
+  .monopoly-top-middle-header {
+    padding: 4px 10px !important;
+    gap: 6px !important;
+    top: 8px !important;
+  }
+
+  .monopoly-top-middle-header h2 {
+    font-size: 0.8rem !important;
+  }
+
+  .header-turn-badge {
+    font-size: 0.65rem !important;
+    padding: 2px 6px !important;
+  }
+
+  .ruleset-indicator {
+    font-size: 0.55rem !important;
+    padding: 1.5px 4px !important;
+  }
+
+  /* 5. Build Manager Modal Mobile Improvements */
+  .build-manager-modal .monopoly-build-sections-container {
+    gap: 10px !important;
+  }
+
+  .build-group-section {
+    padding: 8px !important;
+    border-radius: 8px !important;
+  }
+
+  .build-prop-row {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 6px !important;
+    padding: 6px 0 !important;
+  }
+
+  .build-prop-actions {
+    width: 100% !important;
+    justify-content: space-between !important;
+    gap: 8px !important;
+  }
+
+  .build-action-btn {
+    padding: 5px 10px !important;
+    font-size: 0.7rem !important;
+    flex: 1 !important;
+    text-align: center !important;
+  }
+
+  /* 6. Reset Camera Button Mobile */
+  .reset-camera-btn {
+    padding: 6px 10px !important;
+    font-size: 0.65rem !important;
+    top: 12px !important;
+    right: 70px !important; /* Move away slightly from corner cards */
+  }
+
+  /* 7. Power bar scaling on mobile */
+  .monopoly-unified-hud-bottom .power-bar-wrapper {
+    height: 16px !important;
+    border-radius: 8px !important;
+  }
+
+  .power-bar-indicator {
+    font-size: 0.6rem !important;
+  }
+}

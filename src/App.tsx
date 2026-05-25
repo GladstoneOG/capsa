@@ -65,6 +65,8 @@ interface RoomRules {
   zeroRotate?: boolean;
   drawTillPlay?: boolean;
   ruleset?: string;
+  startingCash?: number;
+  turnLimit?: number;
 }
 
 const INDONESIAN_NAMES = ['Aris', 'Budi', 'Candra', 'Dewi', 'Eko', 'Fitri', 'Giri', 'Hadi', 'Indra', 'Joko', 'Kartika', 'Laras', 'Mega', 'Nugroho', 'Putri', 'Rian', 'Siti', 'Taufik', 'Utami', 'Wulan'];
@@ -83,8 +85,31 @@ function getOrCreatePlayerSessionId() {
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>('menu');
-  const [playerName, setPlayerName] = useState<string>('');
-  const [avatar, setAvatar] = useState<AvatarConfig>(DEFAULT_AVATAR);
+  const [playerName, setPlayerName] = useState<string>(() => {
+    const saved = localStorage.getItem('capsa_player_name');
+    if (saved) return saved;
+    return INDONESIAN_NAMES[Math.floor(Math.random() * INDONESIAN_NAMES.length)];
+  });
+  const [avatar, setAvatar] = useState<AvatarConfig>(() => {
+    const saved = localStorage.getItem('capsa_player_avatar');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {}
+    }
+    return getRandomAvatar();
+  });
+
+  // Persist name and avatar to localStorage when changed
+  useEffect(() => {
+    if (playerName.trim()) {
+      localStorage.setItem('capsa_player_name', playerName);
+    }
+  }, [playerName]);
+
+  useEffect(() => {
+    localStorage.setItem('capsa_player_avatar', JSON.stringify(avatar));
+  }, [avatar]);
   const [serverUrl, setServerUrl] = useState<string>(import.meta.env.VITE_SERVER_URL || 'http://localhost:3001');
   const [customServerVisible, setCustomServerVisible] = useState<boolean>(false);
   const [roomCodeInput, setRoomCodeInput] = useState<string>('');
@@ -162,6 +187,8 @@ export default function App() {
     zeroRotate: true,
     drawTillPlay: true,
     ruleset: 'Default',
+    startingCash: 1500,
+    turnLimit: 0,
   });
   const [gameType, setGameType] = useState<'capsa' | 'uno' | 'monopoly'>('capsa');
   const [unoCurrentColor, setUnoCurrentColor] = useState<string>('red');
@@ -189,6 +216,7 @@ export default function App() {
   const [monopolyPendingForceAcquire, setMonopolyPendingForceAcquire] = useState<any | null>(null);
   const [monopolyPendingRent, setMonopolyPendingRent] = useState<any | null>(null);
   const [monopolyLandedBuildMaxHouses, setMonopolyLandedBuildMaxHouses] = useState<number>(4);
+  const [monopolyTurnCount, setMonopolyTurnCount] = useState<number>(0);
   const [showConfetti, setShowConfetti] = useState<boolean>(false);
   const [unoDiscardPile, setUnoDiscardPile] = useState<UnoCard[]>([]);
   const [unoDrawPile, setUnoDrawPile] = useState<UnoCard[]>([]);
@@ -327,13 +355,8 @@ export default function App() {
     monopolyLandedBuildMaxHouses
   ]);
 
-  // Set random player name on mount
+  // Check query params if we were invited via a URL (e.g. /?room=ABCD)
   useEffect(() => {
-    const randName = INDONESIAN_NAMES[Math.floor(Math.random() * INDONESIAN_NAMES.length)];
-    setPlayerName(randName);
-    setAvatar(getRandomAvatar());
-
-    // Check query params if we were invited via a URL (e.g. /?room=ABCD)
     const params = new URLSearchParams(window.location.search);
     const roomParam = params.get('room');
     if (roomParam) {
@@ -401,6 +424,7 @@ export default function App() {
       setMonopolyPendingRent(room.pendingRent || null);
       setMonopolyLastActionDetail(room.lastActionDetail || null);
       setMonopolyLandedBuildMaxHouses(room.landedBuildMaxHouses !== undefined ? room.landedBuildMaxHouses : 4);
+      setMonopolyTurnCount(room.monopolyTurnCount || 0);
     }
     if (nextScreen) {
       setScreen(nextScreen);
@@ -472,6 +496,7 @@ export default function App() {
         setMonopolyCurrentCard(room.currentCard || null);
         setMonopolyCardType(room.cardType || null);
         setMonopolyActiveDebt(room.activeDebt || null);
+        setMonopolyTurnCount(room.monopolyTurnCount || 0);
       }
       setScreen('lobby');
       setErrorMsg('');
@@ -494,6 +519,7 @@ export default function App() {
         setMonopolyCurrentCard(room.currentCard || null);
         setMonopolyCardType(room.cardType || null);
         setMonopolyActiveDebt(room.activeDebt || null);
+        setMonopolyTurnCount(room.monopolyTurnCount || 0);
       }
       if (screenRef.current === 'menu') {
         setRoomCode(room.code || roomCodeRef.current);
@@ -548,6 +574,7 @@ export default function App() {
         setMonopolyPendingRent(room.pendingRent || null);
         setMonopolyLastActionDetail(room.lastActionDetail || null);
         setMonopolyLandedBuildMaxHouses(room.landedBuildMaxHouses !== undefined ? room.landedBuildMaxHouses : 4);
+        setMonopolyTurnCount(room.monopolyTurnCount || 0);
       }
       setScreen('table');
     });
@@ -582,6 +609,7 @@ export default function App() {
         setMonopolyPendingRent(room.pendingRent || null);
         setMonopolyLastActionDetail(room.lastActionDetail || null);
         setMonopolyLandedBuildMaxHouses(room.landedBuildMaxHouses !== undefined ? room.landedBuildMaxHouses : 4);
+        setMonopolyTurnCount(room.monopolyTurnCount || 0);
       }
     });
 
@@ -612,6 +640,7 @@ export default function App() {
         setMonopolyPendingRent(room.pendingRent || null);
         setMonopolyLastActionDetail(room.lastActionDetail || null);
         setMonopolyLandedBuildMaxHouses(room.landedBuildMaxHouses !== undefined ? room.landedBuildMaxHouses : 4);
+        setMonopolyTurnCount(room.monopolyTurnCount || 0);
       }
     });
 
@@ -832,7 +861,7 @@ export default function App() {
     }
 
     const delay = (roomState.gameType === 'monopoly')
-      ? (roomState.monopolyPhase === 'card_drawn' ? 4000 : 1000)
+      ? (roomState.monopolyPhase === 'card_drawn' ? 3000 : 1000)
       : 1500;
     botTimerRef.current = setTimeout(() => {
       if (roomState.gameType === 'uno') {
@@ -1811,6 +1840,12 @@ export default function App() {
       }
       setTurnIndex(nextTurn);
       setMonopolyPhase('roll');
+      playersList.forEach((pl, idx) => {
+        if (idx === turnIndex || idx === nextTurn) {
+          pl.rollCount = 0;
+          pl.doublesRolled = false;
+        }
+      });
       setPlayers(prev => prev.map((pl, idx) => {
         if (idx === turnIndex || idx === nextTurn) {
           return { ...pl, rollCount: 0, doublesRolled: false };
@@ -1818,6 +1853,10 @@ export default function App() {
         return pl;
       }));
     } else if (p.doublesRolled && !p.bankrupt) {
+      const targetPl = playersList.find(pl => pl.id === p.id);
+      if (targetPl) {
+        targetPl.doublesRolled = false;
+      }
       setPlayers(prev => prev.map(pl => pl.id === p.id ? { ...pl, doublesRolled: false } : pl));
       setMonopolyPhase('roll');
       ioToSystemChat(`🎲 Doubles! ${p.name} gets to roll again.`);
@@ -1926,23 +1965,6 @@ export default function App() {
     }
 
     if (tile.type === 'parking') {
-      if (rules.ruleset === 'Get Rich' && player.money! >= 100) {
-        ioToSystemChat(`✈️ ${player.name} landed on the Airport! Pay $100 to fly to any tile.`);
-        setMonopolyPhase('airport_selection');
-        updatePlayersAndBoard(playersList, boardList);
-      } else if (rules.ruleset === 'Get Rich') {
-        ioToSystemChat(`✈️ ${player.name} landed on the Airport but can't afford the $100 fare.`);
-        setEndTurnPhaseSingle(player, playersList);
-        updatePlayersAndBoard(playersList, boardList);
-      } else {
-        ioToSystemChat(`${player.name} relaxes at Free Parking!`);
-        setEndTurnPhaseSingle(player, playersList);
-        updatePlayersAndBoard(playersList, boardList);
-      }
-      return;
-    }
-
-    if (tile.type === 'gotojail') {
       if (rules.ruleset === 'Get Rich') {
         const ownedProps = boardList.filter(t =>
           (t.type === 'property' || t.type === 'railroad' || t.type === 'utility') && t.owner === player.id
@@ -1953,6 +1975,25 @@ export default function App() {
           updatePlayersAndBoard(playersList, boardList);
         } else {
           ioToSystemChat(`🎉 ${player.name} landed on Festival! No properties to boost.`);
+          setEndTurnPhaseSingle(player, playersList);
+          updatePlayersAndBoard(playersList, boardList);
+        }
+      } else {
+        ioToSystemChat(`${player.name} relaxes at Free Parking!`);
+        setEndTurnPhaseSingle(player, playersList);
+        updatePlayersAndBoard(playersList, boardList);
+      }
+      return;
+    }
+
+    if (tile.type === 'gotojail') {
+      if (rules.ruleset === 'Get Rich') {
+        if (player.money! >= 100) {
+          ioToSystemChat(`✈️ ${player.name} landed on the Airport! Pay $100 to fly to any tile.`);
+          setMonopolyPhase('airport_selection');
+          updatePlayersAndBoard(playersList, boardList);
+        } else {
+          ioToSystemChat(`✈️ ${player.name} landed on the Airport but can't afford the $100 fare.`);
           setEndTurnPhaseSingle(player, playersList);
           updatePlayersAndBoard(playersList, boardList);
         }
@@ -2362,9 +2403,10 @@ export default function App() {
       festivalTurns: 0
     })) as TileState[];
 
+    const startMoney = rules.startingCash ? Number(rules.startingCash) : 1500;
     const initializedPlayers = currentPlayers.map((p) => ({
       ...p,
-      money: 1500,
+      money: startMoney,
       position: 0,
       inJail: false,
       jailTurns: 0,
@@ -2372,15 +2414,16 @@ export default function App() {
       bankrupt: false,
       lastRoll: [1, 1],
       rollCount: 0,
-      netWorth: 1500,
+      netWorth: startMoney,
       passed: false,
       lastPlay: null,
       // Get Rich consumable cards
       oddEvenCards: isGetRich ? 0 : undefined,
       angelCards: isGetRich ? 0 : undefined,
-      score: 1500,
+      score: startMoney,
     }));
 
+    setMonopolyTurnCount(0);
     setPlayers(initializedPlayers);
     setMonopolyBoard(initialBoard);
     setMonopolyDice([1, 1]);
@@ -2447,6 +2490,36 @@ export default function App() {
     if (isMonopolyAnimating && action !== 'leave' && action !== 'end-turn') return;
     socketRef.current?.emit('monopoly-action', { roomCode, action, payload });
   }, [isMonopolyAnimating, roomCode]);
+
+  const checkTurnLimitSingle = (nextPlayers: Player[], nextBoard: TileState[], currentTurnCount: number) => {
+    const limit = rules.turnLimit ? Number(rules.turnLimit) : 0;
+    if (limit > 0 && currentTurnCount >= limit) {
+      setGameState('gameover');
+      
+      const activePlayers = nextPlayers.filter(p => !p.bankrupt);
+      activePlayers.sort((a, b) => (b.netWorth || 0) - (a.netWorth || 0));
+      const winner = activePlayers[0];
+      
+      ioToSystemChat(`⏱️ Turn limit of ${limit} reached!`);
+      ioToSystemChat(`🏆 ${winner.name} wins with a net worth of $${winner.netWorth || 0}! 🏆`);
+      
+      const sortedAll = [...nextPlayers];
+      sortedAll.sort((a, b) => {
+        if (a.bankrupt && !b.bankrupt) return 1;
+        if (!a.bankrupt && b.bankrupt) return -1;
+        return (b.netWorth || 0) - (a.netWorth || 0);
+      });
+      
+      const rankedPlayers = nextPlayers.map(p => {
+        const rank = sortedAll.findIndex(sa => sa.id === p.id) + 1;
+        return { ...p, finishRank: rank, score: p.netWorth || 0 };
+      });
+      
+      setPlayers(rankedPlayers);
+      return true;
+    }
+    return false;
+  };
 
   const handleMonopolyActionSingle = (action: string, payload?: any) => {
     if (isMonopolyAnimating && action !== 'leave' && action !== 'end-turn') return;
@@ -2717,21 +2790,26 @@ export default function App() {
     else if (action === 'pass-property') {
       if (currentPhase !== 'action') return;
       ioToSystemChat(`🏠 ${currentPlayer.name} passed on buying ${currentBoard[currentPlayer.position!].name}.`);
-      const bidders = currentPlayers.filter(p => !p.bankrupt).map(p => p.id);
-      
-      if (bidders.length === 0) {
-        ioToSystemChat(`🎲 No other bidders available. Auction ended.`);
+      const isGetRich = rules.ruleset === 'Get Rich';
+      if (isGetRich) {
         resumeAfterAuctionSingle(currentPlayer, currentPlayers, currentBoard);
       } else {
-        setMonopolyPhase('auction');
-        setMonopolyAuctionState({
-          tileIndex: currentPlayer.position!,
-          highestBid: 0,
-          highestBidder: null,
-          bidders,
-          activeBidderIndex: 0
-        });
-        ioToSystemChat(`🎲 Auction started for ${currentBoard[currentPlayer.position!].name}! Starting bid is $10.`);
+        const bidders = currentPlayers.filter(p => !p.bankrupt).map(p => p.id);
+        
+        if (bidders.length === 0) {
+          ioToSystemChat(`🎲 No other bidders available. Auction ended.`);
+          resumeAfterAuctionSingle(currentPlayer, currentPlayers, currentBoard);
+        } else {
+          setMonopolyPhase('auction');
+          setMonopolyAuctionState({
+            tileIndex: currentPlayer.position!,
+            highestBid: 0,
+            highestBidder: null,
+            bidders,
+            activeBidderIndex: 0
+          });
+          ioToSystemChat(`🎲 Auction started for ${currentBoard[currentPlayer.position!].name}! Starting bid is $10.`);
+        }
       }
     }
 
@@ -2904,6 +2982,15 @@ export default function App() {
       );
       setMonopolyBoard(boardAfterFestival);
 
+      const nextTurnCount = monopolyTurnCount + 1;
+      setMonopolyTurnCount(nextTurnCount);
+
+      // Check turn limit
+      const limitReached = checkTurnLimitSingle(currentPlayers, boardAfterFestival, nextTurnCount);
+      if (limitReached) {
+        return;
+      }
+
       if (currentPlayer.doublesRolled && !currentPlayer.inJail && !currentPlayer.bankrupt) {
         currentPlayer.doublesRolled = false;
         setPlayers(currentPlayers.map(p => p.id === currentPlayer.id ? { ...p, doublesRolled: false } : p));
@@ -2988,8 +3075,14 @@ export default function App() {
       ioToSystemChat(`💼 ${currentPlayer.name} force-acquired ${faTile.name} from ${prevOwner.name} for $${pfa.worth}!`);
       setMonopolyLastActionDetail({ type: 'force-acquire', tileIndex: pfa.tileIndex });
       setMonopolyPendingForceAcquire(null);
-      setEndTurnPhaseSingle(currentPlayer, nextPlayers);
-      updatePlayersAndBoard(nextPlayers, nextBoard);
+      if (faTile.houses === 4) {
+        setMonopolyPhase('landed_build');
+        setMonopolyLandedBuildMaxHouses(5);
+        updatePlayersAndBoard(nextPlayers, nextBoard);
+      } else {
+        setEndTurnPhaseSingle(currentPlayer, nextPlayers);
+        updatePlayersAndBoard(nextPlayers, nextBoard);
+      }
     }
 
     else if (action === 'decline-force-acquire') {
@@ -3509,7 +3602,7 @@ export default function App() {
       if (botTimerRef.current) clearTimeout(botTimerRef.current);
 
       const delay = (gameType === 'monopoly')
-        ? (monopolyPhase === 'card_drawn' ? 4000 : 1000)
+        ? (monopolyPhase === 'card_drawn' ? 3000 : 1000)
         : 1500;
 
       botTimerRef.current = setTimeout(() => {
@@ -4039,8 +4132,11 @@ export default function App() {
       className={`app-container theme-${gameType}`}
       style={{
         position: 'relative',
+        width: '100vw',
+        maxWidth: '100vw',
         minHeight: '100vh',
-        height: (screen === 'menu' || screen === 'lobby') ? '100vh' : 'auto',
+        height: (screen === 'menu' || screen === 'lobby') ? '100vh' : '100dvh',
+        overflowX: 'hidden',
         overflowY: (screen === 'menu' || screen === 'lobby') ? 'auto' : 'hidden',
       }}
     >
@@ -4191,7 +4287,7 @@ export default function App() {
                 }}
                 onClick={() => {
                   setGameType('monopoly');
-                  setRules(prev => ({ ...prev, pointsToWin: 0, ruleset: 'Default' }));
+                  setRules(prev => ({ ...prev, pointsToWin: 0, ruleset: 'Default', startingCash: 1500, turnLimit: 0 }));
                 }}
               >
                 🎩 Monopoly
@@ -4446,6 +4542,61 @@ export default function App() {
                 </span>
               )}
             </div>
+
+            {gameType === 'monopoly' && (
+              <>
+                {/* Starting Cash */}
+                <div className="settings-row">
+                  <label>Starting Cash</label>
+                  {players.find(pl => isSinglePlayer ? pl.id === 'local_user' : pl.id === socketId)?.isHost ? (
+                    <select
+                      value={rules.startingCash !== undefined ? rules.startingCash : 1500}
+                      onChange={(e) => {
+                        const val = Number(e.target.value);
+                        const updated = { ...rules, startingCash: val };
+                        setRules(updated);
+                        if (!isSinglePlayer) updateRulesOnline(updated);
+                      }}
+                    >
+                      <option value={1500}>$1500</option>
+                      <option value={2000}>$2000</option>
+                      <option value={2500}>$2500</option>
+                      <option value={3000}>$3000</option>
+                    </select>
+                  ) : (
+                    <span style={{ fontWeight: 'bold' }}>
+                      ${rules.startingCash !== undefined ? rules.startingCash : 1500}
+                    </span>
+                  )}
+                </div>
+
+                {/* Turn Limit */}
+                <div className="settings-row">
+                  <label>Turn Limit</label>
+                  {players.find(pl => isSinglePlayer ? pl.id === 'local_user' : pl.id === socketId)?.isHost ? (
+                    <select
+                      value={rules.turnLimit !== undefined ? rules.turnLimit : 0}
+                      onChange={(e) => {
+                        const val = Number(e.target.value);
+                        const updated = { ...rules, turnLimit: val };
+                        setRules(updated);
+                        if (!isSinglePlayer) updateRulesOnline(updated);
+                      }}
+                    >
+                      <option value={0}>Unlimited</option>
+                      <option value={15}>15 Turns</option>
+                      <option value={20}>20 Turns</option>
+                      <option value={25}>25 Turns</option>
+                      <option value={30}>30 Turns</option>
+                    </select>
+                  ) : (
+                    <span style={{ fontWeight: 'bold' }}>
+                      {rules.turnLimit === undefined || rules.turnLimit === 0 ? 'Unlimited' : `${rules.turnLimit} Turns`}
+                    </span>
+                  )}
+                </div>
+              </>
+            )}
 
             {/* Turn Timer Duration */}
             {gameType !== 'monopoly' && (
@@ -4761,6 +4912,7 @@ export default function App() {
           isHost={players.find(pl => isSinglePlayer ? pl.id === 'local_user' : pl.id === socketId)?.isHost || false}
           isSinglePlayer={isSinglePlayer}
           rules={rules}
+          monopolyTurnCount={monopolyTurnCount}
           lastActionDetail={monopolyLastActionDetail}
           pendingForceAcquire={monopolyPendingForceAcquire}
           pendingRent={monopolyPendingRent}
