@@ -1009,6 +1009,31 @@ export default function App() {
     triggerBotLogicForMultiplayerRef.current = triggerBotLogicForMultiplayer;
   });
 
+  // Re-trigger bot logic in multiplayer when visual animations finish
+  useEffect(() => {
+    if (lastBotSyncRoomStateRef.current && !isMonopolyAnimating) {
+      const roomState = lastBotSyncRoomStateRef.current;
+      const hasDiscrepancy = (roomState.players || []).some((p: any) => {
+        const localP = (players || []).find((lp: any) => lp.id === p.id);
+        const stateDiff = localP && localP.position !== p.position;
+        const visPos = visualPositionsRef.current[p.id];
+        const visDiff = visPos !== undefined && visPos !== p.position;
+        return stateDiff || visDiff;
+      }) || (roomState.monopolyBoard && (monopolyBoard || []).length > 0 &&
+        roomState.monopolyBoard.some((tile: any, idx: number) => {
+          const localTile = (monopolyBoard || [])[idx];
+          return localTile && tile.houses > localTile.houses;
+        })
+      );
+
+      if (!hasDiscrepancy) {
+        console.log('[BOT COORD] Discrepancies cleared, re-triggering bot logic!');
+        lastBotSyncRoomStateRef.current = null;
+        triggerBotLogicForMultiplayer(roomState);
+      }
+    }
+  }, [isMonopolyAnimating, players, monopolyBoard]);
+
   const sendChatMessage = (text: string) => {
     if (!text.trim()) return;
     if (isSinglePlayer) {

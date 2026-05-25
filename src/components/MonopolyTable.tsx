@@ -411,6 +411,7 @@ export const MonopolyTable: React.FC<MonopolyTableProps> = ({
   const settleTimerRef = useRef<any>(null);
   const closeTimerRef = useRef<any>(null);
   const hopTimersRef = useRef<Record<string, any>>({});
+  const hopTargetsRef = useRef<Record<string, number>>({});
   const prevBoardRef = useRef<TileState[]>([]);
   const prevBoardForMoneyRef = useRef<TileState[]>([]);
   const lastAutoOpenRef = useRef<string | null>(null);
@@ -816,6 +817,7 @@ export const MonopolyTable: React.FC<MonopolyTableProps> = ({
         return next;
       });
       delete hopTimersRef.current[pId];
+      delete hopTargetsRef.current[pId];
       return;
     }
 
@@ -862,6 +864,7 @@ export const MonopolyTable: React.FC<MonopolyTableProps> = ({
         return next;
       });
       delete hopTimersRef.current[pId];
+      delete hopTargetsRef.current[pId];
       return;
     }
 
@@ -895,30 +898,41 @@ export const MonopolyTable: React.FC<MonopolyTableProps> = ({
       if (prevPos === undefined) {
         // Initialize position
         setVisualPositions(prev => ({ ...prev, [p.id]: p.position }));
-      } else if (prevPos !== p.position && !hopTimersRef.current[p.id]) {
-        // Position changed on server: start hop sequence!
-
-        let targetPos = p.position;
-        const diceSum = dice[0] + dice[1];
-
-        // If player is sent to jail from Go To Jail tile (position 30)
-        if (p.inJail && p.position === 10 && (prevPos + diceSum) % 40 === 30) {
-          targetPos = 30;
+      } else {
+        // Check if there is an active hop timer and if the target has changed
+        if (hopTimersRef.current[p.id] && hopTargetsRef.current[p.id] !== undefined && hopTargetsRef.current[p.id] !== p.position) {
+          // Server position changed while hopping (e.g. Chance card movement)
+          // Cancel the current hopping sequence and restart towards the new target
+          clearTimeout(hopTimersRef.current[p.id]);
+          delete hopTimersRef.current[p.id];
+          delete hopTargetsRef.current[p.id];
         }
 
-        const isBackward = (prevPos - targetPos + 40) % 40 === 3;
+        if (prevPos !== p.position && !hopTimersRef.current[p.id]) {
+          // Position changed on server: start hop sequence!
+          let targetPos = p.position;
+          const diceSum = dice[0] + dice[1];
 
-        if (!isDraggingRef.current && !isCameraManual && p.id === activePlayer?.id) {
-          const targetCoords = getTileLocalCoords(targetPos);
-          const stepsCount = isBackward ? (prevPos - targetPos + 40) % 40 : (targetPos - prevPos + 40) % 40;
-          const duration = Math.max(0.4, stepsCount * 0.28);
-          setCameraTransition(`${duration}s linear`);
-          setCameraX(-targetCoords.x * 1.20);
-          setCameraY(-targetCoords.y * 1.20);
-          setCameraScale(1.28);
+          // If player is sent to jail from Go To Jail tile (position 30)
+          if (p.inJail && p.position === 10 && (prevPos + diceSum) % 40 === 30) {
+            targetPos = 30;
+          }
+
+          const isBackward = (prevPos - targetPos + 40) % 40 === 3;
+
+          if (!isDraggingRef.current && !isCameraManual && p.id === activePlayer?.id) {
+            const targetCoords = getTileLocalCoords(targetPos);
+            const stepsCount = isBackward ? (prevPos - targetPos + 40) % 40 : (targetPos - prevPos + 40) % 40;
+            const duration = Math.max(0.4, stepsCount * 0.28);
+            setCameraTransition(`${duration}s linear`);
+            setCameraX(-targetCoords.x * 1.20);
+            setCameraY(-targetCoords.y * 1.20);
+            setCameraScale(1.28);
+          }
+
+          hopTargetsRef.current[p.id] = targetPos;
+          stepPlayerPos(p.id, prevPos, targetPos, isBackward);
         }
-
-        stepPlayerPos(p.id, prevPos, targetPos, isBackward);
       }
     });
   }, [players, gameState, visualPositions, stepPlayerPos, isDiceRolling, activePlayer?.id, isCameraManual, dice]);
