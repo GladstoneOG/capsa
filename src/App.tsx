@@ -2997,7 +2997,22 @@ export default function App() {
         });
         setPlayers(rankedPlayers);
       } else {
-        setEndTurnPhaseSingle(debtor, nextPlayers);
+        let nextTurn = currentTurnIdx;
+        const n = nextPlayers.length;
+        for (let i = 0; i < n; i++) {
+          nextTurn = (nextTurn + 1) % n;
+          if (!nextPlayers[nextTurn].bankrupt) {
+            break;
+          }
+        }
+        
+        const updatedPlayersWithReset = nextPlayers.map((p, idx) => 
+          idx === nextTurn ? { ...p, rollCount: 0, doublesRolled: false } : p
+        );
+        
+        setTurnIndex(nextTurn);
+        setMonopolyPhase('roll');
+        updatePlayersAndBoard(updatedPlayersWithReset, nextBoard);
       }
     }
 
@@ -4198,7 +4213,7 @@ export default function App() {
       {screen === 'menu' && (
         <div className="menu-container">
           <div className="glass-panel menu-panel">
-            <div className="menu-title-section" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+            <div className="menu-title-section" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minHeight: '135px', justifyContent: 'center' }}>
               {gameType === 'uno' ? (
                 <div className="uno-title-wrapper" style={{
                   display: 'inline-block',
@@ -4249,6 +4264,233 @@ export default function App() {
                     Sarang Judi
                   </h1>
                 </div>
+              ) : gameType === 'capsa' ? (
+                <div className="capsa-title-wrapper" style={{
+                  display: 'inline-block',
+                  position: 'relative',
+                  padding: '1.25rem 3rem',
+                  margin: '0 auto 0.75rem',
+                }}>
+                  {/* Left Card Fan */}
+                  <div style={{
+                    position: 'absolute',
+                    left: '-2.5rem',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    pointerEvents: 'none',
+                    zIndex: 1
+                  }}>
+                    {/* Card 1: Ace of Spades */}
+                    <div style={{
+                      transform: 'rotate(-15deg) translateY(4px) translateX(8px)',
+                      boxShadow: '0 4px 10px rgba(0,0,0,0.5)',
+                      borderRadius: '6px',
+                      background: '#ffffff',
+                      border: '1.5px solid #000000',
+                      width: '42px',
+                      height: '60px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      justifyContent: 'space-between',
+                      padding: '3px 4px',
+                      boxSizing: 'border-box',
+                      color: '#0f172a',
+                      fontFamily: "'Outfit', sans-serif",
+                      fontWeight: 800,
+                    }}>
+                      <div style={{ fontSize: '0.65rem', display: 'flex', flexDirection: 'column', alignItems: 'center', lineHeight: 1 }}>
+                        <span>A</span>
+                        <span style={{ fontSize: '0.55rem', marginTop: '-1px' }}>♠</span>
+                      </div>
+                      <div style={{ fontSize: '1.1rem', textAlign: 'center', marginTop: '-3px' }}>♠</div>
+                      <div style={{ fontSize: '0.65rem', display: 'flex', flexDirection: 'column', alignItems: 'center', lineHeight: 1, transform: 'rotate(180deg)' }}>
+                        <span>A</span>
+                        <span style={{ fontSize: '0.55rem', marginTop: '-1px' }}>♠</span>
+                      </div>
+                    </div>
+
+                    {/* Card 2: King of Clubs */}
+                    <div style={{
+                      transform: 'rotate(-5deg) translateX(-4px) translateY(-2px)',
+                      boxShadow: '0 4px 10px rgba(0,0,0,0.5)',
+                      borderRadius: '6px',
+                      background: '#ffffff',
+                      border: '1.5px solid #000000',
+                      width: '42px',
+                      height: '60px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      justifyContent: 'space-between',
+                      padding: '3px 4px',
+                      boxSizing: 'border-box',
+                      color: '#0f172a',
+                      fontFamily: "'Outfit', sans-serif",
+                      fontWeight: 800,
+                      marginLeft: '-15px'
+                    }}>
+                      <div style={{ fontSize: '0.65rem', display: 'flex', flexDirection: 'column', alignItems: 'center', lineHeight: 1 }}>
+                        <span>K</span>
+                        <span style={{ fontSize: '0.55rem', marginTop: '-1px' }}>♣</span>
+                      </div>
+                      <div style={{ fontSize: '1.1rem', textAlign: 'center', marginTop: '-3px' }}>♣</div>
+                      <div style={{ fontSize: '0.65rem', display: 'flex', flexDirection: 'column', alignItems: 'center', lineHeight: 1, transform: 'rotate(180deg)' }}>
+                        <span>K</span>
+                        <span style={{ fontSize: '0.55rem', marginTop: '-1px' }}>♣</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Right Card Fan */}
+                  <div style={{
+                    position: 'absolute',
+                    right: '-2.5rem',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    pointerEvents: 'none',
+                    zIndex: 1
+                  }}>
+                    {/* Card 3: Queen of Hearts */}
+                    <div style={{
+                      transform: 'rotate(5deg) translateX(4px) translateY(-2px)',
+                      boxShadow: '0 4px 10px rgba(0,0,0,0.5)',
+                      borderRadius: '6px',
+                      background: '#ffffff',
+                      border: '1.5px solid #ef4444',
+                      width: '42px',
+                      height: '60px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      justifyContent: 'space-between',
+                      padding: '3px 4px',
+                      boxSizing: 'border-box',
+                      color: '#ef4444',
+                      fontFamily: "'Outfit', sans-serif",
+                      fontWeight: 800,
+                    }}>
+                      <div style={{ fontSize: '0.65rem', display: 'flex', flexDirection: 'column', alignItems: 'center', lineHeight: 1 }}>
+                        <span>Q</span>
+                        <span style={{ fontSize: '0.55rem', marginTop: '-1px' }}>♥</span>
+                      </div>
+                      <div style={{ fontSize: '1.1rem', textAlign: 'center', marginTop: '-3px' }}>♥</div>
+                      <div style={{ fontSize: '0.65rem', display: 'flex', flexDirection: 'column', alignItems: 'center', lineHeight: 1, transform: 'rotate(180deg)' }}>
+                        <span>Q</span>
+                        <span style={{ fontSize: '0.55rem', marginTop: '-1px' }}>♥</span>
+                      </div>
+                    </div>
+
+                    {/* Card 4: 10 of Diamonds */}
+                    <div style={{
+                      transform: 'rotate(15deg) translateY(4px) translateX(-8px)',
+                      boxShadow: '0 4px 10px rgba(0,0,0,0.5)',
+                      borderRadius: '6px',
+                      background: '#ffffff',
+                      border: '1.5px solid #ef4444',
+                      width: '42px',
+                      height: '60px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      justifyContent: 'space-between',
+                      padding: '3px 4px',
+                      boxSizing: 'border-box',
+                      color: '#ef4444',
+                      fontFamily: "'Outfit', sans-serif",
+                      fontWeight: 800,
+                      marginLeft: '-15px'
+                    }}>
+                      <div style={{ fontSize: '0.65rem', display: 'flex', flexDirection: 'column', alignItems: 'center', lineHeight: 1 }}>
+                        <span>10</span>
+                        <span style={{ fontSize: '0.55rem', marginTop: '-1px' }}>♦</span>
+                      </div>
+                      <div style={{ fontSize: '1.1rem', textAlign: 'center', marginTop: '-3px' }}>♦</div>
+                      <div style={{ fontSize: '0.65rem', display: 'flex', flexDirection: 'column', alignItems: 'center', lineHeight: 1, transform: 'rotate(180deg)' }}>
+                        <span>10</span>
+                        <span style={{ fontSize: '0.55rem', marginTop: '-1px' }}>♦</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Backdrop Felt Frame */}
+                  <div style={{
+                    position: 'absolute',
+                    top: '50%',
+                    left: '50%',
+                    transform: 'translate(-50%, -50%)',
+                    width: '100%',
+                    height: '100%',
+                    background: 'linear-gradient(135deg, #15803d 0%, #166534 50%, #14532d 100%)',
+                    border: '3px double #fbbf24',
+                    borderRadius: '16px',
+                    boxShadow: '0 6px 20px rgba(0,0,0,0.5), inset 0 0 12px rgba(0,0,0,0.6)',
+                    zIndex: 2,
+                    pointerEvents: 'none'
+                  }} />
+
+                  {/* Suit Symbols Floating inside Backdrop */}
+                  <div style={{
+                    position: 'absolute',
+                    top: '5px',
+                    left: '10px',
+                    fontSize: '1rem',
+                    opacity: 0.25,
+                    color: '#fbbf24',
+                    zIndex: 3,
+                    pointerEvents: 'none'
+                  }}>♠</div>
+                  <div style={{
+                    position: 'absolute',
+                    bottom: '5px',
+                    left: '15px',
+                    fontSize: '0.8rem',
+                    opacity: 0.25,
+                    color: '#fbbf24',
+                    zIndex: 3,
+                    pointerEvents: 'none'
+                  }}>♦</div>
+                  <div style={{
+                    position: 'absolute',
+                    top: '8px',
+                    right: '15px',
+                    fontSize: '0.8rem',
+                    opacity: 0.25,
+                    color: '#fbbf24',
+                    zIndex: 3,
+                    pointerEvents: 'none'
+                  }}>♥</div>
+                  <div style={{
+                    position: 'absolute',
+                    bottom: '5px',
+                    right: '10px',
+                    fontSize: '1rem',
+                    opacity: 0.25,
+                    color: '#fbbf24',
+                    zIndex: 3,
+                    pointerEvents: 'none'
+                  }}>♣</div>
+
+                  {/* Title Text */}
+                  <h1 className="menu-title-capsa" style={{
+                    position: 'relative',
+                    zIndex: 4,
+                    fontFamily: "'Outfit', sans-serif",
+                    fontSize: '3rem',
+                    fontWeight: 900,
+                    textTransform: 'uppercase',
+                    textAlign: 'center',
+                    margin: 0,
+                    lineHeight: 1,
+                    letterSpacing: '1px',
+                    background: 'linear-gradient(to bottom, #ffe680 0%, #fbbf24 60%, #d97706 100%)',
+                    WebkitBackgroundClip: 'text',
+                    WebkitTextFillColor: 'transparent',
+                    textShadow: '0 2px 5px rgba(0,0,0,0.5)',
+                  }}>
+                    Sarang Judi
+                  </h1>
+                </div>
               ) : (
                 <h1 className="menu-title" style={{ transition: 'all 0.3s' }}>
                   Sarang Judi
@@ -4257,143 +4499,117 @@ export default function App() {
               <p className="menu-subtitle">Bikinan Johan tanpa AI</p>
             </div>
 
-            {/* Game Selection Toggle */}
-            <div className="game-select-group" style={{ display: 'flex', gap: '0.5rem', width: '100%', marginBottom: '1.25rem' }}>
-              <button 
-                type="button"
-                className={`btn-game-type ${gameType === 'capsa' ? 'active' : ''}`}
-                style={{
-                  flex: 1,
-                  padding: '0.65rem 0.25rem',
-                  borderRadius: '12px',
-                  border: gameType === 'capsa' ? '2px solid var(--accent-gold)' : '1px solid rgba(255,255,255,0.1)',
-                  background: gameType === 'capsa' ? 'var(--accent-gold-glow)' : 'rgba(0,0,0,0.2)',
-                  color: gameType === 'capsa' ? 'var(--accent-gold)' : 'var(--text-muted)',
-                  fontWeight: 'bold',
-                  cursor: 'pointer',
-                  fontSize: '0.8rem',
-                  transition: 'all 0.2s ease',
-                }}
+            {/* Highly Prominent & Scalable Game Mode Cards Selector */}
+            <div className="mode-selector-dashboard">
+              <div 
+                className={`mode-card ${gameType === 'capsa' ? 'active active-capsa' : ''}`}
                 onClick={() => {
                   setGameType('capsa');
                   setRules(prev => ({ ...prev, pointsToWin: 15 }));
                 }}
               >
-                ♠️ Capsa
-              </button>
-              <button 
-                type="button"
-                className={`btn-game-type ${gameType === 'uno' ? 'active' : ''}`}
-                style={{
-                  flex: 1,
-                  padding: '0.65rem 0.25rem',
-                  borderRadius: '12px',
-                  border: gameType === 'uno' ? '2px solid var(--primary)' : '1px solid rgba(255,255,255,0.1)',
-                  background: gameType === 'uno' ? 'var(--primary-glow)' : 'rgba(0,0,0,0.2)',
-                  color: gameType === 'uno' ? 'var(--primary)' : 'var(--text-muted)',
-                  fontWeight: 'bold',
-                  cursor: 'pointer',
-                  fontSize: '0.8rem',
-                  transition: 'all 0.2s ease',
-                }}
+                <div className="mode-card-icon">♠️</div>
+                <div className="mode-card-title">Capsa Banting</div>
+                <div className="mode-card-desc">Indonesian 13-card game. High-stakes card strategy.</div>
+              </div>
+
+              <div 
+                className={`mode-card ${gameType === 'uno' ? 'active active-uno' : ''}`}
                 onClick={() => {
                   setGameType('uno');
                   setRules(prev => ({ ...prev, pointsToWin: 250 }));
                 }}
               >
-                🌈 Uno
-              </button>
-              <button 
-                type="button"
-                className={`btn-game-type ${gameType === 'monopoly' ? 'active' : ''}`}
-                style={{
-                  flex: 1,
-                  padding: '0.65rem 0.25rem',
-                  borderRadius: '12px',
-                  border: gameType === 'monopoly' ? '2px solid #10b981' : '1px solid rgba(255,255,255,0.1)',
-                  background: gameType === 'monopoly' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(0,0,0,0.2)',
-                  color: gameType === 'monopoly' ? '#10b981' : 'var(--text-muted)',
-                  fontWeight: 'bold',
-                  cursor: 'pointer',
-                  fontSize: '0.8rem',
-                  transition: 'all 0.2s ease',
-                }}
+                <div className="mode-card-icon">🌈</div>
+                <div className="mode-card-title">Uno Classic</div>
+                <div className="mode-card-desc">Wild cards, house rules, stacks, and intense fast-play.</div>
+              </div>
+
+              <div 
+                className={`mode-card ${gameType === 'monopoly' ? 'active active-monopoly' : ''}`}
                 onClick={() => {
                   setGameType('monopoly');
                   setRules(prev => ({ ...prev, pointsToWin: 0, ruleset: 'Default', startingCash: 1500, turnLimit: 0 }));
                 }}
               >
-                🎩 Monopoly
-              </button>
-            </div>
-
-            {errorMsg && (
-              <div style={{ background: 'rgba(244,63,94,0.15)', border: '1px solid var(--accent-red)', padding: '0.75rem', borderRadius: '10px', fontSize: '0.85rem', color: '#fda4af', textAlign: 'center', width: '100%', marginBottom: '1rem' }}>
-                ⚠️ {errorMsg}
+                <div className="mode-card-icon">🎩</div>
+                <div className="mode-card-title">Monopoly Tycoon</div>
+                <div className="mode-card-desc">Interactive 3D board, rolling dice, deals, and bankrupting bots.</div>
               </div>
-            )}
-
-            {/* Avatar Creator Panel */}
-            <div className="name-input-group">
-              <label>Your Profile Name</label>
-              <input
-                type="text"
-                placeholder="Enter player name..."
-                value={playerName}
-                onChange={(e) => setPlayerName(e.target.value.slice(0, 12))}
-                maxLength={12}
-              />
             </div>
 
-            <AvatarCreator config={avatar} onChange={setAvatar} />
+            <div className="menu-content-columns">
+              <div className="menu-column-left">
+                {/* Avatar Creator Panel */}
+                <div className="name-input-group">
+                  <label>Your Profile Name</label>
+                  <input
+                    type="text"
+                    placeholder="Enter player name..."
+                    value={playerName}
+                    onChange={(e) => setPlayerName(e.target.value.slice(0, 12))}
+                    maxLength={12}
+                  />
+                </div>
 
-            {/* Server Settings (Custom address deployment) */}
-            <div style={{ alignSelf: 'flex-start' }}>
-              <button
-                type="button"
-                className="btn-utility"
-                style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: '0.8rem', padding: 0 }}
-                onClick={() => setCustomServerVisible(!customServerVisible)}
-              >
-                ⚙️ {customServerVisible ? 'Hide Server Settings' : 'Custom Server Settings'}
-              </button>
-            </div>
-
-            {customServerVisible && (
-              <div className="name-input-group" style={{ background: 'rgba(0,0,0,0.15)', padding: '0.75rem', borderRadius: '10px' }}>
-                <label>Socket Server Host URL</label>
-                <input
-                  type="text"
-                  placeholder="http://localhost:3001"
-                  value={serverUrl}
-                  onChange={(e) => setServerUrl(e.target.value)}
-                  style={{ padding: '0.5rem', fontSize: '0.9rem' }}
-                />
+                <AvatarCreator config={avatar} onChange={setAvatar} />
               </div>
-            )}
 
-            <div className="menu-actions">
-              <button className="btn-gold" onClick={startSinglePlayerLobby}>
-                🤖 Play vs Bots
-              </button>
-              <button className="btn-primary" onClick={createOnlineRoom}>
-                🌐 Create Room
-              </button>
-            </div>
+              <div className="menu-column-right">
+                {errorMsg && (
+                  <div style={{ background: 'rgba(244,63,94,0.15)', border: '1px solid var(--accent-red)', padding: '0.75rem', borderRadius: '10px', fontSize: '0.85rem', color: '#fda4af', textAlign: 'center', width: '100%', marginBottom: '0.5rem' }}>
+                    ⚠️ {errorMsg}
+                  </div>
+                )}
 
-            <div className="or-divider">Or join a friend's room</div>
+                <div className="name-input-group">
+                  <label>Multiplayer & Bots</label>
+                  <div className="menu-actions" style={{ marginTop: '0rem' }}>
+                    <button className="btn-gold" onClick={startSinglePlayerLobby}>
+                      🤖 Play vs Bots
+                    </button>
+                    <button className="btn-primary" onClick={createOnlineRoom}>
+                      🌐 Create Room
+                    </button>
+                  </div>
+                </div>
 
-            <div className="room-join-panel">
-              <input
-                type="text"
-                placeholder="Enter 4-Letter Room Code"
-                value={roomCodeInput}
-                onChange={(e) => setRoomCodeInput(e.target.value.slice(0, 4))}
-                maxLength={4}
-              />
-              <button className="btn-primary" onClick={joinOnlineRoom}>
-                Join Game
-              </button>
+                <div className="or-divider">Or join a friend's room</div>
+
+                <div className="room-join-panel">
+                  <input
+                    type="text"
+                    placeholder="Enter 4-Letter Room Code"
+                    value={roomCodeInput}
+                    onChange={(e) => setRoomCodeInput(e.target.value.slice(0, 4))}
+                    maxLength={4}
+                  />
+                  <button className="btn-primary" onClick={joinOnlineRoom}>
+                    Join Game
+                  </button>
+                </div>
+
+                {/* Server Settings (Custom address deployment) */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', width: '100%', marginTop: '0.25rem' }}>
+                  <button
+                    type="button"
+                    className="btn-utility"
+                    style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: '0.8rem', padding: 0, cursor: 'pointer', textAlign: 'left', width: 'fit-content' }}
+                    onClick={() => setCustomServerVisible(!customServerVisible)}
+                  >
+                    ⚙️ {customServerVisible ? 'Hide Server Settings' : 'Custom Server Settings'}
+                  </button>
+                  {customServerVisible && (
+                    <input
+                      type="text"
+                      className="server-settings-input"
+                      placeholder="Server URL (e.g. http://localhost:3001)"
+                      value={serverUrl}
+                      onChange={(e) => setServerUrl(e.target.value)}
+                    />
+                  )}
+                </div>
+              </div>
             </div>
           </div>
         </div>

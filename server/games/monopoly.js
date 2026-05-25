@@ -817,7 +817,17 @@ function handleBankruptcyResolution(room, player, io) {
     // Advance turn
     room.turnIndex = getNextActiveTurnIndex(room);
     room.monopolyPhase = 'roll';
+    
+    // Reset rollCount and doublesRolled for the next active player
+    const nextPlayer = room.players[room.turnIndex];
+    if (nextPlayer) {
+      nextPlayer.rollCount = 0;
+      nextPlayer.doublesRolled = false;
+    }
   }
+
+  // Broadcast the update to all clients so they sync and trigger bot logic/UI updates
+  broadcastGameUpdate(room, io);
 }
 
 export function handleAction(room, socket, action, payload, io) {

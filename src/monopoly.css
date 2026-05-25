@@ -106,6 +106,57 @@
   margin-bottom: 0.5rem !important;
 }
 
+/* High Legibility Monopoly Light Theme Game Mode Cards */
+.theme-monopoly .mode-card {
+  background: #ffffff !important;
+  border: 1px solid rgba(15, 23, 42, 0.12) !important;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.04) !important;
+}
+
+.theme-monopoly .mode-card:hover {
+  background: #f8fafc !important;
+  border-color: rgba(15, 23, 42, 0.24) !important;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.06) !important;
+}
+
+.theme-monopoly .mode-card.active {
+  background: #ffffff !important;
+}
+
+.theme-monopoly .mode-card-title {
+  color: #0f172a !important;
+}
+
+.theme-monopoly .mode-card-desc {
+  color: #475569 !important; /* highly legible dark slate grey */
+}
+
+/* Selected states colors in Monopoly theme */
+.theme-monopoly .mode-card.active-capsa {
+  border: 2px solid var(--accent-gold) !important;
+  box-shadow: 0 0 14px rgba(251, 191, 36, 0.25) !important;
+}
+.theme-monopoly .mode-card.active-capsa .mode-card-title {
+  color: var(--accent-gold) !important;
+}
+
+.theme-monopoly .mode-card.active-uno {
+  border: 2px solid var(--primary) !important;
+  box-shadow: 0 0 14px rgba(139, 92, 246, 0.25) !important;
+}
+.theme-monopoly .mode-card.active-uno .mode-card-title {
+  color: var(--primary) !important;
+}
+
+.theme-monopoly .mode-card.active-monopoly {
+  border: 2px solid #10b981 !important;
+  box-shadow: 0 0 16px rgba(16, 185, 129, 0.28) !important;
+}
+.theme-monopoly .mode-card.active-monopoly .mode-card-title {
+  color: #059669 !important; /* darker green for strong readability in light theme */
+}
+
+
 /* Join Game Button: Red */
 .theme-monopoly .room-join-panel .btn-primary {
   background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%) !important;
