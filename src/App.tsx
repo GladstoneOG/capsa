@@ -5129,6 +5129,8 @@ export default function App() {
                       <option value={2000}>$2000</option>
                       <option value={2500}>$2500</option>
                       <option value={3000}>$3000</option>
+                      <option value={5000}>$5000</option>
+                      <option value={10000}>$10000</option>
                     </select>
                   ) : (
                     <span style={{ fontWeight: 'bold' }}>
