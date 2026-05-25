@@ -1234,7 +1234,7 @@ input:checked + .slider:before {
 
 /* Overlapping stacked cards */
 .fanned-card-wrapper {
-  margin-left: -22px; /* overlaps cards */
+  margin-left: -7px; /* overlaps cards fanned out by 30% more (visible width increased from 50px to 65px) */
   transition: margin 0.2s ease;
   position: relative;
 }
@@ -1256,8 +1256,8 @@ input:checked + .slider:before {
 
 .fanned-card-wrapper:hover {
   z-index: 100;
-  margin-right: 10px;
-  margin-left: -12px;
+  margin-right: 5px;
+  margin-left: -2px;
 }
 
 /* ==================== Action Controls Panel ==================== */
@@ -1613,12 +1613,16 @@ input:checked + .slider:before {
   }
 
   .fanned-card-wrapper {
-    margin-left: -20px;
+    margin-left: -10px; /* fanned out by 30% more (visible width increased from 32px to 42px) */
   }
 
   .fanned-card-wrapper:hover {
     margin-right: 5px;
-    margin-left: -12px;
+    margin-left: -5px;
+  }
+
+  .player-hand-fan.is-dragging-active .fanned-card-wrapper {
+    margin-left: -10px !important;
   }
 
   .table-cards-pool {
@@ -2077,7 +2081,7 @@ input:checked + .slider:before {
 /* Disable hover shifting and transitions during drag */
 .player-hand-fan.is-dragging-active .fanned-card-wrapper {
   transition: none !important;
-  margin-left: -22px !important;
+  margin-left: -7px !important;
   margin-right: 0 !important;
 }
 .player-hand-fan.is-dragging-active .fanned-card-wrapper:first-child {
@@ -2829,12 +2833,12 @@ input:checked + .slider:before {
   }
 
   .fanned-card-wrapper {
-    margin-left: -25px;
+    margin-left: -20px; /* fanned out by 30% more (visible width increased from 17px to 22px) */
   }
 
   .fanned-card-wrapper:hover {
-    margin-right: 4px;
-    margin-left: -18px;
+    margin-right: 5px;
+    margin-left: -15px;
   }
 
   .playing-card.selected {
@@ -2842,7 +2846,7 @@ input:checked + .slider:before {
   }
 
   .player-hand-fan.is-dragging-active .fanned-card-wrapper {
-    margin-left: -25px !important;
+    margin-left: -20px !important;
   }
 
   /* Hide desktop inline controls on mobile */
@@ -3166,7 +3170,11 @@ input:checked + .slider:before {
   }
 
   .fanned-card-wrapper {
-    margin-left: -15px;
+    margin-left: -9px; /* fanned out by 30% more (visible width increased from 21px to 27px) */
+  }
+
+  .player-hand-fan.is-dragging-active .fanned-card-wrapper {
+    margin-left: -9px !important;
   }
 
   .playing-card.selected {
@@ -3246,7 +3254,7 @@ input:checked + .slider:before {
   .fanned-card-wrapper:hover {
     z-index: auto;
     margin-right: 0;
-    margin-left: -22px;
+    margin-left: -7px;
   }
 
   .fanned-card-wrapper:first-child:hover {
