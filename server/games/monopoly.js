@@ -374,6 +374,14 @@ function handleLandedAction(room, player, diceSum, io, chanceDoubleMultiplier = 
   const isGetRich = room.rules && room.rules.ruleset === 'Get Rich';
   
   if (tile.type === 'go') {
+    if (isGetRich) {
+      const ownedProps = room.monopolyBoard.filter(t => t.type === 'property' && t.owner === player.id && t.houses < 5 && !t.mortgaged);
+      if (ownedProps.length > 0) {
+        addSystemChatMessage(room, io, `🎯 ${player.name} landed exactly on GO and can build once on any owned property!`);
+        room.monopolyPhase = 'go_build_select';
+        return;
+      }
+    }
     setEndTurnPhase(room, player, io);
     return;
   }
@@ -412,7 +420,7 @@ function handleLandedAction(room, player, diceSum, io, chanceDoubleMultiplier = 
       triggerPayment(room, player, owner, rentAmount, io);
 
       // Get Rich: After paying rent, offer forced acquisition
-      if (isGetRich && room.monopolyPhase !== 'bankrupt_decision') {
+      if (isGetRich && room.monopolyPhase !== 'bankrupt_decision' && tile.type === 'property') {
         const tileWorth = (tile.price || 0) + (tile.houses || 0) * (tile.housePrice || 0);
         // Cannot force-acquire hotels (houses === 5)
         if (tile.houses < 5 && player.money >= tileWorth) {
@@ -430,6 +438,19 @@ function handleLandedAction(room, player, diceSum, io, chanceDoubleMultiplier = 
   }
 
   if (tile.type === 'tax') {
+    if (isGetRich) {
+      room.monopolyPhase = 'casino_flip';
+      room.casinoState = {
+        playerId: player.id,
+        tileIndex: tile.index,
+        round: 1,
+        status: 'pending_flip',
+        payout: 200,
+        result: null
+      };
+      addSystemChatMessage(room, io, `🎰 ${player.name} landed on ${tile.name} (Casino) and must flip the coin!`);
+      return;
+    }
     addSystemChatMessage(room, io, `${player.name} landed on ${tile.name} and owes the bank $${tile.price}.`);
     triggerPayment(room, player, null, tile.price, io);
     return;
@@ -1123,6 +1144,9 @@ export function handleAction(room, socket, action, payload, io) {
         
         updateNetWorth(room, player.id);
 
+        const someoneWon = checkGetRichSpecialWins(room, io);
+        if (someoneWon) return;
+
         const isGetRich = room.rules && room.rules.ruleset === 'Get Rich';
         if (isGetRich && tile.type === 'property') {
           room.monopolyPhase = 'landed_build';
@@ -1577,14 +1601,14 @@ export function handleAction(room, socket, action, payload, io) {
       updateNetWorth(room, player.id);
       updateNetWorth(room, prevOwner.id);
       room.pendingForceAcquire = null;
+
+      const someoneWon = checkGetRichSpecialWins(room, io);
+      if (someoneWon) return;
+
       // Set lastActionDetail so client can show "Acquired!" label
       room.lastActionDetail = { type: 'force-acquire', tileIndex: fa.tileIndex };
-      if (faTile.houses === 4) {
-        room.monopolyPhase = 'landed_build';
-        room.landedBuildMaxHouses = 5;
-      } else {
-        setEndTurnPhase(room, player, io);
-      }
+      room.monopolyPhase = 'landed_build';
+      room.landedBuildMaxHouses = faTile.houses === 4 ? 5 : 4;
       broadcastGameUpdate(room, io);
       break;
     }
@@ -1624,7 +1648,7 @@ export function handleAction(room, socket, action, payload, io) {
         // Get Rich: Check forced acquisition opportunity after rent
         if (room.monopolyPhase !== 'bankrupt_decision') {
           const drTile = room.monopolyBoard[drDebtor.position];
-          if (drTile && drTile.houses < 5) {
+          if (drTile && drTile.houses < 5 && drTile.type === 'property') {
             const tileWorth = (drTile.price || 0) + (drTile.houses || 0) * (drTile.housePrice || 0);
             if (drDebtor.money >= tileWorth) {
               if (drCreditor.angelCards > 0) {
@@ -1701,6 +1725,145 @@ export function handleAction(room, socket, action, payload, io) {
       if (room.monopolyPhase !== 'landed_build') return;
       setEndTurnPhase(room, player, io);
       broadcastGameUpdate(room, io);
+      break;
+    }
+
+    case 'go-build': {
+      if (room.monopolyPhase !== 'go_build_select') return;
+      const isGetRich = room.rules && room.rules.ruleset === 'Get Rich';
+      if (!isGetRich) return;
+      const tileIndex = payload;
+      const tile = room.monopolyBoard[tileIndex];
+      if (tile && tile.type === 'property' && tile.owner === player.id && !tile.mortgaged && tile.houses < 5) {
+        if (player.money >= tile.housePrice) {
+          player.money -= tile.housePrice;
+          tile.houses += 1;
+          const buildName = (tile.houses === 5) ? 'Hotel!' : 'house';
+          addSystemChatMessage(room, io, `🧱 ${player.name} built a ${buildName} on ${tile.name} via GO landing bonus for $${tile.housePrice}.`);
+          updateNetWorth(room, player.id);
+          
+          const someoneWon = checkGetRichSpecialWins(room, io);
+          if (someoneWon) return;
+          
+          setEndTurnPhase(room, player, io);
+          broadcastGameUpdate(room, io);
+        }
+      }
+      break;
+    }
+
+    case 'go-build-skip': {
+      if (room.monopolyPhase !== 'go_build_select') return;
+      const isGetRich = room.rules && room.rules.ruleset === 'Get Rich';
+      if (!isGetRich) return;
+      setEndTurnPhase(room, player, io);
+      broadcastGameUpdate(room, io);
+      break;
+    }
+
+    case 'casino-flip': {
+      if (room.monopolyPhase !== 'casino_flip' || !room.casinoState) return;
+      if (room.casinoState.status !== 'pending_flip') return;
+
+      room.casinoState.status = 'flipping';
+      const isWin = Math.random() >= 0.5;
+      room.casinoState.result = isWin ? 'win' : 'lose';
+
+      addSystemChatMessage(room, io, `🎰 Coin is in the air...`);
+      broadcastGameUpdate(room, io);
+
+      setTimeout(() => {
+        if (room.casinoState && room.casinoState.status === 'flipping') {
+          const finalResult = room.casinoState.result;
+          if (finalResult === 'win') {
+            room.casinoState.status = 'won';
+            room.monopolyPhase = 'casino_collect_or_push';
+            addSystemChatMessage(room, io, `🏆 Coin landed on WIN! ${player.name} won $${room.casinoState.payout}!`);
+            
+            if (room.casinoState.round === 3) {
+              const jackpot = 800;
+              player.money += jackpot;
+              room.casinoState.status = 'collected';
+              addSystemChatMessage(room, io, `🎰 JACKPOT! ${player.name} collected $${jackpot} total casino winnings!`);
+              updateNetWorth(room, player.id);
+              room.casinoState = null;
+              setEndTurnPhase(room, player, io);
+            }
+          } else {
+            room.casinoState.status = 'lost';
+            const lossAmount = room.casinoState.payout;
+            addSystemChatMessage(room, io, `💀 Coin landed on LOSE! ${player.name} lost $${lossAmount}!`);
+            room.casinoState = null;
+            triggerPayment(room, player, null, lossAmount, io);
+          }
+          broadcastGameUpdate(room, io);
+        }
+      }, 2200);
+
+      break;
+    }
+
+    case 'casino-collect': {
+      if (room.monopolyPhase !== 'casino_collect_or_push' || !room.casinoState) return;
+      if (room.casinoState.status !== 'won') return;
+
+      const winnings = room.casinoState.payout;
+      player.money += winnings;
+      room.casinoState.status = 'collected';
+      addSystemChatMessage(room, io, `💰 ${player.name} collected $${winnings} casino winnings!`);
+      updateNetWorth(room, player.id);
+      room.casinoState = null;
+      setEndTurnPhase(room, player, io);
+      broadcastGameUpdate(room, io);
+      break;
+    }
+
+    case 'casino-push': {
+      if (room.monopolyPhase !== 'casino_collect_or_push' || !room.casinoState) return;
+      if (room.casinoState.status !== 'won') return;
+
+      const nextRound = room.casinoState.round + 1;
+      const nextPayout = nextRound === 2 ? 400 : 800;
+
+      room.casinoState.round = nextRound;
+      room.casinoState.payout = nextPayout;
+      room.casinoState.status = 'flipping';
+      const isWin = Math.random() >= 0.5;
+      room.casinoState.result = isWin ? 'win' : 'lose';
+      room.monopolyPhase = 'casino_flip';
+
+      addSystemChatMessage(room, io, `🎲 ${player.name} pushes their luck to Round ${nextRound} for a chance to win $${nextPayout}!`);
+      addSystemChatMessage(room, io, `🎰 Coin is in the air...`);
+      broadcastGameUpdate(room, io);
+
+      setTimeout(() => {
+        if (room.casinoState && room.casinoState.status === 'flipping') {
+          const finalResult = room.casinoState.result;
+          if (finalResult === 'win') {
+            room.casinoState.status = 'won';
+            room.monopolyPhase = 'casino_collect_or_push';
+            addSystemChatMessage(room, io, `🏆 Coin landed on WIN! ${player.name} won $${room.casinoState.payout}!`);
+            
+            if (room.casinoState.round === 3) {
+              const jackpot = 800;
+              player.money += jackpot;
+              room.casinoState.status = 'collected';
+              addSystemChatMessage(room, io, `🎰 JACKPOT! ${player.name} collected $${jackpot} total casino winnings!`);
+              updateNetWorth(room, player.id);
+              room.casinoState = null;
+              setEndTurnPhase(room, player, io);
+            }
+          } else {
+            room.casinoState.status = 'lost';
+            const lossAmount = room.casinoState.payout;
+            addSystemChatMessage(room, io, `💀 Coin landed on LOSE! ${player.name} lost $${lossAmount}!`);
+            room.casinoState = null;
+            triggerPayment(room, player, null, lossAmount, io);
+          }
+          broadcastGameUpdate(room, io);
+        }
+      }, 2200);
+
       break;
     }
 
@@ -1879,6 +2042,10 @@ export function handleAction(room, socket, action, payload, io) {
 
       addSystemChatMessage(room, io, `🤝 Trade accepted! Assets exchanged between ${sender.name} and ${receiver.name}.`);
       room.activeTrade = null;
+
+      const someoneWon = checkGetRichSpecialWins(room, io);
+      if (someoneWon) return;
+      room.activeTrade = null;
       broadcastGameUpdate(room, io);
       break;
     }
@@ -1928,4 +2095,62 @@ export function handleAction(room, socket, action, payload, io) {
       break;
     }
   }
+}
+
+function checkGetRichSpecialWins(room, io) {
+  const isGetRich = room.rules && room.rules.ruleset === 'Get Rich';
+  if (!isGetRich) return false;
+
+  const activePlayers = room.players.filter(p => !p.bankrupt);
+  for (const player of activePlayers) {
+    const railroads = [5, 15, 25, 35];
+    const utilities = [12, 28];
+    const ownsAllTourism = railroads.every(idx => room.monopolyBoard[idx] && room.monopolyBoard[idx].owner === player.id) &&
+                           utilities.every(idx => room.monopolyBoard[idx] && room.monopolyBoard[idx].owner === player.id);
+
+    if (ownsAllTourism) {
+      declareGetRichWinner(room, player, 'Tourism Win (owns all tourism and railway spots)', io);
+      return true;
+    }
+
+    const bottomLine = [1, 3, 5, 6, 8, 9];
+    const leftLine = [11, 12, 13, 14, 15, 16, 18, 19];
+    const topLine = [21, 23, 24, 25, 26, 27, 28, 29];
+    const rightLine = [31, 32, 34, 35, 37, 39];
+
+    const ownsBottom = bottomLine.every(idx => room.monopolyBoard[idx] && room.monopolyBoard[idx].owner === player.id);
+    const ownsLeft = leftLine.every(idx => room.monopolyBoard[idx] && room.monopolyBoard[idx].owner === player.id);
+    const ownsTop = topLine.every(idx => room.monopolyBoard[idx] && room.monopolyBoard[idx].owner === player.id);
+    const ownsRight = rightLine.every(idx => room.monopolyBoard[idx] && room.monopolyBoard[idx].owner === player.id);
+
+    if (ownsBottom || ownsLeft || ownsTop || ownsRight) {
+      declareGetRichWinner(room, player, 'Line Win (owns all ownable properties on one side)', io);
+      return true;
+    }
+  }
+  return false;
+}
+
+function declareGetRichWinner(room, winner, winReason, io) {
+  room.gameState = 'gameover';
+  addSystemChatMessage(room, io, `🏆 ${winner.name} achieved an instant victory via ${winReason}! Victory is theirs! 🏆`);
+
+  const others = room.players.filter(p => p.id !== winner.id);
+  others.sort((a, b) => {
+    if (a.bankrupt && !b.bankrupt) return 1;
+    if (!a.bankrupt && b.bankrupt) return -1;
+    return b.netWorth - a.netWorth;
+  });
+
+  room.players.forEach(p => {
+    if (p.id === winner.id) {
+      p.finishRank = 1;
+    } else {
+      const idx = others.findIndex(sa => sa.id === p.id);
+      p.finishRank = idx + 2;
+    }
+    p.score = p.netWorth;
+  });
+
+  io.to(room.code).emit('round-over', getSanitizedRoomState(room, ''));
 }

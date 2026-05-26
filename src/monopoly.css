@@ -2292,8 +2292,6 @@
   position: absolute;
   width: 64px;
   height: 32px;
-  background: linear-gradient(135deg, #a7f3d0 0%, #86efac 100%);
-  border: 1.5px solid #047857;
   border-radius: 4px;
   box-shadow: 0 5px 12px rgba(0, 0, 0, 0.4);
   display: flex;
@@ -3922,4 +3920,161 @@
 
 .monopoly-dev-console-input::placeholder {
   color: rgba(16, 185, 129, 0.4);
+}
+
+/* ==================== Casino Premium Coin Flip Animations ==================== */
+.casino-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.85);
+  backdrop-filter: blur(10px);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 9999;
+}
+
+.casino-card {
+  background: rgba(20, 20, 25, 0.95);
+  border: 3px solid rgba(251, 191, 36, 0.8);
+  border-radius: 24px;
+  padding: 32px;
+  width: 90%;
+  max-width: 440px;
+  box-shadow: 0 0 50px rgba(251, 191, 36, 0.35);
+  text-align: center;
+  color: white;
+  animation: modal-zoom-in 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+@keyframes modal-zoom-in {
+  0% { transform: scale(0.8); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+.casino-title {
+  font-family: 'Outfit', sans-serif;
+  font-size: 2rem;
+  font-weight: 900;
+  color: #fbbf24;
+  letter-spacing: 2px;
+  text-shadow: 0 0 10px rgba(251, 191, 36, 0.6);
+  margin-bottom: 8px;
+  text-transform: uppercase;
+}
+
+.casino-subtitle {
+  font-size: 0.85rem;
+  color: #94a3b8;
+  margin-bottom: 24px;
+}
+
+/* 3D Coin CSS */
+.coin-container {
+  width: 120px;
+  height: 120px;
+  margin: 0 auto 30px;
+  perspective: 1000px;
+}
+
+.coin-3d {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  transform-style: preserve-3d;
+  transform: rotateY(0deg);
+  transition: transform 0.1s;
+}
+
+.coin-3d.flipping {
+  animation: coin-flip-animation 2.2s cubic-bezier(0.2, 0.85, 0.35, 1) forwards;
+}
+
+.coin-3d.won-state {
+  transform: rotateY(0deg);
+}
+
+.coin-3d.lost-state {
+  transform: rotateY(180deg);
+}
+
+.coin-side {
+  width: 100%;
+  height: 100%;
+  position: absolute;
+  border-radius: 50%;
+  backface-visibility: hidden;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-family: 'Outfit', sans-serif;
+  font-size: 1.5rem;
+  font-weight: 900;
+  border: 5px solid #d97706;
+  box-shadow: 0 0 20px rgba(217, 119, 6, 0.4);
+}
+
+.coin-front {
+  background: radial-gradient(circle, #fbbf24 0%, #d97706 100%);
+  color: #1e1b4b;
+  transform: rotateY(0deg);
+}
+
+.coin-back {
+  background: radial-gradient(circle, #475569 0%, #0f172a 100%);
+  color: #ef4444;
+  border-color: #0f172a;
+  transform: rotateY(180deg);
+}
+
+.coin-crown {
+  font-size: 2.5rem;
+  margin-bottom: 4px;
+}
+
+@keyframes coin-flip-animation {
+  0% { transform: rotateY(0deg) rotateX(0); }
+  100% { transform: rotateY(var(--coin-final-rotation, 1800deg)) rotateX(0); }
+}
+
+.win-text-effect {
+  animation: win-pulse 1s infinite alternate;
+  font-weight: 900;
+  color: #10b981;
+  text-shadow: 0 0 10px rgba(16, 185, 129, 0.8);
+}
+
+@keyframes win-pulse {
+  0% { transform: scale(1); }
+  100% { transform: scale(1.15); }
+}
+
+.lose-shake-effect {
+  animation: lose-shake 0.5s ease-in-out;
+  color: #ef4444;
+}
+
+@keyframes lose-shake {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-8px); }
+  40%, 80% { transform: translateX(8px); }
+}
+
+.confetti-shimmer {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+  background: radial-gradient(circle, rgba(251, 191, 36, 0.15) 0%, transparent 70%);
+  animation: shimmer-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes shimmer-pulse {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 0.8; }
 }

@@ -73,6 +73,7 @@ interface MonopolyTableProps {
   landedBuildMaxHouses?: number;
   monopolyTurnCount?: number;
   tradeRejectedName?: string | null;
+  casinoState?: any | null;
 }
 
 // Maps board index to grid row and column (1-indexed CSS Grid)
@@ -170,7 +171,8 @@ export const MonopolyTable: React.FC<MonopolyTableProps> = ({
   pendingRent = null,
   landedBuildMaxHouses = 4,
   monopolyTurnCount = 0,
-  tradeRejectedName = null
+  tradeRejectedName = null,
+  casinoState = null
 }) => {
   const [selectedDeedIndex, setSelectedDeedIndex] = useState<number | null>(null);
   const [tradeBoardSelectionMode, setTradeBoardSelectionMode] = useState<'me' | 'them' | null>(null);
@@ -195,6 +197,7 @@ export const MonopolyTable: React.FC<MonopolyTableProps> = ({
   const rollIntervalRef = useRef<any | null>(null);
   const [flyingBills, setFlyingBills] = useState<{
     id: string;
+    val: number;
     startX: number;
     startY: number;
     startZ: number;
@@ -433,12 +436,35 @@ export const MonopolyTable: React.FC<MonopolyTableProps> = ({
     const startCoords = getPlayerStackCoords(fromIdx);
     const endCoords = getPlayerStackCoords(toIdx);
 
-    // Determine bill count based on amount (min 3, max 8)
-    const billCount = Math.min(8, Math.max(3, Math.floor(amount / 100)));
+    // Determine realistic denomination bills to spawn based on the amount
+    let tempAmount = amount;
+    const denominations = [500, 100, 50, 10];
+    const billsToSpawn: number[] = [];
+
+    for (const denom of denominations) {
+      const count = Math.floor(tempAmount / denom);
+      if (count > 0) {
+        for (let c = 0; c < count; c++) {
+          billsToSpawn.push(denom);
+        }
+        tempAmount %= denom;
+      }
+    }
+
+    // If it's less than $10, or somehow empty, default to at least one $10 bill
+    if (billsToSpawn.length === 0) {
+      billsToSpawn.push(10);
+    }
+
+    // Use the actual denominations directly without capping or padding limits
+    const finalBillVals = billsToSpawn;
+
+    const billCount = finalBillVals.length;
     const newBills: any[] = [];
 
     for (let i = 0; i < billCount; i++) {
       const id = `bill_${Date.now()}_${Math.random()}_${i}`;
+      const val = finalBillVals[i];
 
       const offsetStart = {
         x: (Math.random() - 0.5) * 50,
@@ -479,6 +505,7 @@ export const MonopolyTable: React.FC<MonopolyTableProps> = ({
 
       newBills.push({
         id,
+        val,
         startX: sX,
         startY: sY,
         startZ: sZ,
@@ -663,6 +690,14 @@ export const MonopolyTable: React.FC<MonopolyTableProps> = ({
   // Start game curtain & countdown intro cinematic sweep
   useEffect(() => {
     if (gameState === 'playing') {
+      setVisualPositions({});
+      Object.keys(hopTimersRef.current).forEach(id => {
+        clearTimeout(hopTimersRef.current[id]);
+      });
+      hopTimersRef.current = {};
+      hopTargetsRef.current = {};
+      setMovingPlayerSteps({});
+
       setIntroTransitionActive(true);
       setCurtainOpen(false); // Make sure curtains start completely closed
 
@@ -1139,7 +1174,10 @@ export const MonopolyTable: React.FC<MonopolyTableProps> = ({
 
           // Check if landed on a tax tile (Income Tax or Luxury Tax)
           if (tile.type === 'tax') {
-            addText(currentTilePos, `${tile.name}!`, 'rent');
+            const isGetRich = rules && rules.ruleset === 'Get Rich';
+            if (!isGetRich) {
+              addText(currentTilePos, `${tile.name}!`, 'rent');
+            }
           }
         }
       }
@@ -1425,7 +1463,8 @@ export const MonopolyTable: React.FC<MonopolyTableProps> = ({
   }, [defaultCameraScale, isOverview, isCameraManual, isDragging]);
 
   // Animation state calculation & synchronization
-  const isAnimating = isDiceRolling || Object.keys(hopTimersRef.current).length > 0 || isCameraLocked || isJailingInProgress || !!jailAnimationPlayerId;
+  const isAnyoneMoving = players.some(p => visualPositions[p.id] !== undefined && visualPositions[p.id] !== p.position);
+  const isAnimating = isDiceRolling || Object.keys(hopTimersRef.current).length > 0 || isCameraLocked || isJailingInProgress || !!jailAnimationPlayerId || isAnyoneMoving;
 
   useEffect(() => {
     if (onAnimationStateChange) {
@@ -1651,6 +1690,16 @@ export const MonopolyTable: React.FC<MonopolyTableProps> = ({
       );
     }
     if (tile.type === 'tax') {
+      const isGetRich = rules && rules.ruleset === 'Get Rich';
+      if (isGetRich) {
+        return (
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', width: '100%' }}>
+            <span style={{ fontSize: '1.25rem' }}>🎰</span>
+            <span style={{ fontSize: '0.55rem', fontWeight: 800, color: '#fbbf24', textAlign: 'center', width: '100%', display: 'block' }}>CASINO</span>
+            <span style={{ fontSize: '0.45rem', color: '#fbbf24', fontWeight: 'bold', textAlign: 'center', width: '100%', display: 'block' }}>Flip to Win/Lose</span>
+          </div>
+        );
+      }
       const isIncome = tile.name.includes('Income');
       return (
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', width: '100%' }}>
@@ -1736,7 +1785,9 @@ export const MonopolyTable: React.FC<MonopolyTableProps> = ({
             else if (idx === 2) { stackStyle = { bottom: '-110px', left: '50%', transform: 'translateX(-50%)' }; }
             else if (idx === 3) { stackStyle = { top: '50%', left: '-200px', transform: 'translateY(-50%) rotateZ(-90deg)' }; }
 
-            const cash = p.money || 0;
+            const cash = (activeChanges[p.id] !== undefined)
+              ? (p.money || 0)
+              : (displayMoney[p.id] !== undefined ? displayMoney[p.id] : (p.money || 0));
 
             // Dynamic realistic Monopoly cash breakdown by denomination
             let tempCash = cash;
@@ -1887,7 +1938,7 @@ export const MonopolyTable: React.FC<MonopolyTableProps> = ({
           {flyingBills.map(bill => (
             <div
               key={bill.id}
-              className="flying-bill"
+              className={`flying-bill table-bill val-${bill.val}`}
               style={{
                 left: 0,
                 top: 0,
@@ -1906,7 +1957,15 @@ export const MonopolyTable: React.FC<MonopolyTableProps> = ({
                 animationDelay: `${bill.delay}ms`,
               }}
             >
-              <span className="table-bill-text">$100</span>
+              <div className="table-bill-inner">
+                <div className="table-bill-ellipse">
+                  <span className="table-bill-center-val">M</span>
+                </div>
+                <span className="table-bill-corner tl">{bill.val}</span>
+                <span className="table-bill-corner tr">{bill.val}</span>
+                <span className="table-bill-corner bl">{bill.val}</span>
+                <span className="table-bill-corner br">{bill.val}</span>
+              </div>
             </div>
           ))}
 
@@ -2331,6 +2390,31 @@ export const MonopolyTable: React.FC<MonopolyTableProps> = ({
                           👑 x2 Rent
                         </div>
                       )}
+                    </div>
+                  )}
+
+                  {/* Festival crown indicator on any boosted tile */}
+                  {(tile as any).festivalTurns > 0 && !tile.mortgaged && (
+                    <div
+                      style={{
+                        position: 'absolute',
+                        top: '4px',
+                        left: '50%',
+                        transform: 'translateX(-50%) translateZ(2px)',
+                        background: 'linear-gradient(135deg, #fbbf24 0%, #d97706 100%)',
+                        color: 'white',
+                        fontSize: '0.5rem',
+                        fontWeight: 900,
+                        padding: '2px 4px',
+                        borderRadius: '4px',
+                        border: '1.2px solid #7c2d12',
+                        whiteSpace: 'nowrap',
+                        boxShadow: '0 2px 5px rgba(0,0,0,0.3), 0 0 4px #fbbf24',
+                        zIndex: 90,
+                        pointerEvents: 'none'
+                      }}
+                    >
+                      👑 🎉 x2 ({(tile as any).festivalTurns}T)
                     </div>
                   )}
 
@@ -3624,24 +3708,29 @@ export const MonopolyTable: React.FC<MonopolyTableProps> = ({
                 if (!tile.owner) return 0;
                 if (tile.mortgaged) return 0;
 
+                let rentVal = 0;
                 if (isProp) {
                   const isMonopoly = tile.color ? monopolyColorGroups[tile.color] === tile.owner : false;
                   if (tile.houses === 0) {
-                    return isMonopoly ? (tile.rent?.[0] || 0) * 2 : (tile.rent?.[0] || 0);
+                    rentVal = isMonopoly ? (tile.rent?.[0] || 0) * 2 : (tile.rent?.[0] || 0);
+                  } else {
+                    rentVal = tile.rent?.[tile.houses] || 0;
                   }
-                  return tile.rent?.[tile.houses] || 0;
-                }
-                if (isRail) {
+                } else if (isRail) {
                   const count = monopolyBoard.filter(t => t.type === 'railroad' && t.owner === tile.owner).length;
-                  return tile.rent?.[Math.min(count - 1, 3)] || 25;
-                }
-                if (isUtil) {
+                  rentVal = tile.rent?.[Math.min(count - 1, 3)] || 25;
+                } else if (isUtil) {
                   const count = monopolyBoard.filter(t => t.type === 'utility' && t.owner === tile.owner).length;
                   const diceSum = dice[0] + dice[1];
                   const mult = count === 2 ? 10 : 4;
-                  return diceSum * mult;
+                  rentVal = diceSum * mult;
                 }
-                return 0;
+
+                // Apply Festival x2
+                if ((tile as any).festivalTurns && (tile as any).festivalTurns > 0) {
+                  rentVal = rentVal * 2;
+                }
+                return rentVal;
               };
 
               const getRentMathBreakdown = () => {
@@ -3661,43 +3750,41 @@ export const MonopolyTable: React.FC<MonopolyTableProps> = ({
                 }
 
                 const ownerName = players.find(p => p.id === tile.owner)?.name || 'Owner';
+                const hasFestival = (tile as any).festivalTurns && (tile as any).festivalTurns > 0;
+                const festivalMultiplier = hasFestival ? 2 : 1;
 
                 if (isProp) {
                   const isMonopoly = tile.color ? monopolyColorGroups[tile.color] === tile.owner : false;
                   const baseRent = tile.rent?.[0] || 0;
                   if (tile.houses === 0) {
-                    if (isMonopoly) {
-                      return (
-                        <section style={{ display: 'block', padding: '8px', background: 'rgba(16, 185, 129, 0.04)', borderRadius: '6px', fontSize: '0.7rem', color: '#0f172a', border: '1px solid rgba(16, 185, 129, 0.2)', marginTop: '10px', borderBottom: 'none' }}>
-                          <span style={{ fontWeight: 'bold', color: '#10b981', display: 'block', marginBottom: '4px' }}>📊 Rent Calculation Math:</span>
-                          <span style={{ display: 'block', margin: '2px 0' }}>• Base Rent: <strong>${baseRent}</strong></span>
-                          <span style={{ display: 'block', margin: '2px 0' }}>• Group Status: <strong>Monopoly Owned (+100%)</strong></span>
-                          <span style={{ borderTop: '1px dashed rgba(16, 185, 129, 0.2)', display: 'block', marginTop: '4px', paddingTop: '4px', fontWeight: 'bold' }}>
-                            Total Rent = ${baseRent} × 2 = ${baseRent * 2}
-                          </span>
-                        </section>
-                      );
-                    } else {
-                      return (
-                        <section style={{ display: 'block', padding: '8px', background: '#f8fafc', borderRadius: '6px', fontSize: '0.7rem', color: '#0f172a', border: '1px solid #e2e8f0', marginTop: '10px', borderBottom: 'none' }}>
-                          <span style={{ fontWeight: 'bold', color: '#64748b', display: 'block', marginBottom: '4px' }}>📊 Rent Calculation Math:</span>
-                          <span style={{ display: 'block', margin: '2px 0' }}>• Base Rent: <strong>${baseRent}</strong></span>
-                          <span style={{ display: 'block', margin: '2px 0' }}>• Group Status: <strong>No Monopoly</strong></span>
-                          <span style={{ borderTop: '1px dashed #e2e8f0', display: 'block', marginTop: '4px', paddingTop: '4px', fontWeight: 'bold' }}>
-                            Total Rent = ${baseRent}
-                          </span>
-                        </section>
-                      );
-                    }
-                  } else {
-                    const houseText = tile.houses === 5 ? 'Hotel' : `${tile.houses} House${tile.houses > 1 ? 's' : ''}`;
-                    const rentWithHouses = tile.rent?.[tile.houses] || 0;
+                    const preFestivalRent = isMonopoly ? baseRent * 2 : baseRent;
+                    const finalRent = preFestivalRent * festivalMultiplier;
                     return (
                       <section style={{ display: 'block', padding: '8px', background: 'rgba(16, 185, 129, 0.04)', borderRadius: '6px', fontSize: '0.7rem', color: '#0f172a', border: '1px solid rgba(16, 185, 129, 0.2)', marginTop: '10px', borderBottom: 'none' }}>
                         <span style={{ fontWeight: 'bold', color: '#10b981', display: 'block', marginBottom: '4px' }}>📊 Rent Calculation Math:</span>
-                        <span style={{ display: 'block', margin: '2px 0' }}>• Upgrades: <strong>{houseText}</strong></span>
+                        <span style={{ display: 'block', margin: '2px 0' }}>• Base Rent: <strong>${baseRent}</strong></span>
+                        <span style={{ display: 'block', margin: '2px 0' }}>• Group Status: <strong>{isMonopoly ? 'Monopoly Owned (+100%)' : 'No Monopoly'}</strong></span>
+                        {hasFestival && (
+                          <span style={{ display: 'block', margin: '2px 0', color: '#d97706' }}>• Festival Boost: <strong>Double Rent Active ({(tile as any).festivalTurns} turns left)</strong></span>
+                        )}
                         <span style={{ borderTop: '1px dashed rgba(16, 185, 129, 0.2)', display: 'block', marginTop: '4px', paddingTop: '4px', fontWeight: 'bold' }}>
-                          Total Rent = ${rentWithHouses}
+                          Total Rent = ${preFestivalRent} {hasFestival ? `× 2 = $${finalRent}` : ''}
+                        </span>
+                      </section>
+                    );
+                  } else {
+                    const houseText = tile.houses === 5 ? 'Hotel' : `${tile.houses} House${tile.houses > 1 ? 's' : ''}`;
+                    const rentWithUpgrades = tile.rent?.[tile.houses] || 0;
+                    const finalRent = rentWithUpgrades * festivalMultiplier;
+                    return (
+                      <section style={{ display: 'block', padding: '8px', background: 'rgba(16, 185, 129, 0.04)', borderRadius: '6px', fontSize: '0.7rem', color: '#0f172a', border: '1px solid rgba(16, 185, 129, 0.2)', marginTop: '10px', borderBottom: 'none' }}>
+                        <span style={{ fontWeight: 'bold', color: '#10b981', display: 'block', marginBottom: '4px' }}>📊 Rent Calculation Math:</span>
+                        <span style={{ display: 'block', margin: '2px 0' }}>• Upgrades: <strong>{houseText} (${rentWithUpgrades})</strong></span>
+                        {hasFestival && (
+                          <span style={{ display: 'block', margin: '2px 0', color: '#d97706' }}>• Festival Boost: <strong>Double Rent Active ({(tile as any).festivalTurns} turns left)</strong></span>
+                        )}
+                        <span style={{ borderTop: '1px dashed rgba(16, 185, 129, 0.2)', display: 'block', marginTop: '4px', paddingTop: '4px', fontWeight: 'bold' }}>
+                          Total Rent = ${rentWithUpgrades} {hasFestival ? `× 2 = $${finalRent}` : ''}
                         </span>
                       </section>
                     );
@@ -3706,14 +3793,18 @@ export const MonopolyTable: React.FC<MonopolyTableProps> = ({
 
                 if (isRail) {
                   const railCount = monopolyBoard.filter(t => t.type === 'railroad' && t.owner === tile.owner).length;
-                  const calculatedRent = tile.rent?.[Math.min(railCount - 1, 3)] || 25;
+                  const baseRent = tile.rent?.[Math.min(railCount - 1, 3)] || 25;
+                  const finalRent = baseRent * festivalMultiplier;
                   return (
                     <section style={{ display: 'block', padding: '8px', background: 'rgba(16, 185, 129, 0.04)', borderRadius: '6px', fontSize: '0.7rem', color: '#0f172a', border: '1px solid rgba(16, 185, 129, 0.2)', marginTop: '10px', borderBottom: 'none' }}>
                       <span style={{ fontWeight: 'bold', color: '#10b981', display: 'block', marginBottom: '4px' }}>📊 Rent Calculation Math:</span>
                       <span style={{ display: 'block', margin: '2px 0' }}>• Railroads owned by {ownerName}: <strong>{railCount} of 4</strong></span>
-                      <span style={{ display: 'block', margin: '2px 0' }}>• Formula: <strong>$25 × 2^(N-1)</strong></span>
+                      <span style={{ display: 'block', margin: '2px 0' }}>• Base Railroad Rent: <strong>${baseRent}</strong></span>
+                      {hasFestival && (
+                        <span style={{ display: 'block', margin: '2px 0', color: '#d97706' }}>• Festival Boost: <strong>Double Rent Active ({(tile as any).festivalTurns} turns left)</strong></span>
+                      )}
                       <span style={{ borderTop: '1px dashed rgba(16, 185, 129, 0.2)', display: 'block', marginTop: '4px', paddingTop: '4px', fontWeight: 'bold' }}>
-                        Total Rent = ${calculatedRent}
+                        Total Rent = ${baseRent} {hasFestival ? `× 2 = $${finalRent}` : ''}
                       </span>
                     </section>
                   );
@@ -3723,14 +3814,19 @@ export const MonopolyTable: React.FC<MonopolyTableProps> = ({
                   const utilCount = monopolyBoard.filter(t => t.type === 'utility' && t.owner === tile.owner).length;
                   const diceSum = dice[0] + dice[1];
                   const mult = utilCount === 2 ? 10 : 4;
+                  const baseRent = diceSum * mult;
+                  const finalRent = baseRent * festivalMultiplier;
                   return (
                     <section style={{ display: 'block', padding: '8px', background: 'rgba(16, 185, 129, 0.04)', borderRadius: '6px', fontSize: '0.7rem', color: '#0f172a', border: '1px solid rgba(16, 185, 129, 0.2)', marginTop: '10px', borderBottom: 'none' }}>
                       <span style={{ fontWeight: 'bold', color: '#10b981', display: 'block', marginBottom: '4px' }}>📊 Rent Calculation Math:</span>
                       <span style={{ display: 'block', margin: '2px 0' }}>• Utilities owned by {ownerName}: <strong>{utilCount} of 2</strong></span>
                       <span style={{ display: 'block', margin: '2px 0' }}>• Dice Sum: <strong>{diceSum}</strong> <span style={{ color: '#64748b' }}>({dice[0]} + {dice[1]})</span></span>
                       <span style={{ display: 'block', margin: '2px 0' }}>• Multiplier: <strong>{mult}x</strong></span>
+                      {hasFestival && (
+                        <span style={{ display: 'block', margin: '2px 0', color: '#d97706' }}>• Festival Boost: <strong>Double Rent Active ({(tile as any).festivalTurns} turns left)</strong></span>
+                      )}
                       <span style={{ borderTop: '1px dashed rgba(16, 185, 129, 0.2)', display: 'block', marginTop: '4px', paddingTop: '4px', fontWeight: 'bold' }}>
-                        Total Rent = {diceSum} × {mult} = ${diceSum * mult}
+                        Total Rent = {diceSum} × {mult} = ${baseRent} {hasFestival ? `× 2 = $${finalRent}` : ''}
                       </span>
                     </section>
                   );
@@ -5183,6 +5279,175 @@ export const MonopolyTable: React.FC<MonopolyTableProps> = ({
             >
               Return to Trade Proposal
             </button>
+          </div>
+        );
+      })()}
+
+      {/* ==================== Casino Premium Coin Flip Modal ==================== */}
+      {!isAnimating && casinoState && (() => {
+        const activeFlippingPlayer = players.find(p => p.id === casinoState.playerId);
+        const isActivePlayerFlipping = casinoState.playerId === playerId;
+        const isFlipping = casinoState.status === 'flipping';
+        const isWon = casinoState.status === 'won';
+        const isLost = casinoState.status === 'lost';
+        const isPending = casinoState.status === 'pending_flip';
+        const coinFinalRotation = casinoState.result === 'win' ? '1800deg' : '1980deg';
+
+        return (
+          <div className="casino-modal-overlay">
+            {isWon && <div className="confetti-shimmer" />}
+            <div className="casino-card">
+              <div className="casino-title">🎰 GET RICH CASINO 🎰</div>
+              <div className="casino-subtitle">
+                {activeFlippingPlayer ? (
+                  <>
+                    Player <strong>{activeFlippingPlayer.name}</strong> is rolling their fortune!
+                  </>
+                ) : (
+                  "Rolling your fortune!"
+                )}
+              </div>
+
+              <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#fbbf24', marginBottom: '20px' }}>
+                Round {casinoState.round} — Target: ${casinoState.payout}
+              </div>
+
+              {/* 3D Coin flip container */}
+              <div className="coin-container">
+                <div 
+                  className={`coin-3d ${isFlipping ? 'flipping' : ''} ${isWon ? 'won-state' : ''} ${isLost ? 'lost-state' : ''}`}
+                  style={{ '--coin-final-rotation': coinFinalRotation } as React.CSSProperties}
+                >
+                  <div className="coin-side coin-front">
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                      <span className="coin-crown">👑</span>
+                      <span style={{ fontSize: '0.9rem', color: '#1e1b4b' }}>WIN</span>
+                    </div>
+                  </div>
+                  <div className="coin-side coin-back">
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                      <span className="coin-crown">💀</span>
+                      <span style={{ fontSize: '0.9rem', color: '#ef4444' }}>LOSE</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Status and Action Buttons */}
+              <div style={{ minHeight: '60px', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', gap: '12px' }}>
+                {isPending && (
+                  <>
+                    {isActivePlayerFlipping ? (
+                      <button 
+                        className="btn-primary roll-glow-animation"
+                        style={{ padding: '12px 28px', borderRadius: '14px', fontWeight: 900, background: 'linear-gradient(135deg, #fbbf24 0%, #d97706 100%)', color: '#1e1b4b', border: 'none', cursor: 'pointer', fontSize: '1rem', width: '100%' }}
+                        onClick={() => onMonopolyAction('casino-flip')}
+                      >
+                        🪙 Flip the Coin!
+                      </button>
+                    ) : (
+                      <div style={{ fontSize: '0.9rem', fontStyle: 'italic', color: '#94a3b8' }}>
+                        Waiting for {activeFlippingPlayer?.name || 'player'} to flip the coin...
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {isFlipping && (
+                  <div style={{ fontSize: '1.1rem', fontWeight: 700, color: '#e2e8f0', animation: 'pulse 1s infinite' }}>
+                    🪙 Coin in the air...
+                  </div>
+                )}
+
+                {isWon && (
+                  <>
+                    <div className="win-text-effect" style={{ fontSize: '1.25rem', marginBottom: '8px' }}>
+                      🎉 WIN! Won +${casinoState.payout}! 🎉
+                    </div>
+                    {isActivePlayerFlipping ? (
+                      <div style={{ display: 'flex', gap: '12px', width: '100%' }}>
+                        <button
+                          className="btn-primary"
+                          style={{ flex: 1, padding: '10px', borderRadius: '10px', fontWeight: 'bold' }}
+                          onClick={() => onMonopolyAction('casino-collect')}
+                        >
+                          💰 Collect ${casinoState.payout}
+                        </button>
+                        {casinoState.round < 3 && (
+                          <button
+                            className="btn-gold"
+                            style={{ flex: 1, padding: '10px', borderRadius: '10px', fontWeight: 'bold', background: 'linear-gradient(135deg, #a78bfa 0%, #7c3aed 100%)', color: 'white', border: 'none' }}
+                            onClick={() => onMonopolyAction('casino-push')}
+                          >
+                            🎲 Push Luck! (Round {casinoState.round + 1})
+                          </button>
+                        )}
+                      </div>
+                    ) : (
+                      <div style={{ fontSize: '0.85rem', fontStyle: 'italic', color: '#94a3b8' }}>
+                        Waiting for {activeFlippingPlayer?.name || 'player'} to make a decision...
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {isLost && (
+                  <div className="lose-shake-effect" style={{ fontSize: '1.25rem', fontWeight: 800 }}>
+                    💀 LOSE! Lost -${casinoState.payout}! 💀
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ==================== GO Landing Free Build Select Modal ==================== */}
+      {!isAnimating && rules.ruleset === 'Get Rich' && monopolyPhase === 'go_build_select' && activePlayer?.id === playerId && (() => {
+        const buildable = monopolyBoard.filter(t => t.type === 'property' && t.owner === playerId && (t.houses || 0) < 5 && !t.mortgaged);
+        return (
+          <div className="casino-modal-overlay">
+            <div className="casino-card" style={{ border: '3px solid #10b981', boxShadow: '0 0 50px rgba(16, 185, 129, 0.35)' }}>
+              <div className="casino-title" style={{ color: '#10b981', textShadow: '0 0 10px rgba(16, 185, 129, 0.6)' }}>🎯 GO LANDING BONUS 🎯</div>
+              <div className="casino-subtitle" style={{ marginBottom: '16px' }}>
+                You landed exactly on GO! You are granted one free build option (paying normal house price) on ANY owned property tile!
+              </div>
+
+              <div style={{ maxHeight: '160px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '20px', width: '100%', background: 'rgba(255,255,255,0.05)', padding: '10px', borderRadius: '12px', boxSizing: 'border-box' }}>
+                {buildable.map(prop => {
+                  const currentHouses = prop.houses || 0;
+                  const buildCost = prop.housePrice || 50;
+                  const isAffordable = activePlayer.money >= buildCost;
+
+                  return (
+                    <div key={prop.index} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', padding: '6px 8px', background: 'rgba(255,255,255,0.05)', borderRadius: '8px', boxSizing: 'border-box' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', flexGrow: 1, textAlign: 'left' }}>
+                        <span style={{ fontSize: '0.8rem', fontWeight: 'bold', color: '#f8fafc' }}>{prop.name}</span>
+                        <span style={{ fontSize: '0.65rem', color: '#94a3b8' }}>
+                          Houses: {currentHouses} | Cost: ${buildCost}
+                        </span>
+                      </div>
+                      <button
+                        className="btn-primary"
+                        style={{ padding: '6px 12px', fontSize: '0.7rem', borderRadius: '6px', cursor: isAffordable ? 'pointer' : 'not-allowed', background: isAffordable ? '#10b981' : '#475569', border: 'none', color: 'white', fontWeight: 'bold' }}
+                        disabled={!isAffordable}
+                        onClick={() => onMonopolyAction('go-build', prop.index)}
+                      >
+                        🧱 {currentHouses === 4 ? 'Build Hotel' : 'Build House'}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <button
+                className="btn-secondary"
+                style={{ width: '100%', padding: '10px', borderRadius: '10px', fontWeight: 'bold', background: '#475569', color: 'white', border: 'none', cursor: 'pointer' }}
+                onClick={() => onMonopolyAction('go-build-skip')}
+              >
+                Skip Bonus
+              </button>
+            </div>
           </div>
         );
       })()}

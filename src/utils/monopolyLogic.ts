@@ -120,6 +120,35 @@ export function getBotMonopolyDecision(
   landedBuildMaxHouses?: number,
   isGetRich?: boolean
 ): { action: string; payload?: any } {
+  if (phase === 'casino_flip') {
+    return { action: 'casino-flip' };
+  }
+
+  if (phase === 'casino_collect_or_push') {
+    const round = auctionState ? auctionState.round : 1;
+    if (round === 1 && botPlayer.money >= 600) {
+      return { action: 'casino-push' };
+    }
+    return { action: 'casino-collect' };
+  }
+
+  if (phase === 'go_build_select') {
+    const ownedProperties = board.filter(t => t.owner === botPlayer.id && t.type === 'property' && !t.mortgaged && (t.houses || 0) < 5);
+    if (ownedProperties.length > 0) {
+      ownedProperties.sort((a, b) => {
+        const aRent = a.rent ? (a.rent[a.houses || 0] || a.rent[0]) : 0;
+        const bRent = b.rent ? (b.rent[b.houses || 0] || b.rent[0]) : 0;
+        return bRent - aRent;
+      });
+      for (const target of ownedProperties) {
+        const housePrice = target.housePrice || 50;
+        if (botPlayer.money >= housePrice) {
+          return { action: 'go-build', payload: target.index };
+        }
+      }
+    }
+    return { action: 'go-build-skip' };
+  }
   
   if (phase === 'jail_decision') {
     if (botPlayer.getOutOfJailCards > 0) {
@@ -378,29 +407,67 @@ export function evaluateBotTrade(
 
 function getBotPropertyValuation(botPlayer: any, tile: TileState, board: TileState[], isGiving: boolean): number {
   const value = tile.price || 100;
-  if (tile.type !== 'property' || !tile.color) {
-    return value;
+  
+  // Calculate Tourism Win proximity
+  const totalRailroadsOwned = board.filter(t => t.type === 'railroad' && t.owner === botPlayer.id).length;
+  const totalUtilitiesOwned = board.filter(t => t.type === 'utility' && t.owner === botPlayer.id).length;
+  const totalTourismOwned = totalRailroadsOwned + totalUtilitiesOwned; // out of 6
+  
+  // Calculate Line Win proximity
+  const bottomLine = [1, 3, 5, 6, 8, 9];
+  const leftLine = [11, 12, 13, 14, 15, 16, 18, 19];
+  const topLine = [21, 23, 24, 25, 26, 27, 28, 29];
+  const rightLine = [31, 32, 34, 35, 37, 39];
+  const lines = [bottomLine, leftLine, topLine, rightLine];
+  const line = lines.find(l => l.includes(tile.index));
+  
+  let multiplier = 1.0;
+  
+  // If railroad or utility (tourism)
+  if (tile.type === 'railroad' || tile.type === 'utility') {
+    if (isGiving) {
+      multiplier = 1.5 + totalTourismOwned * 0.4; // e.g. if we own 4, mult = 3.1
+    } else {
+      multiplier = 2.0 + totalTourismOwned * 0.5; // e.g. if we own 4, mult = 4.0
+    }
+  } else if (tile.type === 'property' && tile.color) {
+    const colorGroup = board.filter(t => t.type === 'property' && t.color === tile.color);
+    const ownedBySelf = colorGroup.filter(t => t.owner === botPlayer.id).length;
+    
+    if (isGiving) {
+      if (ownedBySelf === colorGroup.length) {
+        multiplier = 3.5; // Monopoly is precious
+      } else if (ownedBySelf === colorGroup.length - 1) {
+        multiplier = 2.8; // Almost monopoly!
+      } else if (ownedBySelf > 1) {
+        multiplier = 1.8;
+      }
+    } else {
+      const ownedBySelfNew = ownedBySelf + 1;
+      if (ownedBySelfNew === colorGroup.length) {
+        multiplier = 4.0; // Completes monopoly!
+      } else if (ownedBySelfNew === colorGroup.length - 1) {
+        multiplier = 3.0; // Almost monopoly!
+      } else if (ownedBySelfNew > 1) {
+        multiplier = 2.0;
+      }
+    }
   }
   
-  const colorGroup = board.filter(t => t.type === 'property' && t.color === tile.color);
-  const ownedBySelf = colorGroup.filter(t => t.owner === botPlayer.id).length;
-  
-  if (isGiving) {
-    if (ownedBySelf === colorGroup.length) {
-      return value * 2.0; // Monopoly is precious
+  // Check Line Win proximity and apply the higher multiplier if applicable
+  if (line) {
+    const ownedOnLine = line.filter(idx => board[idx] && board[idx].owner === botPlayer.id).length;
+    const totalOnLine = line.length;
+    if (ownedOnLine >= totalOnLine - 2) { // 1 or 2 tiles away from line win
+      let lineMultiplier = 1.0;
+      if (isGiving) {
+        lineMultiplier = 2.5 + ownedOnLine * 0.5;
+      } else {
+        lineMultiplier = 3.0 + ownedOnLine * 0.6;
+      }
+      multiplier = Math.max(multiplier, lineMultiplier);
     }
-    if (ownedBySelf > 1) {
-      return value * 1.5;
-    }
-    return value;
-  } else {
-    const ownedBySelfNew = ownedBySelf + 1;
-    if (ownedBySelfNew === colorGroup.length) {
-      return value * 2.2; // Completes monopoly!
-    }
-    if (ownedBySelfNew > 1) {
-      return value * 1.6;
-    }
-    return value;
   }
+  
+  return value * multiplier;
 }
