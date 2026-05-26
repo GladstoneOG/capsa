@@ -3087,7 +3087,7 @@ export const MonopolyTable: React.FC<MonopolyTableProps> = ({
                           {isPressing ? '🔥 RELEASE' : '🎲 Hold to Roll'}
                         </button>
                         {/* Power Bar visual */}
-                        <div style={{
+                        <div className="power-bar-container" style={{
                           width: '120px',
                           height: '8px',
                           background: '#1e293b',
@@ -3106,7 +3106,7 @@ export const MonopolyTable: React.FC<MonopolyTableProps> = ({
                                 : 'linear-gradient(to right, #ef4444 0%, #dc2626 100%)'
                           }} />
                         </div>
-                        <div style={{ fontSize: '0.62rem', color: '#94a3b8', fontWeight: 800 }}>
+                        <div className="power-bar-text" style={{ fontSize: '0.62rem', color: '#94a3b8', fontWeight: 800 }}>
                           Power: {powerValue}% ({powerValue <= 33 ? 'Low: 1-4' : powerValue <= 66 ? 'Mid: 5-8' : 'High: 9-12'})
                         </div>
                       </div>
@@ -4454,12 +4454,12 @@ export const MonopolyTable: React.FC<MonopolyTableProps> = ({
           <div className="deed-card-modal-backdrop">
             <div className="player-detail-modal auction-modal" style={{ maxWidth: '520px', borderColor: 'var(--primary)' }}>
               <div className="auction-header" style={{ textAlign: 'center', marginBottom: '15px' }}>
-                <h2 style={{ fontSize: '1.5rem', fontWeight: 900, color: 'var(--accent-gold)' }}>🎲 PROPERTY AUCTION 🎲</h2>
+                <h2 className="auction-title" style={{ fontSize: '1.5rem', fontWeight: 900, color: 'var(--accent-gold)' }}>🎲 PROPERTY AUCTION 🎲</h2>
                 <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>The highest bidder gets the title deed!</p>
               </div>
 
               {/* Auctioned Property Details */}
-              <div style={{ display: 'flex', gap: '15px', background: 'rgba(0,0,0,0.05)', padding: '12px', borderRadius: '12px', marginBottom: '15px', alignItems: 'center' }}>
+              <div className="auction-property-details" style={{ display: 'flex', gap: '15px', background: 'rgba(0,0,0,0.05)', padding: '12px', borderRadius: '12px', marginBottom: '15px', alignItems: 'center' }}>
                 {tile.color ? (
                   <div className="deed-card" style={{ transform: 'scale(0.8)', margin: 0, pointerEvents: 'none' }}>
                     <div className="deed-header">
@@ -4476,7 +4476,7 @@ export const MonopolyTable: React.FC<MonopolyTableProps> = ({
                 )}
                 <div style={{ flexGrow: 1 }}>
                   <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>CURRENT BID</div>
-                  <div style={{ fontSize: '2.5rem', fontWeight: 900, color: '#10b981' }}>${auctionState.highestBid}</div>
+                  <div className="auction-bid-value" style={{ fontSize: '2.5rem', fontWeight: 900, color: '#10b981' }}>${auctionState.highestBid}</div>
                   <div style={{ fontSize: '0.85rem' }}>
                     Highest Bidder: <strong style={{ color: 'var(--text-primary)' }}>{highestBidderName}</strong>
                   </div>
@@ -4484,7 +4484,7 @@ export const MonopolyTable: React.FC<MonopolyTableProps> = ({
               </div>
 
               {/* Financials & Rents Details (Requirement 3) */}
-              <div style={{
+              <div className="auction-property-financials" style={{
                 background: 'rgba(0,0,0,0.02)',
                 border: '1px solid rgba(0,0,0,0.06)',
                 borderRadius: '12px',
@@ -4571,7 +4571,7 @@ export const MonopolyTable: React.FC<MonopolyTableProps> = ({
               {/* Bidder List */}
               <div style={{ marginBottom: '20px' }}>
                 <h4 style={{ fontSize: '0.9rem', marginBottom: '8px', borderBottom: '1px solid rgba(0,0,0,0.05)', paddingBottom: '4px' }}>Bidders In Room</h4>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '8px' }}>
+                <div className="auction-bidders-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '8px' }}>
                   {players.filter(p => !p.bankrupt).map(p => {
                     const isBiddingActive = auctionState.bidders.includes(p.id);
                     const isCurrentBidder = bidderId === p.id;
@@ -4735,7 +4735,7 @@ export const MonopolyTable: React.FC<MonopolyTableProps> = ({
                 🤝 PROPOSE TRADE DEAL
               </h3>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px', maxHeight: '350px', overflowY: 'auto', paddingRight: '5px' }}>
+              <div className="trade-proposal-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px', maxHeight: '350px', overflowY: 'auto', paddingRight: '5px' }}>
                 {/* Offered Side (Left) */}
                 <div style={{ borderRight: '1px solid rgba(0,0,0,0.08)', paddingRight: '10px' }}>
                   <h4 style={{ fontWeight: 'bold', fontSize: '0.95rem', color: '#10b981', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -5014,7 +5014,7 @@ export const MonopolyTable: React.FC<MonopolyTableProps> = ({
                 <strong style={{ color: 'var(--text-primary)' }}>{sender.name}</strong> proposed a trade deal to you:
               </p>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', background: 'rgba(0,0,0,0.03)', padding: '15px', borderRadius: '12px', marginBottom: '20px' }}>
+              <div className="trade-incoming-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', background: 'rgba(0,0,0,0.03)', padding: '15px', borderRadius: '12px', marginBottom: '20px' }}>
                 {/* Offered assets */}
                 <div style={{ borderRight: '1px solid rgba(0,0,0,0.08)', paddingRight: '10px' }}>
                   <h4 style={{ fontSize: '0.85rem', color: '#10b981', fontWeight: 'bold', marginBottom: '8px' }}>THEY OFFER</h4>

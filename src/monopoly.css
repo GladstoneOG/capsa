@@ -3640,24 +3640,39 @@
 /* ==================== Mobile Adaptations & UI Overhaul ==================== */
 @media (max-width: 768px) {
   /* 1. Scrollable, Viewport-Constrained Dialogs & Modals */
-  .player-detail-modal {
-    max-height: 90vh !important;
-    max-width: 95vw !important;
+  .player-detail-modal-backdrop,
+  .deed-card-modal-backdrop {
+    align-items: flex-start !important;
     overflow-y: auto !important;
+    padding: 16px 8px !important;
+    box-sizing: border-box !important;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .player-detail-modal {
+    max-height: none !important;
+    max-width: 95vw !important;
+    width: 95% !important;
+    height: auto !important;
+    overflow: visible !important;
+    margin: 10px auto !important;
   }
 
   .build-manager-modal {
-    max-height: 90vh !important;
+    max-height: none !important;
     max-width: 95vw !important;
-    overflow-y: auto !important;
+    height: auto !important;
+    overflow: visible !important;
     padding: 14px !important;
+    margin: 10px auto !important;
   }
 
   .deed-card {
-    max-height: 85vh !important;
+    max-height: none !important;
     max-width: 95vw !important;
-    overflow-y: auto !important;
-    width: auto !important;
+    overflow: visible !important;
+    width: 95% !important;
+    margin: 10px auto !important;
   }
 
   .deed-card-layout {
@@ -3674,29 +3689,166 @@
     padding: 15px !important;
   }
 
-  /* 2. Scaled-Down UI - Corner Player Cards */
-  .corner-card {
-    width: 130px !important;
-    padding: 5px 8px !important;
-    gap: 5px !important;
+  /* Stack columns in Trade modals */
+  .trade-proposal-grid,
+  .trade-incoming-grid {
+    grid-template-columns: 1fr !important;
+    max-height: none !important;
+    overflow-y: visible !important;
+    gap: 15px !important;
   }
 
-  .corner-card-header {
-    gap: 4px !important;
+  .trade-proposal-grid > div,
+  .trade-incoming-grid > div {
+    border-right: none !important;
+    border-bottom: 1px solid rgba(0,0,0,0.08) !important;
+    padding-right: 0 !important;
+    padding-bottom: 15px !important;
+    margin-bottom: 5px !important;
   }
 
-  .corner-card-avatar-container {
+  .trade-proposal-grid > div:last-child,
+  .trade-incoming-grid > div:last-child {
+    border-bottom: none !important;
+    padding-bottom: 0 !important;
+    margin-bottom: 0 !important;
+  }
+
+  /* Compact Player Details for short landscape / mobile heights */
+  .player-detail-avatar-circle {
     width: 32px !important;
     height: 32px !important;
   }
+  .player-detail-avatar-circle svg {
+    width: 28px !important;
+    height: 28px !important;
+  }
+  .player-detail-name {
+    font-size: 1.05rem !important;
+  }
+  .player-detail-role {
+    font-size: 0.62rem !important;
+  }
+  .player-detail-header {
+    margin-bottom: 8px !important;
+  }
+  .player-detail-close {
+    width: 24px !important;
+    height: 24px !important;
+    font-size: 0.72rem !important;
+    top: 8px !important;
+    right: 8px !important;
+  }
+  .player-detail-stats {
+    gap: 8px !important;
+    margin-bottom: 8px !important;
+  }
+  .player-detail-stat-card {
+    padding: 6px 10px !important;
+    border-radius: 8px !important;
+  }
+  .stat-val {
+    font-size: 0.95rem !important;
+  }
+  .player-detail-section {
+    margin-top: 8px !important;
+  }
+  .section-title {
+    font-size: 0.68rem !important;
+    margin-bottom: 4px !important;
+  }
+  .properties-list-detail {
+    max-height: 220px !important;
+  }
+
+  /* Compact Property details list items */
+  .detail-property-card {
+    border-radius: 8px !important;
+  }
+  .detail-property-card-header {
+    padding: 6px 10px !important;
+  }
+  .detail-property-card-body {
+    padding: 8px 10px !important;
+    grid-template-columns: 1fr !important;
+    gap: 8px !important;
+  }
+  .detail-property-financials {
+    gap: 2px !important;
+    border-right: none !important;
+    border-bottom: 1px solid #f1f5f9;
+    padding-bottom: 6px;
+  }
+  .detail-property-fin-row {
+    font-size: 0.68rem !important;
+  }
+  .detail-property-rents-grid {
+    gap: 4px !important;
+  }
+  .detail-property-rent-item {
+    padding: 3px !important;
+    border-radius: 6px !important;
+    font-size: 0.6rem !important;
+  }
+  .rent-value {
+    font-size: 0.65rem !important;
+  }
+
+  /* Compact Property Auction Modal */
+  .auction-title {
+    font-size: 1.1rem !important;
+  }
+  .auction-bid-value {
+    font-size: 1.8rem !important;
+  }
+  .auction-property-details {
+    padding: 8px 10px !important;
+    border-radius: 8px !important;
+    gap: 10px !important;
+  }
+  .auction-property-financials {
+    padding: 8px 10px !important;
+    border-radius: 8px !important;
+    font-size: 0.72rem !important;
+  }
+  .auction-bidders-grid {
+    grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)) !important;
+    gap: 6px !important;
+  }
+  .auction-bidders-grid > div {
+    padding: 6px !important;
+    border-radius: 6px !important;
+  }
+
+  /* 2. Scaled-Down UI - Corner Player Cards */
+  .corner-card {
+    width: 105px !important;
+    padding: 4px 6px !important;
+    gap: 4px !important;
+    border-radius: 8px !important;
+  }
+
+  .corner-card-header {
+    gap: 3px !important;
+  }
+
+  .corner-card .corner-avatar-wrapper {
+    width: 22px !important;
+    height: 22px !important;
+    border-width: 2px !important;
+  }
+  .corner-card .corner-avatar-wrapper svg {
+    width: 16px !important;
+    height: 16px !important;
+  }
 
   .corner-card-name {
-    font-size: 0.65rem !important;
-    max-width: 70px !important;
+    font-size: 0.58rem !important;
+    max-width: 60px !important;
   }
 
   .corner-card-money {
-    font-size: 0.72rem !important;
+    font-size: 0.65rem !important;
   }
 
   .corner-card-worth,
@@ -3704,18 +3856,24 @@
     display: none !important; /* Hide secondary elements to fit mobile corners */
   }
 
+  .corner-rank-badge {
+    font-size: 0.48rem !important;
+    padding: 1px 3px !important;
+  }
+
   /* Corner card position offsets */
-  .corner-card.top-left { top: 8px !important; left: 8px !important; }
-  .corner-card.top-right { top: 8px !important; right: 8px !important; }
-  .corner-card.bottom-left { bottom: 8px !important; left: 8px !important; }
-  .corner-card.bottom-right { bottom: 8px !important; right: 8px !important; }
+  .corner-card.top-left { top: 6px !important; left: 6px !important; }
+  .corner-card.top-right { top: 6px !important; right: 6px !important; }
+  .corner-card.bottom-left { bottom: 6px !important; left: 6px !important; }
+  .corner-card.bottom-right { bottom: 6px !important; right: 6px !important; }
 
   /* 3. Bottom Action Bar Scaling */
   .monopoly-unified-hud-bottom {
-    padding: 8px 12px !important;
+    padding: 6px 12px !important;
     gap: 8px !important;
-    bottom: 8px !important;
+    bottom: 6px !important;
     max-width: 95vw !important;
+    border-radius: 12px !important;
   }
 
   /* Hide portfolio/list section on mobile as agreed in the plan */
@@ -3724,10 +3882,11 @@
   }
 
   /* Scaling buttons in bottom HUD */
-  .hud-btn {
-    padding: 8px 12px !important;
-    font-size: 0.75rem !important;
-    min-width: 75px !important;
+  .monopoly-unified-hud-bottom button {
+    padding: 6px 12px !important;
+    font-size: 0.72rem !important;
+    min-width: 65px !important;
+    border-radius: 8px !important;
   }
 
   .unified-hud-actions {
@@ -3738,69 +3897,75 @@
   .monopoly-top-middle-header {
     padding: 4px 10px !important;
     gap: 6px !important;
-    top: 8px !important;
+    top: 6px !important;
   }
 
   .monopoly-top-middle-header h2 {
-    font-size: 0.8rem !important;
+    font-size: 0.75rem !important;
   }
 
   .header-turn-badge {
-    font-size: 0.65rem !important;
-    padding: 2px 6px !important;
+    font-size: 0.6rem !important;
+    padding: 1.5px 5px !important;
   }
 
   .ruleset-indicator {
-    font-size: 0.55rem !important;
-    padding: 1.5px 4px !important;
+    font-size: 0.5rem !important;
+    padding: 1px 3.5px !important;
   }
 
   /* 5. Build Manager Modal Mobile Improvements */
   .build-manager-modal .monopoly-build-sections-container {
-    gap: 10px !important;
+    gap: 8px !important;
   }
 
   .build-group-section {
-    padding: 8px !important;
-    border-radius: 8px !important;
+    padding: 6px !important;
+    border-radius: 6px !important;
   }
 
   .build-prop-row {
     flex-direction: column !important;
     align-items: flex-start !important;
-    gap: 6px !important;
-    padding: 6px 0 !important;
+    gap: 4px !important;
+    padding: 4px 0 !important;
   }
 
   .build-prop-actions {
     width: 100% !important;
     justify-content: space-between !important;
-    gap: 8px !important;
+    gap: 6px !important;
   }
 
   .build-action-btn {
-    padding: 5px 10px !important;
-    font-size: 0.7rem !important;
+    padding: 4px 8px !important;
+    font-size: 0.65rem !important;
     flex: 1 !important;
     text-align: center !important;
   }
 
   /* 6. Reset Camera Button Mobile */
   .reset-camera-btn {
-    padding: 6px 10px !important;
-    font-size: 0.65rem !important;
-    top: 12px !important;
-    right: 70px !important; /* Move away slightly from corner cards */
+    padding: 4px 8px !important;
+    font-size: 0.6rem !important;
+    top: 10px !important;
+    right: 65px !important; /* Move away slightly from corner cards */
   }
 
   /* 7. Power bar scaling on mobile */
-  .monopoly-unified-hud-bottom .power-bar-wrapper {
-    height: 16px !important;
-    border-radius: 8px !important;
+  .monopoly-unified-hud-bottom .power-bar-container {
+    width: 80px !important;
+    height: 6px !important;
+    border-radius: 4px !important;
   }
 
-  .power-bar-indicator {
-    font-size: 0.6rem !important;
+  .power-bar-text {
+    font-size: 0.55rem !important;
+  }
+
+  .btn-odd-even {
+    padding: 2px 6px !important;
+    font-size: 0.58rem !important;
   }
 }
 
