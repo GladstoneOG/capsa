@@ -285,9 +285,9 @@ function checkGameWinner(room, io) {
   if (activePlayers.length === 1) {
     const winner = activePlayers[0];
     room.gameState = 'gameover';
-    
+
     addSystemChatMessage(room, io, `🏆 ${winner.name} is the last tycoon standing! Victory is theirs! 🏆`);
-    
+
     // Assign finish ranks to everyone
     room.players.forEach(p => {
       if (p.id === winner.id) {
@@ -309,18 +309,18 @@ function checkTurnLimit(room, io) {
   const limit = room.rules && room.rules.turnLimit ? Number(room.rules.turnLimit) : 0;
   if (limit > 0 && (room.monopolyTurnCount || 0) >= limit) {
     room.gameState = 'gameover';
-    
+
     // Find all non-bankrupt players
     const activePlayers = room.players.filter(p => !p.bankrupt);
-    
+
     // Sort by netWorth descending
     activePlayers.sort((a, b) => b.netWorth - a.netWorth);
-    
+
     const winner = activePlayers[0];
-    
+
     addSystemChatMessage(room, io, `⏱️ Turn limit of ${limit} reached!`);
     addSystemChatMessage(room, io, `🏆 ${winner.name} wins with a net worth of $${winner.netWorth}! 🏆`);
-    
+
     // Assign finish ranks to all players
     const sortedAll = [...room.players];
     sortedAll.sort((a, b) => {
@@ -328,13 +328,13 @@ function checkTurnLimit(room, io) {
       if (!a.bankrupt && b.bankrupt) return -1;
       return b.netWorth - a.netWorth;
     });
-    
+
     room.players.forEach(p => {
       const rank = sortedAll.findIndex(sa => sa.id === p.id) + 1;
       p.finishRank = rank;
       p.score = p.netWorth;
     });
-    
+
     io.to(room.code).emit('round-over', getSanitizedRoomState(room, ''));
     return true;
   }
@@ -372,7 +372,7 @@ function calculateRent(tile, board, diceSum, chanceDoubleMultiplier = false) {
 function handleLandedAction(room, player, diceSum, io, chanceDoubleMultiplier = false) {
   const tile = room.monopolyBoard[player.position];
   const isGetRich = room.rules && room.rules.ruleset === 'Get Rich';
-  
+
   if (tile.type === 'go') {
     if (isGetRich) {
       const ownedProps = room.monopolyBoard.filter(t => t.type === 'property' && t.owner === player.id && t.houses < 5 && !t.mortgaged);
@@ -407,7 +407,7 @@ function handleLandedAction(room, player, diceSum, io, chanceDoubleMultiplier = 
       // Rent payment
       const owner = room.players.find(p => p.id === tile.owner);
       const rentAmount = calculateRent(tile, room.monopolyBoard, diceSum, chanceDoubleMultiplier);
-      
+
       addSystemChatMessage(room, io, `${player.name} landed on ${tile.name} and owes ${owner.name} $${rentAmount} rent.`);
 
       // Get Rich: Angel Card can skip rent
@@ -416,7 +416,7 @@ function handleLandedAction(room, player, diceSum, io, chanceDoubleMultiplier = 
         room.pendingRent = { fromId: player.id, toId: owner.id, amount: rentAmount };
         return;
       }
-      
+
       triggerPayment(room, player, owner, rentAmount, io);
 
       // Get Rich: After paying rent, offer forced acquisition
@@ -539,7 +539,7 @@ function sendPlayerToJail(room, player, io) {
 function startPropertyAuction(room, tileIndex, io) {
   const passingPlayer = room.players[room.turnIndex];
   const bidders = room.players.filter(p => !p.bankrupt).map(p => p.id);
-  
+
   if (bidders.length === 0) {
     const player = room.players[room.turnIndex];
     resumeAfterAuction(room, player, io);
@@ -554,7 +554,7 @@ function startPropertyAuction(room, tileIndex, io) {
     bidders,
     activeBidderIndex: 0
   };
-  
+
   const tile = room.monopolyBoard[tileIndex];
   addSystemChatMessage(room, io, `🎲 Auction started for ${tile.name}! Starting bid is $10.`);
 }
@@ -616,14 +616,14 @@ function resolveCardAction(room, player, io, diceSum) {  // eslint-disable-line
     const oldPos = player.position;
     player.position = card.target;
     addSystemChatMessage(room, io, `${player.name} moved to ${room.monopolyBoard[player.position].name}.`);
-    
+
     // Check pass GO
     if (player.position < oldPos) {
       player.money += 200;
       addSystemChatMessage(room, io, `${player.name} passed GO and collected $200!`);
       updateNetWorth(room, player.id);
     }
-    
+
     // Trigger action on landed property
     handleLandedAction(room, player, diceSum, io);
     return;
@@ -669,7 +669,7 @@ function resolveCardAction(room, player, io, diceSum) {  // eslint-disable-line
     const oldPos = player.position;
     player.position = curr;
     addSystemChatMessage(room, io, `${player.name} advanced to nearest Railroad: ${room.monopolyBoard[player.position].name}.`);
-    
+
     if (player.position < oldPos) {
       player.money += 200;
       addSystemChatMessage(room, io, `${player.name} passed GO and collected $200!`);
@@ -689,7 +689,7 @@ function resolveCardAction(room, player, io, diceSum) {  // eslint-disable-line
     const oldPos = player.position;
     player.position = curr;
     addSystemChatMessage(room, io, `${player.name} advanced to nearest Utility: ${room.monopolyBoard[player.position].name}.`);
-    
+
     if (player.position < oldPos) {
       player.money += 200;
       addSystemChatMessage(room, io, `${player.name} passed GO and collected $200!`);
@@ -714,7 +714,7 @@ function resolveCardAction(room, player, io, diceSum) {  // eslint-disable-line
   if (card.action === 'pay_each') {
     const activeOpponents = room.players.filter(p => !p.bankrupt && p.id !== player.id);
     const totalCost = activeOpponents.length * card.amount;
-    
+
     if (player.money >= totalCost) {
       player.money -= totalCost;
       activeOpponents.forEach(p => {
@@ -775,7 +775,7 @@ function resolveCardAction(room, player, io, diceSum) {  // eslint-disable-line
 
     const totalRepairBill = (housesCount * card.houseCost) + (hotelsCount * card.hotelCost);
     addSystemChatMessage(room, io, `${player.name} assessed street repairs: ${housesCount} houses, ${hotelsCount} hotels. Bill: $${totalRepairBill}`);
-    
+
     if (totalRepairBill > 0) {
       triggerPayment(room, player, null, totalRepairBill, io);
     } else {
@@ -861,7 +861,7 @@ function handleBankruptcyResolution(room, player, io) {
     // Advance turn
     room.turnIndex = getNextActiveTurnIndex(room);
     room.monopolyPhase = 'roll';
-    
+
     // Reset rollCount and doublesRolled for the next active player
     const nextPlayer = room.players[room.turnIndex];
     if (nextPlayer) {
@@ -965,7 +965,7 @@ function handleDevCommand(room, payload, io) {
           }
         });
         addSystemChatMessage(room, io, `☠️ Dev Console: Bankrupted ${targetPlayer.name}. All their properties are released.`);
-        
+
         const activeOthers = room.players.filter(p => !p.bankrupt);
         if (activeOthers.length <= 1) {
           room.gameState = 'gameover';
@@ -1025,6 +1025,7 @@ export function handleAction(room, socket, action, payload, io) {
     case 'roll-dice': {
       if (room.monopolyPhase !== 'roll' || player.inJail) return;
 
+      room.lastActionDetail = null;
       const isGetRich = room.rules && room.rules.ruleset === 'Get Rich';
       let d1, d2;
 
@@ -1066,11 +1067,11 @@ export function handleAction(room, socket, action, payload, io) {
           d2 = Math.floor(Math.random() * 6) + 1;
         }
       }
-      
+
       room.dice = [d1, d2];
       room.rollId = Math.random().toString(36).substring(2, 9);
       player.lastRoll = [d1, d2];
-      
+
       const sum = d1 + d2;
       const isDoubles = d1 === d2;
 
@@ -1092,7 +1093,7 @@ export function handleAction(room, socket, action, payload, io) {
             // Normal doubles move
             const oldPos = player.position;
             player.position = (player.position + sum) % 40;
-            
+
             if (player.position < oldPos) {
               player.money += 200;
               addSystemChatMessage(room, io, `${player.name} passed GO and collected $200!`);
@@ -1116,7 +1117,7 @@ export function handleAction(room, socket, action, payload, io) {
 
           const oldPos = player.position;
           player.position = (player.position + sum) % 40;
-          
+
           if (player.position < oldPos) {
             player.money += 200;
             addSystemChatMessage(room, io, `${player.name} passed GO and collected $200!`);
@@ -1141,7 +1142,7 @@ export function handleAction(room, socket, action, payload, io) {
         player.money -= tile.price;
         tile.owner = player.id;
         addSystemChatMessage(room, io, `🏠 ${player.name} bought ${tile.name} for $${tile.price}.`);
-        
+
         updateNetWorth(room, player.id);
 
         const someoneWon = checkGetRichSpecialWins(room, io);
@@ -1202,7 +1203,7 @@ export function handleAction(room, socket, action, payload, io) {
         player.jailTurns = 0;
         addSystemChatMessage(room, io, `🔓 ${player.name} paid $50 to get out of jail.`);
         updateNetWorth(room, player.id);
-        
+
         // Let them roll normally now
         room.monopolyPhase = 'roll';
       }
@@ -1217,7 +1218,7 @@ export function handleAction(room, socket, action, payload, io) {
         player.inJail = false;
         player.jailTurns = 0;
         addSystemChatMessage(room, io, `🔓 ${player.name} used a Get Out of Jail Free card.`);
-        
+
         // Let them roll normally now
         room.monopolyPhase = 'roll';
       }
@@ -1228,6 +1229,7 @@ export function handleAction(room, socket, action, payload, io) {
     case 'roll-jail-doubles': {
       if (room.monopolyPhase !== 'roll' || !player.inJail) return;
 
+      room.lastActionDetail = null;
       let d1, d2;
       if (room.nextForcedRoll) {
         d1 = room.nextForcedRoll[0];
@@ -1241,7 +1243,7 @@ export function handleAction(room, socket, action, payload, io) {
       room.dice = [d1, d2];
       room.rollId = Math.random().toString(36).substring(2, 9);
       player.lastRoll = [d1, d2];
-      
+
       const sum = d1 + d2;
       const isDoubles = d1 === d2;
 
@@ -1258,7 +1260,7 @@ export function handleAction(room, socket, action, payload, io) {
           player.inJail = false;
           player.jailTurns = 0;
           addSystemChatMessage(room, io, `🔓 Release successful! Doubles rolled!`);
-          
+
           // Move immediately
           const oldPos = player.position;
           player.position = (player.position + sum) % 40;
@@ -1283,7 +1285,7 @@ export function handleAction(room, socket, action, payload, io) {
               // Owe the jail fine
               player.inJail = false;
               player.jailTurns = 0;
-              
+
               const oldPos = player.position;
               player.position = (player.position + sum) % 40;
               if (player.position < oldPos) player.money += 200;
@@ -1347,7 +1349,7 @@ export function handleAction(room, socket, action, payload, io) {
       if (!tile || tile.type !== 'property' || tile.owner !== player.id || tile.houses === 0) return;
 
       const colorGroup = room.monopolyBoard.filter(t => t.type === 'property' && t.color === tile.color);
-      
+
       // Even sell check
       const currentHouses = tile.houses;
       const canSell = colorGroup.every(t => t.houses <= currentHouses);
@@ -1360,7 +1362,7 @@ export function handleAction(room, socket, action, payload, io) {
       player.money += returnMoney;
       tile.houses -= 1;
       addSystemChatMessage(room, io, `🧱 ${player.name} sold a house on ${tile.name} for $${returnMoney}.`);
-      
+
       updateNetWorth(room, player.id);
 
       // Check if debt resolved
@@ -1387,7 +1389,7 @@ export function handleAction(room, socket, action, payload, io) {
           }
           room.activeDebt = null;
           updateNetWorth(room, player.id);
-          
+
           if (player.doublesRolled) {
             player.doublesRolled = false;
             room.monopolyPhase = 'roll';
@@ -1500,7 +1502,7 @@ export function handleAction(room, socket, action, payload, io) {
 
     case 'end-turn': {
       if (room.monopolyPhase !== 'end_turn') return;
-      
+
       const currentPlayer = room.players[room.turnIndex];
       if (currentPlayer) {
         currentPlayer.status = null;
@@ -1526,7 +1528,7 @@ export function handleAction(room, socket, action, payload, io) {
       // Advance turn
       room.turnIndex = getNextActiveTurnIndex(room);
       room.monopolyPhase = 'roll';
-      
+
       // Reset player rolls
       const nextPlayer = room.players[room.turnIndex];
       nextPlayer.rollCount = 0;
@@ -1707,11 +1709,11 @@ export function handleAction(room, socket, action, payload, io) {
       }
       const lbTile = room.monopolyBoard[lbIndex];
       if (!lbTile || lbTile.type !== 'property' || lbTile.owner !== player.id || lbTile.mortgaged) return;
-      
+
       const maxHouses = room.landedBuildMaxHouses !== undefined ? room.landedBuildMaxHouses : 4;
       if (lbTile.houses + count > maxHouses) return;
       if (player.money < lbTile.housePrice * count) return;
-      
+
       player.money -= lbTile.housePrice * count;
       lbTile.houses += count;
       const buildName = (lbTile.houses === 5) ? 'Hotel!' : `${lbTile.houses} house(s)`;
@@ -1741,10 +1743,10 @@ export function handleAction(room, socket, action, payload, io) {
           const buildName = (tile.houses === 5) ? 'Hotel!' : 'house';
           addSystemChatMessage(room, io, `🧱 ${player.name} built a ${buildName} on ${tile.name} via GO landing bonus for $${tile.housePrice}.`);
           updateNetWorth(room, player.id);
-          
+
           const someoneWon = checkGetRichSpecialWins(room, io);
           if (someoneWon) return;
-          
+
           setEndTurnPhase(room, player, io);
           broadcastGameUpdate(room, io);
         }
@@ -1779,7 +1781,7 @@ export function handleAction(room, socket, action, payload, io) {
             room.casinoState.status = 'won';
             room.monopolyPhase = 'casino_collect_or_push';
             addSystemChatMessage(room, io, `🏆 Coin landed on WIN! ${player.name} won $${room.casinoState.payout}!`);
-            
+
             if (room.casinoState.round === 3) {
               const jackpot = 800;
               player.money += jackpot;
@@ -1843,7 +1845,7 @@ export function handleAction(room, socket, action, payload, io) {
             room.casinoState.status = 'won';
             room.monopolyPhase = 'casino_collect_or_push';
             addSystemChatMessage(room, io, `🏆 Coin landed on WIN! ${player.name} won $${room.casinoState.payout}!`);
-            
+
             if (room.casinoState.round === 3) {
               const jackpot = 800;
               player.money += jackpot;
@@ -1907,7 +1909,7 @@ export function handleAction(room, socket, action, payload, io) {
       if (bidder) {
         addSystemChatMessage(room, io, `❌ ${bidder.name} passed in the auction.`);
         room.auctionState.bidders = room.auctionState.bidders.filter(id => id !== activeBidderId);
-        
+
         if (room.auctionState.bidders.length === 0) {
           // No winner
           const tile = room.monopolyBoard[room.auctionState.tileIndex];
@@ -1918,19 +1920,19 @@ export function handleAction(room, socket, action, payload, io) {
           if (room.auctionState.activeBidderIndex >= room.auctionState.bidders.length) {
             room.auctionState.activeBidderIndex = 0;
           }
-          
+
           if (room.auctionState.bidders.length === 1 && room.auctionState.highestBidder !== null) {
             // One bidder left and there's a bid -> they win!
             const winnerId = room.auctionState.highestBidder;
             const winner = room.players.find(p => p.id === winnerId);
             const tile = room.monopolyBoard[room.auctionState.tileIndex];
-            
+
             if (winner && tile) {
               winner.money -= room.auctionState.highestBid;
               tile.owner = winnerId;
               addSystemChatMessage(room, io, `🏆 ${winner.name} won the auction and bought ${tile.name} for $${room.auctionState.highestBid}!`);
               updateNetWorth(room, winnerId);
-              
+
               const originalPlayer = room.players[room.turnIndex];
               resumeAfterAuction(room, originalPlayer, io);
             }
@@ -1994,7 +1996,7 @@ export function handleAction(room, socket, action, payload, io) {
 
     case 'trade-accept': {
       if (!room.activeTrade) return;
-      
+
       const { senderId, receiverId, senderProperties, senderMoney, receiverProperties, receiverMoney, senderJailCards, receiverJailCards } = room.activeTrade;
       const authorized = receiverId === socket.id || (room.players.find(p => p.id === receiverId)?.isBot && room.players.find(p => p.id === socket.id)?.isHost);
       if (!authorized) return;
@@ -2046,6 +2048,7 @@ export function handleAction(room, socket, action, payload, io) {
       const someoneWon = checkGetRichSpecialWins(room, io);
       if (someoneWon) return;
       room.activeTrade = null;
+      room.lastActionDetail = { type: 'trade' };
       broadcastGameUpdate(room, io);
       break;
     }
@@ -2106,7 +2109,7 @@ function checkGetRichSpecialWins(room, io) {
     const railroads = [5, 15, 25, 35];
     const utilities = [12, 28];
     const ownsAllTourism = railroads.every(idx => room.monopolyBoard[idx] && room.monopolyBoard[idx].owner === player.id) &&
-                           utilities.every(idx => room.monopolyBoard[idx] && room.monopolyBoard[idx].owner === player.id);
+      utilities.every(idx => room.monopolyBoard[idx] && room.monopolyBoard[idx].owner === player.id);
 
     if (ownsAllTourism) {
       declareGetRichWinner(room, player, 'Tourism Win (owns all tourism and railway spots)', io);

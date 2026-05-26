@@ -417,6 +417,7 @@ export const MonopolyTable: React.FC<MonopolyTableProps> = ({
   const closeTimerRef = useRef<any>(null);
   const hopTimersRef = useRef<Record<string, any>>({});
   const hopTargetsRef = useRef<Record<string, number>>({});
+  const hopServerTargetsRef = useRef<Record<string, number>>({});
   const prevBoardRef = useRef<TileState[]>([]);
   const prevBoardForMoneyRef = useRef<TileState[]>([]);
   const lastAutoOpenRef = useRef<string | null>(null);
@@ -696,6 +697,7 @@ export const MonopolyTable: React.FC<MonopolyTableProps> = ({
       });
       hopTimersRef.current = {};
       hopTargetsRef.current = {};
+      hopServerTargetsRef.current = {};
       setMovingPlayerSteps({});
 
       setIntroTransitionActive(true);
@@ -855,6 +857,7 @@ export const MonopolyTable: React.FC<MonopolyTableProps> = ({
       });
       delete hopTimersRef.current[pId];
       delete hopTargetsRef.current[pId];
+      delete hopServerTargetsRef.current[pId];
       return;
     }
 
@@ -890,7 +893,7 @@ export const MonopolyTable: React.FC<MonopolyTableProps> = ({
         const timer = setTimeout(() => {
           setIsJailingInProgress(false);
           stepPlayerPos(pId, 30, 10);
-        }, 1000);
+        }, 500);
         hopTimersRef.current[pId] = timer;
         return;
       }
@@ -902,6 +905,7 @@ export const MonopolyTable: React.FC<MonopolyTableProps> = ({
       });
       delete hopTimersRef.current[pId];
       delete hopTargetsRef.current[pId];
+      delete hopServerTargetsRef.current[pId];
       return;
     }
 
@@ -936,22 +940,24 @@ export const MonopolyTable: React.FC<MonopolyTableProps> = ({
         // Initialize position
         setVisualPositions(prev => ({ ...prev, [p.id]: p.position }));
       } else {
-        // Check if there is an active hop timer and if the target has changed
-        if (hopTimersRef.current[p.id] && hopTargetsRef.current[p.id] !== undefined && hopTargetsRef.current[p.id] !== p.position) {
+        // Check if there is an active hop timer and if the server target has changed
+        if (hopTimersRef.current[p.id] && hopServerTargetsRef.current[p.id] !== undefined && hopServerTargetsRef.current[p.id] !== p.position) {
           // Server position changed while hopping (e.g. Chance card movement)
           // Cancel the current hopping sequence and restart towards the new target
           clearTimeout(hopTimersRef.current[p.id]);
           delete hopTimersRef.current[p.id];
           delete hopTargetsRef.current[p.id];
+          delete hopServerTargetsRef.current[p.id];
         }
 
         if (prevPos !== p.position && !hopTimersRef.current[p.id]) {
           // Position changed on server: start hop sequence!
           let targetPos = p.position;
-          const diceSum = dice[0] + dice[1];
+          const pRoll = p.lastRoll || [0, 0];
+          const diceSum = pRoll[0] + pRoll[1];
 
           // If player is sent to jail from Go To Jail tile (position 30)
-          if (p.inJail && p.position === 10 && (prevPos + diceSum) % 40 === 30) {
+          if (p.inJail && p.position === 10 && diceSum > 0 && (prevPos + diceSum) % 40 === 30) {
             targetPos = 30;
           }
 
@@ -968,6 +974,7 @@ export const MonopolyTable: React.FC<MonopolyTableProps> = ({
           }
 
           hopTargetsRef.current[p.id] = targetPos;
+          hopServerTargetsRef.current[p.id] = p.position;
           stepPlayerPos(p.id, prevPos, targetPos, isBackward);
         }
       }
@@ -1153,35 +1160,37 @@ export const MonopolyTable: React.FC<MonopolyTableProps> = ({
     });
 
     // 2. Check for Rent ("Rent!") & Tax Payments
-    players.forEach(p => {
-      const prevP = prevPlayers.find(pp => pp.id === p.id);
-      if (prevP && p.money < prevP.money) {
-        // Cash decreased. Find player's current tile
-        const currentTilePos = visualPositions[p.id] ?? p.position;
-        const tile = monopolyBoard[currentTilePos];
-        if (tile) {
-          const isLandedOnOtherProperty = (tile.type === 'property' || tile.type === 'railroad' || tile.type === 'utility')
-            && tile.owner
-            && tile.owner !== p.id;
+    if (lastActionDetail?.type !== 'trade') {
+      players.forEach(p => {
+        const prevP = prevPlayers.find(pp => pp.id === p.id);
+        if (prevP && p.money < prevP.money) {
+          // Cash decreased. Find player's current tile
+          const currentTilePos = visualPositions[p.id] ?? p.position;
+          const tile = monopolyBoard[currentTilePos];
+          if (tile) {
+            const isLandedOnOtherProperty = (tile.type === 'property' || tile.type === 'railroad' || tile.type === 'utility')
+              && tile.owner
+              && tile.owner !== p.id;
 
-          if (isLandedOnOtherProperty) {
-            // Make sure they didn't just buy the property in this render (which also decreases cash)
-            const justBought = newTexts.some(t => t.tileIndex === currentTilePos && t.type === 'bought');
-            if (!justBought) {
-              addText(currentTilePos, 'Rent!', 'rent');
+            if (isLandedOnOtherProperty) {
+              // Make sure they didn't just buy the property in this render (which also decreases cash)
+              const justBought = newTexts.some(t => t.tileIndex === currentTilePos && t.type === 'bought');
+              if (!justBought) {
+                addText(currentTilePos, 'Rent!', 'rent');
+              }
             }
-          }
 
-          // Check if landed on a tax tile (Income Tax or Luxury Tax)
-          if (tile.type === 'tax') {
-            const isGetRich = rules && rules.ruleset === 'Get Rich';
-            if (!isGetRich) {
-              addText(currentTilePos, `${tile.name}!`, 'rent');
+            // Check if landed on a tax tile (Income Tax or Luxury Tax)
+            if (tile.type === 'tax') {
+              const isGetRich = rules && rules.ruleset === 'Get Rich';
+              if (!isGetRich) {
+                addText(currentTilePos, `${tile.name}!`, 'rent');
+              }
             }
           }
         }
-      }
-    });
+      });
+    }
 
 
 
@@ -5122,14 +5131,14 @@ export const MonopolyTable: React.FC<MonopolyTableProps> = ({
       {/* Trade Rejected Popup */}
       {tradeRejectedName && (
         <div className="deed-card-modal-backdrop" style={{ background: 'rgba(0,0,0,0.3)', backdropFilter: 'blur(3px)', zIndex: 1100 }}>
-          <div 
-            className="player-detail-modal" 
-            style={{ 
-              maxWidth: '360px', 
-              padding: '24px 16px', 
-              textAlign: 'center', 
-              border: '2px solid #ef4444', 
-              boxShadow: '0 20px 25px -5px rgba(239, 68, 68, 0.25), 0 10px 10px -5px rgba(239, 68, 68, 0.25)' 
+          <div
+            className="player-detail-modal"
+            style={{
+              maxWidth: '360px',
+              padding: '24px 16px',
+              textAlign: 'center',
+              border: '2px solid #ef4444',
+              boxShadow: '0 20px 25px -5px rgba(239, 68, 68, 0.25), 0 10px 10px -5px rgba(239, 68, 68, 0.25)'
             }}
           >
             <div style={{ fontSize: '3rem', marginBottom: '12px' }}>❌</div>
@@ -5314,7 +5323,7 @@ export const MonopolyTable: React.FC<MonopolyTableProps> = ({
 
               {/* 3D Coin flip container */}
               <div className="coin-container">
-                <div 
+                <div
                   className={`coin-3d ${isFlipping ? 'flipping' : ''} ${isWon ? 'won-state' : ''} ${isLost ? 'lost-state' : ''}`}
                   style={{ '--coin-final-rotation': coinFinalRotation } as React.CSSProperties}
                 >
@@ -5338,7 +5347,7 @@ export const MonopolyTable: React.FC<MonopolyTableProps> = ({
                 {isPending && (
                   <>
                     {isActivePlayerFlipping ? (
-                      <button 
+                      <button
                         className="btn-primary roll-glow-animation"
                         style={{ padding: '12px 28px', borderRadius: '14px', fontWeight: 900, background: 'linear-gradient(135deg, #fbbf24 0%, #d97706 100%)', color: '#1e1b4b', border: 'none', cursor: 'pointer', fontSize: '1rem', width: '100%' }}
                         onClick={() => onMonopolyAction('casino-flip')}
