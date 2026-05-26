@@ -222,13 +222,6 @@ export default function App() {
   // Monopoly States
   const [monopolyBoard, setMonopolyBoard] = useState<TileState[]>([]);
   const [isMonopolyAnimating, setIsMonopolyAnimating] = useState<boolean>(false);
-  const isTableAnimating = useCallback(() => {
-    if (isMonopolyAnimating) return true;
-    return players.some(p => {
-      const vPos = visualPositionsRef.current[p.id];
-      return vPos !== undefined && vPos !== p.position;
-    });
-  }, [isMonopolyAnimating, players]);
   const [monopolyPhase, setMonopolyPhase] = useState<'roll' | 'action' | 'jail_decision' | 'card_drawn' | 'bankrupt_decision' | 'end_turn' | 'auction' | 'festival_selection' | 'airport_selection' | 'force_acquire_decision' | 'use_angel_rent' | 'use_angel_force' | 'landed_build' | 'casino_flip' | 'casino_collect_or_push' | 'go_build_select'>('roll');
   const [monopolyDice, setMonopolyDice] = useState<number[]>([1, 1]);
   const [monopolyRollId, setMonopolyRollId] = useState<string | null>(null);
