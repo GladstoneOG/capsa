@@ -59,7 +59,7 @@ class MonopolyFuzzer {
       else if (idx === 10) { type = 'jail'; name = 'Jail'; }
       else if (idx === 20) { type = 'parking'; name = 'Free Parking'; }
       else if (idx === 30) { type = 'gotojail'; name = 'Go To Jail'; }
-      else if (idx === 12 || idx === 28) { type = 'utility'; name = idx === 12 ? 'Electric Company' : 'Water Works'; price = 150; }
+      else if (idx === 12 || idx === 28) { type = 'utility'; name = idx === 12 ? 'Bali' : 'Hawaii'; price = 150; }
       else if (idx === 5 || idx === 15 || idx === 25 || idx === 35) { type = 'railroad'; name = 'Railroad'; price = 200; rent = [25, 50, 100, 200]; }
 
       return {

@@ -1642,10 +1642,10 @@ export const MonopolyTable: React.FC<MonopolyTableProps> = ({
       );
     }
     if (tile.type === 'utility') {
-      const isElectric = tile.name.includes('Electric');
+      const isBali = tile.name.toLowerCase().includes('bali');
       return (
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-          <span style={{ fontSize: '1.25rem' }}>{isElectric ? '⚡' : '🚰'}</span>
+          <span style={{ fontSize: '1.25rem' }}>{isBali ? '🌴' : '🌊'}</span>
           <span style={{ fontSize: '0.5rem', fontWeight: 800, textAlign: 'center', lineHeight: 1.1, color: '#0f172a' }}>{tile.name}</span>
         </div>
       );
