@@ -318,7 +318,8 @@ export default function App() {
     monopolyActiveTrade,
     monopolyChanceDeck,
     monopolyChestDeck,
-    monopolyLandedBuildMaxHouses
+    monopolyLandedBuildMaxHouses,
+    monopolyCasinoState
   });
 
   useEffect(() => {
