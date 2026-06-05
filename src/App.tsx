@@ -5447,6 +5447,7 @@ export default function App() {
                 <div className="mode-card-desc">Interactive 3D board, rolling dice, deals, and bankrupting bots.</div>
               </div>
 
+              {/*
               <div
                 className={`mode-card ${gameType === 'snakes_ladders' ? 'active active-snakes_ladders' : ''}`}
                 onClick={() => {
@@ -5458,6 +5459,7 @@ export default function App() {
                 <div className="mode-card-title">Snakes & Ladders</div>
                 <div className="mode-card-desc">Roll dice, climb ladders, avoid slides, and race to 100!</div>
               </div>
+              */}
             </div>
 
             <div className="menu-content-columns">
