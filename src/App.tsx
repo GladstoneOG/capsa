@@ -15,6 +15,8 @@ import { LOCAL_BOARD_TILES, LOCAL_CHANCE_CARDS, LOCAL_CHEST_CARDS, getBotMonopol
 import type { TileState } from './utils/monopolyLogic';
 import './monopoly.css';
 import { FallingBackground } from './components/FallingBackground';
+import { SnakesLaddersTable } from './components/SnakesLaddersTable';
+import { SNAKES, LADDERS } from './utils/snakesLaddersLogic';
 
 type Screen = 'menu' | 'lobby' | 'table';
 
@@ -115,7 +117,7 @@ export default function App() {
     if (saved) {
       try {
         return JSON.parse(saved);
-      } catch (e) { }
+      } catch (e) { /* ignore */ }
     }
     return getRandomAvatar();
   });
@@ -241,6 +243,12 @@ export default function App() {
   const [monopolyTurnCount, setMonopolyTurnCount] = useState<number>(0);
   const [showConfetti, setShowConfetti] = useState<boolean>(false);
 
+  // Snakes and Ladders States
+  const [snakesLaddersDice, setSnakesLaddersDice] = useState<number[]>([1]);
+  const [snakesLaddersRollId, setSnakesLaddersRollId] = useState<string | null>(null);
+  const [snakesLaddersPhase, setSnakesLaddersPhase] = useState<'roll' | 'rolling_animation'>('roll');
+  const [snakesLaddersLastAction, setSnakesLaddersLastAction] = useState<any | null>(null);
+
   // Developer Console State
   const [showDevConsole, setShowDevConsole] = useState<boolean>(false);
   const [devConsoleCommand, setDevConsoleCommand] = useState<string>('');
@@ -319,7 +327,11 @@ export default function App() {
     monopolyChanceDeck,
     monopolyChestDeck,
     monopolyLandedBuildMaxHouses,
-    monopolyCasinoState
+    monopolyCasinoState,
+    snakesLaddersDice,
+    snakesLaddersPhase,
+    snakesLaddersRollId,
+    snakesLaddersLastAction
   });
 
   useEffect(() => {
@@ -359,7 +371,11 @@ export default function App() {
       monopolyChanceDeck,
       monopolyChestDeck,
       monopolyLandedBuildMaxHouses,
-      monopolyCasinoState
+      monopolyCasinoState,
+      snakesLaddersDice,
+      snakesLaddersPhase,
+      snakesLaddersRollId,
+      snakesLaddersLastAction
     };
   }, [
     players,
@@ -388,7 +404,11 @@ export default function App() {
     monopolyChanceDeck,
     monopolyChestDeck,
     monopolyLandedBuildMaxHouses,
-    monopolyCasinoState
+    monopolyCasinoState,
+    snakesLaddersDice,
+    snakesLaddersPhase,
+    snakesLaddersRollId,
+    snakesLaddersLastAction
   ]);
 
   // Check query params if we were invited via a URL (e.g. /?room=ABCD)
@@ -686,6 +706,12 @@ export default function App() {
       setMonopolyCasinoState(room.casinoState || null);
       setMonopolyTurnCount(room.monopolyTurnCount || 0);
     }
+    if (room.gameType === 'snakes_ladders') {
+      setSnakesLaddersDice(room.snakesLaddersDice || [1]);
+      setSnakesLaddersRollId(room.snakesLaddersRollId || null);
+      setSnakesLaddersPhase(room.snakesLaddersPhase || 'roll');
+      setSnakesLaddersLastAction(room.snakesLaddersLastAction || null);
+    }
     if (nextScreen) {
       setScreen(nextScreen);
     }
@@ -758,6 +784,12 @@ export default function App() {
         setMonopolyActiveDebt(room.activeDebt || null);
         setMonopolyTurnCount(room.monopolyTurnCount || 0);
       }
+      if (room.gameType === 'snakes_ladders') {
+        setSnakesLaddersDice(room.snakesLaddersDice || [1]);
+        setSnakesLaddersRollId(room.snakesLaddersRollId || null);
+        setSnakesLaddersPhase(room.snakesLaddersPhase || 'roll');
+        setSnakesLaddersLastAction(room.snakesLaddersLastAction || null);
+      }
       setScreen('lobby');
       setErrorMsg('');
     });
@@ -780,6 +812,12 @@ export default function App() {
         setMonopolyCardType(room.cardType || null);
         setMonopolyActiveDebt(room.activeDebt || null);
         setMonopolyTurnCount(room.monopolyTurnCount || 0);
+      }
+      if (room.gameType === 'snakes_ladders') {
+        setSnakesLaddersDice(room.snakesLaddersDice || [1]);
+        setSnakesLaddersRollId(room.snakesLaddersRollId || null);
+        setSnakesLaddersPhase(room.snakesLaddersPhase || 'roll');
+        setSnakesLaddersLastAction(room.snakesLaddersLastAction || null);
       }
       if (screenRef.current === 'menu') {
         setRoomCode(room.code || roomCodeRef.current);
@@ -836,6 +874,12 @@ export default function App() {
         setMonopolyLandedBuildMaxHouses(room.landedBuildMaxHouses !== undefined ? room.landedBuildMaxHouses : 4);
         setMonopolyTurnCount(room.monopolyTurnCount || 0);
       }
+      if (room.gameType === 'snakes_ladders') {
+        setSnakesLaddersDice(room.snakesLaddersDice || [1]);
+        setSnakesLaddersRollId(room.snakesLaddersRollId || null);
+        setSnakesLaddersPhase(room.snakesLaddersPhase || 'roll');
+        setSnakesLaddersLastAction(room.snakesLaddersLastAction || null);
+      }
       setScreen('table');
     });
 
@@ -871,6 +915,12 @@ export default function App() {
         setMonopolyLandedBuildMaxHouses(room.landedBuildMaxHouses !== undefined ? room.landedBuildMaxHouses : 4);
         setMonopolyTurnCount(room.monopolyTurnCount || 0);
       }
+      if (room.gameType === 'snakes_ladders') {
+        setSnakesLaddersDice(room.snakesLaddersDice || [1]);
+        setSnakesLaddersRollId(room.snakesLaddersRollId || null);
+        setSnakesLaddersPhase(room.snakesLaddersPhase || 'roll');
+        setSnakesLaddersLastAction(room.snakesLaddersLastAction || null);
+      }
     });
 
     socket.on('round-over', (room) => {
@@ -901,6 +951,12 @@ export default function App() {
         setMonopolyLastActionDetail(room.lastActionDetail || null);
         setMonopolyLandedBuildMaxHouses(room.landedBuildMaxHouses !== undefined ? room.landedBuildMaxHouses : 4);
         setMonopolyTurnCount(room.monopolyTurnCount || 0);
+      }
+      if (room.gameType === 'snakes_ladders') {
+        setSnakesLaddersDice(room.snakesLaddersDice || [1]);
+        setSnakesLaddersRollId(room.snakesLaddersRollId || null);
+        setSnakesLaddersPhase(room.snakesLaddersPhase || 'roll');
+        setSnakesLaddersLastAction(room.snakesLaddersLastAction || null);
       }
     });
 
@@ -2256,11 +2312,11 @@ export default function App() {
           });
           ioToSystemChat(`${player.name} paid $${rent} rent to ${owner.name}.`);
 
-          let nextPhase: 'roll' | 'action' | 'jail_decision' | 'card_drawn' | 'bankrupt_decision' | 'end_turn' | 'auction' | 'festival_selection' | 'airport_selection' | 'force_acquire_decision' | 'use_angel_rent' | 'use_angel_force' | 'landed_build' | 'casino_flip' | 'casino_collect_or_push' | 'go_build_select' = 'end_turn';
           const tileWorth = (tile.price || 0) + (tile.houses || 0) * (tile.housePrice || 0);
 
           if (rules.ruleset === 'Get Rich' && tile.houses < 5 && tile.type === 'property' && moneyAfterRent >= tileWorth) {
             setMonopolyPendingForceAcquire({ byId: player.id, tileIndex: tile.index, worth: tileWorth });
+            let nextPhase: 'roll' | 'action' | 'jail_decision' | 'card_drawn' | 'bankrupt_decision' | 'end_turn' | 'auction' | 'festival_selection' | 'airport_selection' | 'force_acquire_decision' | 'use_angel_rent' | 'use_angel_force' | 'landed_build' | 'casino_flip' | 'casino_collect_or_push' | 'go_build_select';
             if ((owner as any).angelCards > 0) {
               nextPhase = 'use_angel_force';
             } else {
@@ -4018,7 +4074,241 @@ export default function App() {
     }
   };
 
+  const startSinglePlayerSnakesLaddersGame = () => {
+    sfx.playDeal();
+
+    const currentPlayers = [...players];
+    const botAvatars = [
+      { skinColor: '#FFDBAC', hairStyle: 'spiky', hairColor: '#1A1A1A', expression: 'cool', clothesColor: '#2F855A' },
+      { skinColor: '#F1C27D', hairStyle: 'bob', hairColor: '#E5C158', expression: 'smile', clothesColor: '#6B46C1' },
+      { skinColor: '#E0AC69', hairStyle: 'short', hairColor: '#B83B1D', expression: 'excited', clothesColor: '#C53030' },
+    ] as AvatarConfig[];
+
+    // Ensure at least 2 players
+    if (currentPlayers.length < 2) {
+      const existingNames = currentPlayers.map((p) => p.name);
+      const unusedNames = BOT_NAMES.filter((n) => !existingNames.includes(n));
+      const botName = unusedNames.length > 0
+        ? unusedNames[Math.floor(Math.random() * unusedNames.length)]
+        : `Bot ${currentPlayers.length + 1}`;
+      const botAvatar = botAvatars[currentPlayers.length % botAvatars.length];
+      currentPlayers.push({
+        id: `bot_${Math.random()}`,
+        name: botName,
+        avatar: botAvatar,
+        isHost: false,
+        isReady: true,
+        isBot: true,
+        cards: [],
+        passed: false,
+        score: 0,
+        lastPlay: null,
+      });
+    }
+
+    const updatedPlayers = currentPlayers.map((p) => ({
+      ...p,
+      position: 1, // Resets positions to 1
+      score: 0,
+      roundPoints: 0,
+      lastRoll: null,
+      lastPositionBeforeMove: null,
+      hadExtraTurn: false,
+      lastObstacleType: null,
+      lastObstacleStart: null,
+      lastObstacleEnd: null,
+      finishRank: undefined,
+    }));
+
+    setSnakesLaddersDice([1]);
+    setSnakesLaddersRollId(null);
+    setSnakesLaddersPhase('roll');
+    setSnakesLaddersLastAction(null);
+
+    setPlayers(updatedPlayers);
+    setTurnIndex(0);
+    setGameState('playing');
+    setScreen('table');
+
+    const systemMsgs = [
+      {
+        id: `sys_${Math.random()}`,
+        senderName: 'System',
+        senderId: 'system',
+        text: '🎲 Snakes & Ladders started! First to square 100 wins! 🐍',
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        system: true,
+      },
+      ...updatedPlayers.map(p => ({
+        id: `sys_${Math.random()}`,
+        senderName: 'System',
+        senderId: 'system',
+        text: `${p.name} joined the table.`,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        system: true,
+      }))
+    ];
+    setChatMessages(systemMsgs);
+  };
+
+  const restartSinglePlayerSnakesLaddersGameRound = () => {
+    startSinglePlayerSnakesLaddersGame();
+  };
+
+  const rollDiceSnakesLaddersSingle = () => {
+    const { snakesLaddersPhase: phase, turnIndex: tIdx, players: currentPlayers, rules: currentRules } = stateRef.current;
+    if (phase !== 'roll') return;
+
+    const currentPlayer = currentPlayers[tIdx];
+    if (!currentPlayer || currentPlayer.bankrupt) return;
+
+    const roll = Math.floor(Math.random() * 6) + 1;
+    setSnakesLaddersDice([roll]);
+    setSnakesLaddersRollId(Math.random().toString(36).substring(2, 9));
+    setSnakesLaddersPhase('rolling_animation');
+
+    sfx.playDiceRoll();
+
+    const rollMsg = {
+      id: `sys_${Math.random()}`,
+      senderName: 'System',
+      senderId: 'system',
+      text: `🎲 ${currentPlayer.name} rolled a ${roll}!`,
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      system: true,
+    };
+    setChatMessages((prev) => [...prev, rollMsg]);
+
+    setTimeout(() => {
+      sfx.playDiceLand();
+
+      const { players: freshPlayers, turnIndex: freshTurnIndex, rules: freshRules } = stateRef.current;
+      const freshCurrentPlayer = freshPlayers[freshTurnIndex];
+      if (!freshCurrentPlayer) return;
+
+      const oldPos = freshCurrentPlayer.position || 1;
+      let nextPos = oldPos + roll;
+      let landedEffect = null;
+      let landedEffectPos = null;
+
+      // Bounce-back
+      if (nextPos > 100) {
+        nextPos = 100 - (nextPos - 100);
+      }
+
+      let finalPos = nextPos;
+      if (LADDERS[nextPos]) {
+        finalPos = LADDERS[nextPos];
+        landedEffect = 'ladder';
+        landedEffectPos = nextPos;
+      } else if (SNAKES[nextPos]) {
+        finalPos = SNAKES[nextPos];
+        landedEffect = 'snake';
+        landedEffectPos = nextPos;
+      }
+
+      let chatText = `${freshCurrentPlayer.name} moved from ${oldPos} to ${nextPos}`;
+      if (landedEffect === 'ladder') {
+        chatText += `, then climbed a ladder from ${landedEffectPos} to ${finalPos}! 🪜`;
+      } else if (landedEffect === 'snake') {
+        chatText += `, then slid down a snake from ${landedEffectPos} to ${finalPos}! 🐍`;
+      } else {
+        chatText += '.';
+      }
+
+      const moveMsg = {
+        id: `sys_${Math.random()}`,
+        senderName: 'System',
+        senderId: 'system',
+        text: chatText,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        system: true,
+      };
+
+      const updatedLastAction = {
+        playerId: freshCurrentPlayer.id,
+        roll,
+        oldPos,
+        intermediatePos: nextPos,
+        finalPos,
+        landedEffect,
+        landedEffectPos
+      };
+
+      let nextTurnIndex = freshTurnIndex;
+
+      const rollSixBonus = freshRules && freshRules.rollSixBonus;
+      const hadExtraTurn = (roll === 6 && rollSixBonus);
+
+      const finalPlayers = freshPlayers.map((p, idx) => {
+        if (idx === freshTurnIndex) {
+          return {
+            ...p,
+            position: finalPos,
+            lastRoll: roll,
+            lastPositionBeforeMove: oldPos,
+            hadExtraTurn,
+            lastObstacleType: landedEffect,
+            lastObstacleStart: landedEffectPos,
+            lastObstacleEnd: landedEffect ? finalPos : null
+          };
+        }
+        return p;
+      });
+
+      if (finalPos === 100) {
+        finalPlayers.forEach((p) => {
+          if (p.id === freshCurrentPlayer.id) {
+            p.finishRank = 1;
+            p.score = 100;
+          } else {
+            p.finishRank = 2;
+            p.score = p.position || 1;
+          }
+        });
+
+        const winMsg = {
+          id: `sys_${Math.random()}`,
+          senderName: 'System',
+          senderId: 'system',
+          text: `🏆 ${freshCurrentPlayer.name} reached 100 and won!`,
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          system: true,
+        };
+
+        setPlayers(finalPlayers);
+        setGameState('gameover');
+        setChatMessages((prev) => [...prev, moveMsg, winMsg]);
+        return;
+      }
+
+      if (roll === 6 && rollSixBonus) {
+        const bonusMsg = {
+          id: `sys_${Math.random()}`,
+          senderName: 'System',
+          senderId: 'system',
+          text: `🔥 Bonus turn! ${freshCurrentPlayer.name} rolled a 6 and rolls again.`,
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          system: true,
+        };
+        setChatMessages((prev) => [...prev, moveMsg, bonusMsg]);
+      } else {
+        nextTurnIndex = (freshTurnIndex + 1) % freshPlayers.length;
+        setChatMessages((prev) => [...prev, moveMsg]);
+      }
+
+      setPlayers(finalPlayers);
+      setTurnIndex(nextTurnIndex);
+      setSnakesLaddersLastAction(updatedLastAction);
+      setSnakesLaddersPhase('roll');
+    }, 1500);
+  };
+
   const startSinglePlayerGame = () => {
+    if (gameType === 'snakes_ladders') {
+      startSinglePlayerSnakesLaddersGame();
+      return;
+    }
     if (gameType === 'monopoly') {
       startSinglePlayerMonopolyGame();
       return;
@@ -4342,6 +4632,13 @@ export default function App() {
               handleMonopolyActionSingle(decision.action, decision.payload);
             }
           }
+        } else if (latestGameType === 'snakes_ladders') {
+          const activePlayer = latestPlayers[latestTurnIndex];
+          if (!activePlayer || activePlayer.id !== targetBotId) return;
+
+          if (latestPhase === 'roll') {
+            rollDiceSnakesLaddersSingle();
+          }
         } else {
           // Capsa Logic
           const activePlayer = latestPlayers[latestTurnIndex];
@@ -4386,7 +4683,8 @@ export default function App() {
     isMonopolyAnimating,
     players,
     monopolyBoard,
-    monopolyLandedBuildMaxHouses
+    monopolyLandedBuildMaxHouses,
+    snakesLaddersPhase
   ]);
 
   function playCardsSingle(pId: string, cards: Card[]) {
@@ -5082,6 +5380,18 @@ export default function App() {
                 <div className="mode-card-title">Monopoly Tycoon</div>
                 <div className="mode-card-desc">Interactive 3D board, rolling dice, deals, and bankrupting bots.</div>
               </div>
+
+              <div
+                className={`mode-card ${gameType === 'snakes_ladders' ? 'active active-snakes_ladders' : ''}`}
+                onClick={() => {
+                  setGameType('snakes_ladders');
+                  setRules(prev => ({ ...prev, pointsToWin: 100, rollSixBonus: true }));
+                }}
+              >
+                <div className="mode-card-icon">🐍</div>
+                <div className="mode-card-title">Snakes & Ladders</div>
+                <div className="mode-card-desc">Roll dice, climb ladders, avoid slides, and race to 100!</div>
+              </div>
             </div>
 
             <div className="menu-content-columns">
@@ -5180,10 +5490,10 @@ export default function App() {
                 WebkitBackgroundClip: 'text',
                 WebkitTextFillColor: 'transparent'
               }}>
-                {gameType === 'monopoly' ? 'Monopoly' : gameType === 'uno' ? 'UNO' : 'Capsa Banting'}
+                {gameType === 'monopoly' ? 'Monopoly' : gameType === 'uno' ? 'UNO' : gameType === 'snakes_ladders' ? 'Snakes & Ladders' : 'Capsa Banting'}
               </h2>
               <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginTop: '0.2rem' }}>
-                {gameType === 'monopoly' ? 'board tycoon' : gameType === 'uno' ? 'house rules' : 'gacor kang'}
+                {gameType === 'monopoly' ? 'board tycoon' : gameType === 'uno' ? 'house rules' : gameType === 'snakes_ladders' ? 'classic race' : 'gacor kang'}
               </p>
             </div>
 
@@ -5587,6 +5897,30 @@ export default function App() {
               </div>
             )}
 
+            {gameType === 'snakes_ladders' && (
+              <>
+                <div className="settings-row">
+                  <label>Roll 6 Extra Turn</label>
+                  {players.find(pl => isSinglePlayer ? pl.id === 'local_user' : pl.id === socketId)?.isHost ? (
+                    <label className="switch">
+                      <input
+                        type="checkbox"
+                        checked={rules.rollSixBonus}
+                        onChange={(e) => {
+                          const updated = { ...rules, rollSixBonus: e.target.checked };
+                          setRules(updated);
+                          if (!isSinglePlayer) updateRulesOnline(updated);
+                        }}
+                      />
+                      <span className="slider" />
+                    </label>
+                  ) : (
+                    <span style={{ fontWeight: 'bold' }}>{rules.rollSixBonus ? 'Enabled' : 'Disabled'}</span>
+                  )}
+                </div>
+              </>
+            )}
+
             {/* Seat fill with bot buttons (only for host) */}
             {players.find(pl => isSinglePlayer ? pl.id === 'local_user' : pl.id === socketId)?.isHost && players.length < (gameType === 'uno' ? 8 : 4) && (
               <div style={{ marginTop: 'auto', paddingTop: '1rem', display: 'flex', flexDirection: 'column' }}>
@@ -5692,6 +6026,26 @@ export default function App() {
           onSwapHand={isSinglePlayer ? (targetId) => swapHandUnoSingle(targetId) : (targetId) => socketRef.current?.emit('swap-hand', { roomCode, targetPlayerId: targetId })}
           onRestartGame={isSinglePlayer ? restartSinglePlayerUnoGameRound : restartOnlineGame}
           onLeaveRoom={leaveRoom}
+        />
+      )}
+
+      {screen === 'table' && gameType === 'snakes_ladders' && (
+        <SnakesLaddersTable
+          playerId={isSinglePlayer ? 'local_user' : socketId}
+          players={players}
+          turnIndex={turnIndex}
+          dice={snakesLaddersDice}
+          rollId={snakesLaddersRollId}
+          phase={snakesLaddersPhase}
+          lastAction={snakesLaddersLastAction}
+          gameState={gameState}
+          roomCode={roomCode}
+          isHost={players.find(pl => isSinglePlayer ? pl.id === 'local_user' : pl.id === socketId)?.isHost || false}
+          isSinglePlayer={isSinglePlayer}
+          rules={rules}
+          onRollDice={isSinglePlayer ? rollDiceSnakesLaddersSingle : () => socketRef.current?.emit('snakes-ladders-action', { roomCode, action: 'roll-dice' })}
+          onLeaveRoom={leaveRoom}
+          onRestartGame={isSinglePlayer ? restartSinglePlayerSnakesLaddersGameRound : restartOnlineGame}
         />
       )}
 

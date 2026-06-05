@@ -5,6 +5,7 @@ import cors from 'cors';
 import * as capsaEngine from './games/capsa.js';
 import * as unoEngine from './games/uno.js';
 import * as monopolyEngine from './games/monopoly.js';
+import * as snakesLaddersEngine from './games/snakes_ladders.js';
 
 const BOT_NAMES = [
   // Indonesian Names
@@ -63,6 +64,7 @@ function emitRoomUpdated(roomCode, room) {
 
 function getRoomEngine(room) {
   if (room.gameType === 'monopoly') return monopolyEngine;
+  if (room.gameType === 'snakes_ladders') return snakesLaddersEngine;
   return room.gameType === 'uno' ? unoEngine : capsaEngine;
 }
 
@@ -284,6 +286,9 @@ io.on('connection', (socket) => {
         sevenSwap: true,
         zeroRotate: true,
         drawTillPlay: true,
+      } : type === 'snakes_ladders' ? {
+        pointsToWin: 100,
+        rollSixBonus: true
       } : {
         pointsToWin: 15,
         turnDuration: 30, // 30 seconds
@@ -490,6 +495,12 @@ io.on('connection', (socket) => {
         return;
       }
       unoEngine.startRound(room, io);
+    } else if (room.gameType === 'snakes_ladders') {
+      if (room.players.length < 2) {
+        socket.emit('start-error', 'Need at least 2 players to start Snakes & Ladders.');
+        return;
+      }
+      snakesLaddersEngine.startRound(room, io);
     } else {
       // Auto-fill empty slots with bots up to 4 players for Capsa Banting
       const botAvatars = [
@@ -604,6 +615,14 @@ io.on('connection', (socket) => {
     }
   });
 
+  socket.on('snakes-ladders-action', ({ roomCode, action, payload }) => {
+    const room = rooms.get(roomCode);
+    if (!room || room.gameState !== 'playing') return;
+    if (room.gameType === 'snakes_ladders') {
+      snakesLaddersEngine.handleAction(room, socket, action, payload, io);
+    }
+  });
+
   // 10. Restart Game / Next Round
   socket.on('restart-game', ({ roomCode }) => {
     const room = rooms.get(roomCode);
@@ -623,6 +642,8 @@ io.on('connection', (socket) => {
       monopolyEngine.startRound(room, io);
     } else if (room.gameType === 'uno') {
       unoEngine.startRound(room, io);
+    } else if (room.gameType === 'snakes_ladders') {
+      snakesLaddersEngine.startRound(room, io);
     } else {
       capsaEngine.startRound(room, io);
     }
