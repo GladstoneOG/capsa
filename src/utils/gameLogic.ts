@@ -217,10 +217,6 @@ export function checkCombination(cards: Card[]): Combination {
   return { type: 'invalid', cards };
 }
 
-function isStraight(sorted: Card[]): boolean {
-  return getConsecutiveStraight(sorted) !== null;
-}
-
 function isFlush(sorted: Card[]): boolean {
   const suit = sorted[0].suit;
   return sorted.every(c => c.suit === suit);
