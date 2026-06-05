@@ -3316,4 +3316,71 @@ input:checked + .slider:before {
   box-shadow: 0 6px 20px rgba(22, 163, 74, 0.5) !important;
 }
 
+/* ==================== Snakes & Ladders Theme Overrides ==================== */
+.theme-snakes_ladders {
+  --bg-gradient: radial-gradient(circle at top, #eaf4f4 0%, #cce3de 45%, #a4c3b2 100%) !important;
+  background: var(--bg-gradient) !important;
+  color: #2c3e50 !important; /* Dark natural slate text */
+  
+  --primary: #6b9080 !important; /* Pastel natural sage green */
+  --primary-hover: #557566 !important;
+  --primary-glow: rgba(107, 144, 128, 0.4) !important;
+  
+  --accent-gold: #f6bd60 !important; /* Pastel gold */
+  --accent-gold-hover: #f5a834 !important;
+  --accent-gold-glow: rgba(246, 189, 96, 0.3) !important;
+  
+  --text-primary: #2c3e50 !important;
+  --text-muted: #4a5d6e !important;
+  --border-glow: rgba(107, 144, 128, 0.2) !important;
+}
+
+.theme-snakes_ladders .glass-panel {
+  background: rgba(255, 255, 255, 0.45) !important; /* Glassmorphism light mode pastel */
+  border: 1px solid rgba(255, 255, 255, 0.6) !important;
+  backdrop-filter: blur(12px) !important;
+  -webkit-backdrop-filter: blur(12px) !important;
+  color: #2c3e50 !important;
+  box-shadow: 0 8px 32px 0 rgba(107, 144, 128, 0.1) !important;
+}
+
+.theme-snakes_ladders .glow-orb-1 {
+  background: radial-gradient(circle, rgba(163, 196, 188, 0.4) 0%, rgba(0,0,0,0) 70%) !important;
+}
+
+.theme-snakes_ladders .glow-orb-2 {
+  background: radial-gradient(circle, rgba(246, 189, 96, 0.4) 0%, rgba(0,0,0,0) 70%) !important;
+}
+
+.theme-snakes_ladders .btn-primary {
+  background: linear-gradient(135deg, var(--primary) 0%, #4f6d61 100%) !important;
+  box-shadow: 0 4px 15px var(--primary-glow) !important;
+  color: #ffffff !important;
+}
+
+.theme-snakes_ladders .btn-primary:hover {
+  box-shadow: 0 6px 20px rgba(107, 144, 128, 0.6) !important;
+}
+
+.theme-snakes_ladders .btn-gold {
+  background: linear-gradient(135deg, var(--accent-gold) 0%, #e76f51 100%) !important;
+  box-shadow: 0 4px 15px var(--accent-gold-glow) !important;
+  color: #ffffff !important;
+}
+
+.theme-snakes_ladders .btn-gold:hover {
+  box-shadow: 0 6px 20px rgba(246, 189, 96, 0.5) !important;
+}
+
+.theme-snakes_ladders .lobby-code-badge {
+  background: rgba(255, 255, 255, 0.65) !important;
+  border: 1px solid rgba(107, 144, 128, 0.3) !important;
+  color: #2c3e50 !important;
+}
+
+.theme-snakes_ladders .mode-card.active {
+  border-color: var(--primary) !important;
+  box-shadow: 0 0 15px var(--primary-glow) !important;
+}
+
 
