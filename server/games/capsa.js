@@ -322,8 +322,15 @@ export function passTurn(room, socket, io) {
   });
 
   const activeCount = getActivePlayerCount(room.players);
-  if (activeCount <= 1) {
-    const lastPlayerIdx = room.players.findIndex(p => p.id === room.lastPlayerPlayedId);
+  const lastPlayerIdx = room.players.findIndex(p => p.id === room.lastPlayerPlayedId);
+  const lastPlayerStillActive = lastPlayerIdx !== -1 && !room.players[lastPlayerIdx].passed && room.players[lastPlayerIdx].cards.length > 0;
+
+  // Trick ends when no one can contest the last play:
+  // - If the trick winner is still in the game: when they're the only active player (activeCount === 1)
+  // - If the trick winner has no cards left: when ALL remaining players have passed (activeCount === 0)
+  const trickOver = lastPlayerStillActive ? activeCount <= 1 : activeCount === 0;
+
+  if (trickOver) {
     const lastPlayer = room.players[lastPlayerIdx];
     const lastPlayerName = lastPlayer ? lastPlayer.name : 'Unknown';
 

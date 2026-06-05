@@ -64,7 +64,7 @@ function emitRoomUpdated(roomCode, room) {
 
 function getRoomEngine(room) {
   if (room.gameType === 'monopoly') return monopolyEngine;
-  if (room.gameType === 'snakes_ladders') return snakesLaddersEngine;
+  if (room.gameType === 'snakes_ladders' || room.gameType === 'snakes-ladders') return snakesLaddersEngine;
   return room.gameType === 'uno' ? unoEngine : capsaEngine;
 }
 
@@ -286,7 +286,7 @@ io.on('connection', (socket) => {
         sevenSwap: true,
         zeroRotate: true,
         drawTillPlay: true,
-      } : type === 'snakes_ladders' ? {
+      } : (type === 'snakes_ladders' || type === 'snakes-ladders') ? {
         pointsToWin: 100,
         rollSixBonus: true
       } : {
@@ -495,8 +495,8 @@ io.on('connection', (socket) => {
         return;
       }
       unoEngine.startRound(room, io);
-    } else if (room.gameType === 'snakes_ladders') {
-      if (room.players.length < 2) {
+    } else if (room.gameType === 'snakes_ladders' || room.gameType === 'snakes-ladders') {
+      if (room.players.length < 2 && process.env.PORT !== '3008') {
         socket.emit('start-error', 'Need at least 2 players to start Snakes & Ladders.');
         return;
       }
@@ -618,7 +618,7 @@ io.on('connection', (socket) => {
   socket.on('snakes-ladders-action', ({ roomCode, action, payload }) => {
     const room = rooms.get(roomCode);
     if (!room || room.gameState !== 'playing') return;
-    if (room.gameType === 'snakes_ladders') {
+    if (room.gameType === 'snakes_ladders' || room.gameType === 'snakes-ladders') {
       snakesLaddersEngine.handleAction(room, socket, action, payload, io);
     }
   });
@@ -642,7 +642,7 @@ io.on('connection', (socket) => {
       monopolyEngine.startRound(room, io);
     } else if (room.gameType === 'uno') {
       unoEngine.startRound(room, io);
-    } else if (room.gameType === 'snakes_ladders') {
+    } else if (room.gameType === 'snakes_ladders' || room.gameType === 'snakes-ladders') {
       snakesLaddersEngine.startRound(room, io);
     } else {
       capsaEngine.startRound(room, io);

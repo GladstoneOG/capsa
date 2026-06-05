@@ -72,6 +72,7 @@ interface RoomRules {
   ruleset?: string;
   startingCash?: number;
   turnLimit?: number;
+  rollSixBonus?: boolean;
 }
 
 const INDONESIAN_NAMES = ['Aris', 'Budi', 'Candra', 'Dewi', 'Eko', 'Fitri', 'Giri', 'Hadi', 'Indra', 'Joko', 'Kartika', 'Laras', 'Mega', 'Nugroho', 'Putri', 'Rian', 'Siti', 'Taufik', 'Utami', 'Wulan'];
@@ -212,7 +213,7 @@ export default function App() {
     startingCash: 1500,
     turnLimit: 0,
   });
-  const [gameType, setGameType] = useState<'capsa' | 'uno' | 'monopoly'>('capsa');
+  const [gameType, setGameType] = useState<'capsa' | 'uno' | 'monopoly' | 'snakes_ladders'>('capsa');
   const [unoCurrentColor, setUnoCurrentColor] = useState<string>('red');
   const [unoCurrentValue, setUnoCurrentValue] = useState<string>('0');
   const [unoPlayDirection, setUnoPlayDirection] = useState<number>(1);
@@ -4111,7 +4112,7 @@ export default function App() {
       position: 1, // Resets positions to 1
       score: 0,
       roundPoints: 0,
-      lastRoll: null,
+      lastRoll: [],
       lastPositionBeforeMove: null,
       hadExtraTurn: false,
       lastObstacleType: null,
@@ -4156,7 +4157,7 @@ export default function App() {
   };
 
   const rollDiceSnakesLaddersSingle = () => {
-    const { snakesLaddersPhase: phase, turnIndex: tIdx, players: currentPlayers, rules: currentRules } = stateRef.current;
+    const { snakesLaddersPhase: phase, turnIndex: tIdx, players: currentPlayers } = stateRef.current;
     if (phase !== 'roll') return;
 
     const currentPlayer = currentPlayers[tIdx];
@@ -4245,7 +4246,7 @@ export default function App() {
           return {
             ...p,
             position: finalPos,
-            lastRoll: roll,
+            lastRoll: [roll],
             lastPositionBeforeMove: oldPos,
             hadExtraTurn,
             lastObstacleType: landedEffect,
@@ -5335,6 +5336,71 @@ export default function App() {
                     Sarang Judi
                   </h1>
                 </div>
+              ) : gameType === 'snakes_ladders' ? (
+                <div className="snakes-ladders-title-wrapper" style={{
+                  display: 'inline-block',
+                  position: 'relative',
+                  padding: '1.25rem 3.5rem',
+                  margin: '0 auto 0.75rem',
+                }}>
+                  {/* Backdrop Pastel Wood Plate */}
+                  <div style={{
+                    position: 'absolute',
+                    top: '50%',
+                    left: '50%',
+                    transform: 'translate(-50%, -50%)',
+                    width: '100%',
+                    height: '100%',
+                    background: 'linear-gradient(135deg, #cce3de 0%, #a4c3b2 100%)',
+                    border: '3px solid #6b9080',
+                    borderRadius: '16px',
+                    boxShadow: '0 6px 20px rgba(107,144,128,0.35), inset 0 0 10px rgba(255,255,255,0.6)',
+                    zIndex: 2,
+                    pointerEvents: 'none'
+                  }} />
+
+                  {/* Cute Snake head peaking from left */}
+                  <div style={{
+                    position: 'absolute',
+                    left: '-2rem',
+                    top: '50%',
+                    transform: 'translateY(-50%) rotate(-15deg)',
+                    zIndex: 3,
+                    fontSize: '2.5rem',
+                    pointerEvents: 'none'
+                  }}>🐍</div>
+
+                  {/* Cute Ladder peaking from right */}
+                  <div style={{
+                    position: 'absolute',
+                    right: '-2rem',
+                    top: '50%',
+                    transform: 'translateY(-50%) rotate(15deg)',
+                    zIndex: 3,
+                    fontSize: '2.5rem',
+                    pointerEvents: 'none'
+                  }}>🪜</div>
+
+                  {/* Dynamic Gradient Title Text */}
+                  <h1 className="menu-title-snakes-ladders" style={{
+                    position: 'relative',
+                    zIndex: 4,
+                    fontFamily: "'Outfit', sans-serif",
+                    fontSize: '2.6rem',
+                    fontWeight: 900,
+                    textTransform: 'uppercase',
+                    textAlign: 'center',
+                    margin: 0,
+                    lineHeight: 1,
+                    letterSpacing: '1px',
+                    background: 'linear-gradient(to bottom, #2c3e50 0%, #557566 100%)',
+                    WebkitBackgroundClip: 'text',
+                    WebkitTextFillColor: 'transparent',
+                    textShadow: '0 1px 3px rgba(255,255,255,0.8)',
+                  }}>
+                    Sarang Judi
+                  </h1>
+                </div>
               ) : (
                 <h1 className="menu-title" style={{ transition: 'all 0.3s' }}>
                   Sarang Judi
@@ -5486,7 +5552,9 @@ export default function App() {
                   ? 'linear-gradient(to right, #10b981, #059669)'
                   : gameType === 'uno'
                     ? 'linear-gradient(to right, #60a5fa, #4ade80)'
-                    : 'linear-gradient(to right, #a78bfa, #fbbf24)',
+                    : gameType === 'snakes_ladders'
+                      ? 'linear-gradient(to right, #6b9080, #f6bd60)'
+                      : 'linear-gradient(to right, #a78bfa, #fbbf24)',
                 WebkitBackgroundClip: 'text',
                 WebkitTextFillColor: 'transparent'
               }}>

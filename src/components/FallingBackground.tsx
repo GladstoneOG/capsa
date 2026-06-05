@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 
 interface FallingBackgroundProps {
-  gameType: 'capsa' | 'uno' | 'monopoly';
+  gameType: 'capsa' | 'uno' | 'monopoly' | 'snakes_ladders';
 }
 
 interface Particle {
@@ -12,7 +12,7 @@ interface Particle {
   angle: number;
   rotationSpeed: number;
   scale: number;
-  type: 'playing-card' | 'uno-card' | 'die' | 'bill';
+  type: 'playing-card' | 'uno-card' | 'die' | 'bill' | 'snake' | 'ladder';
   faceUp: boolean;
   suit?: 'H' | 'D' | 'C' | 'S';
   rank?: string;
@@ -102,8 +102,7 @@ export const FallingBackground: React.FC<FallingBackgroundProps> = ({ gameType }
         unoVal = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '⇄', '⊘', '+2'][
           Math.floor(Math.random() * 13)
         ];
-      } else {
-        // monopoly
+      } else if (gameType === 'monopoly') {
         const isDie = Math.random() > 0.6;
         type = isDie ? 'die' : 'bill';
         if (isDie) {
@@ -112,6 +111,18 @@ export const FallingBackground: React.FC<FallingBackgroundProps> = ({ gameType }
         } else {
           const vals = [10, 20, 50, 100, 500];
           billVal = vals[Math.floor(Math.random() * vals.length)];
+        }
+      } else {
+        // snakes_ladders
+        const rand = Math.random();
+        if (rand < 0.4) {
+          type = 'die';
+          dieVal = Math.floor(Math.random() * 6) + 1;
+          dieColor = ['#B7E4C7', '#FFE8D6', '#D8F3DC', '#F0E6EF'][Math.floor(Math.random() * 4)];
+        } else if (rand < 0.7) {
+          type = 'snake';
+        } else {
+          type = 'ladder';
         }
       }
 
@@ -518,6 +529,83 @@ export const FallingBackground: React.FC<FallingBackgroundProps> = ({ gameType }
       ctx.restore();
     };
 
+    const drawSnake = (p: Particle) => {
+      const length = 40 * p.scale;
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      ctx.rotate(p.angle);
+
+      // Cute snake color - pastel coral/pink or light green
+      ctx.strokeStyle = '#F8AD9D';
+      ctx.lineWidth = 4 * p.scale;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+
+      // Draw wavy body
+      ctx.beginPath();
+      ctx.moveTo(-length / 2, 0);
+      for (let i = -length / 2; i <= length / 2; i += 2) {
+        const wave = Math.sin((i / length) * Math.PI * 4) * 6 * p.scale;
+        ctx.lineTo(i, wave);
+      }
+      ctx.stroke();
+
+      // Draw head at the end
+      const headX = length / 2;
+      const headY = Math.sin((headX / length) * Math.PI * 4) * 6 * p.scale;
+      ctx.fillStyle = '#F8AD9D';
+      ctx.beginPath();
+      ctx.arc(headX, headY, 5 * p.scale, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Cute eye
+      ctx.fillStyle = '#1e293b';
+      ctx.beginPath();
+      ctx.arc(headX + 1 * p.scale, headY - 1 * p.scale, 1 * p.scale, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.restore();
+    };
+
+    const drawLadder = (p: Particle) => {
+      const w = 16 * p.scale;
+      const h = 45 * p.scale;
+
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      ctx.rotate(p.angle);
+
+      // Wood-like pastel color
+      ctx.strokeStyle = '#DDB892';
+      ctx.lineWidth = 3 * p.scale;
+      ctx.lineCap = 'round';
+
+      // Left rail
+      ctx.beginPath();
+      ctx.moveTo(-w / 2, -h / 2);
+      ctx.lineTo(-w / 2, h / 2);
+      ctx.stroke();
+
+      // Right rail
+      ctx.beginPath();
+      ctx.moveTo(w / 2, -h / 2);
+      ctx.lineTo(w / 2, h / 2);
+      ctx.stroke();
+
+      // Rungs
+      const rungCount = 4;
+      ctx.lineWidth = 2 * p.scale;
+      for (let i = 0; i < rungCount; i++) {
+        const ry = -h / 2 + (h / (rungCount - 1)) * i;
+        ctx.beginPath();
+        ctx.moveTo(-w / 2, ry);
+        ctx.lineTo(w / 2, ry);
+        ctx.stroke();
+      }
+
+      ctx.restore();
+    };
+
     // ANIMATION LOOP
     const tick = () => {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -543,6 +631,10 @@ export const FallingBackground: React.FC<FallingBackgroundProps> = ({ gameType }
           drawDie(p);
         } else if (p.type === 'bill') {
           drawBill(p);
+        } else if (p.type === 'snake') {
+          drawSnake(p);
+        } else if (p.type === 'ladder') {
+          drawLadder(p);
         }
       });
 

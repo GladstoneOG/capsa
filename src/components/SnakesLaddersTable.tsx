@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { AvatarSVG } from './AvatarCreator';
 import { SNAKES, LADDERS } from '../utils/snakesLaddersLogic';
 import './SnakesLaddersTable.css';
@@ -11,7 +11,7 @@ interface TableProps {
   rollId: string | null;
   phase: 'roll' | 'rolling_animation';
   lastAction: any;
-  gameState: 'playing' | 'gameover' | 'roundover';
+  gameState: 'lobby' | 'playing' | 'gameover' | 'roundover';
   roomCode: string;
   isHost: boolean;
   isSinglePlayer: boolean;
@@ -26,14 +26,14 @@ export const SnakesLaddersTable: React.FC<TableProps> = ({
   players,
   turnIndex,
   dice,
-  rollId,
+  rollId: _rollId,
   phase,
-  lastAction,
+  lastAction: _lastAction,
   gameState,
   roomCode,
   isHost,
-  isSinglePlayer,
-  rules,
+  isSinglePlayer: _isSinglePlayer,
+  rules: _rules,
   onRollDice,
   onLeaveRoom,
   onRestartGame

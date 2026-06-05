@@ -161,6 +161,14 @@ class SocketClientHelper {
       this.room = room;
       this.events.push({ name: 'room-updated', data: room });
     });
+    this.socket.on('game-updated', (room: any) => {
+      this.room = room;
+      this.events.push({ name: 'room-updated', data: room });
+    });
+    this.socket.on('game-started', (room: any) => {
+      this.room = room;
+      this.events.push({ name: 'room-updated', data: room });
+    });
     this.socket.on('join-error', (msg: any) => {
       this.errors.push(msg);
       this.events.push({ name: 'join-error', data: msg });
@@ -1382,7 +1390,7 @@ async function main() {
   console.log('==================================================');
 
   let server: MockServer | null = null;
-  const port = 3005;
+  const port = 3008;
 
   if (isVerifyRunner) {
     server = new MockServer(port);
