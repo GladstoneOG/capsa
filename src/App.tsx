@@ -1064,7 +1064,7 @@ export default function App() {
 
   const playCardsOnline = (cards: Card[]) => {
     const combo = checkCombination(cards);
-    socketRef.current?.emit('play-cards', { roomCode, cards, comboType: combo.type });
+    socketRef.current?.emit('play-cards', { roomCode, cards: combo.cards, comboType: combo.type });
   };
 
   const passTurnOnline = () => {
@@ -4695,20 +4695,23 @@ export default function App() {
     if (idx === -1 || idx !== currentTurnIndex) return;
     if (!cards.length) return;
 
+    const combo = checkCombination(cards);
+    const resolvedCards = combo.type !== 'invalid' ? combo.cards : cards;
+
     const isFirstPlay = !currentActivePlay && currentPlayers.every(p => p.cards.length === 13);
-    if (isFirstPlay && !contains3Diamonds(cards)) return;
+    if (isFirstPlay && !contains3Diamonds(resolvedCards)) return;
 
     // Count how many players have already finished (have finishRank set)
     const finishedCount = currentPlayers.filter((p) => p.finishRank !== undefined).length;
 
     const updated = currentPlayers.map((player, index) => {
       if (index === idx) {
-        const cardIds = cards.map((c) => c.id);
+        const cardIds = resolvedCards.map((c) => c.id);
         const remainingCards = player.cards.filter((c) => c && !cardIds.includes(c.id));
         return {
           ...player,
           cards: remainingCards,
-          lastPlay: cards,
+          lastPlay: resolvedCards,
           passed: false,
           finishRank: remainingCards.length === 0 ? finishedCount + 1 : player.finishRank,
         };
@@ -4719,8 +4722,8 @@ export default function App() {
     const p = updated[idx];
 
     const nextActivePlay = {
-      type: cards.length === 1 ? 'single' : cards.length === 2 ? 'pair' : cards.length === 3 ? 'tris' : checkCombination(cards).type,
-      cards: cards,
+      type: resolvedCards.length === 1 ? 'single' : resolvedCards.length === 2 ? 'pair' : resolvedCards.length === 3 ? 'tris' : combo.type,
+      cards: resolvedCards,
     } as Combination;
 
     setPlayers(updated);
@@ -4729,8 +4732,8 @@ export default function App() {
 
     // Chat logs
     const suitSymbols: Record<string, string> = { D: '♦', C: '♣', H: '♥', S: '♠' };
-    const desc = cards.map(c => `${c.rank}${suitSymbols[c.suit]}`).join(' ');
-    const comboType = cards.length === 1 ? 'Single' : cards.length === 2 ? 'Pair' : cards.length === 3 ? 'Tris' : '5-Card Combination';
+    const desc = resolvedCards.map(c => `${c.rank}${suitSymbols[c.suit]}`).join(' ');
+    const comboType = resolvedCards.length === 1 ? 'Single' : resolvedCards.length === 2 ? 'Pair' : resolvedCards.length === 3 ? 'Tris' : '5-Card Combination';
     const sysMsg: ChatMessage = {
       id: `sys_${Math.random()}`,
       senderName: 'System',
@@ -4741,7 +4744,7 @@ export default function App() {
     };
     setChatMessages((prevMsgs) => [...prevMsgs, sysMsg]);
 
-    const comboTypeToCheck = cards.length === 1 ? 'single' : cards.length === 2 ? 'pair' : cards.length === 3 ? 'tris' : checkCombination(cards).type;
+    const comboTypeToCheck = resolvedCards.length === 1 ? 'single' : resolvedCards.length === 2 ? 'pair' : resolvedCards.length === 3 ? 'tris' : combo.type;
     const isBomb = comboTypeToCheck === 'bomber' || comboTypeToCheck === 'straightflush';
     if (p.isBot) {
       triggerBotChatMessage(p.name, p.id, isBomb ? 'bomb' : 'play');

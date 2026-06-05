@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { type Card, type Combination, checkCombination, canBeat, contains3Diamonds, sortCards, getValidPlays, RANK_ORDER, SUIT_ORDER } from '../utils/gameLogic';
+import { type Card, type Combination, checkCombination, canBeat, contains3Diamonds, sortCards, getValidPlays, RANK_ORDER, SUIT_ORDER, getStraightHighCard } from '../utils/gameLogic';
 import { AvatarSVG } from './AvatarCreator';
 import { sfx } from '../utils/audio';
 
@@ -102,7 +102,10 @@ function getComboDescription(combo: Combination | null): string {
     if (rDiff !== 0) return rDiff;
     return SUIT_ORDER[a.suit] - SUIT_ORDER[b.suit];
   });
-  const highestCard = sorted[sorted.length - 1];
+  let highestCard = sorted[sorted.length - 1];
+  if (combo.type === 'straight' || combo.type === 'straightflush') {
+    highestCard = getStraightHighCard(combo.cards);
+  }
 
   switch (combo.type) {
     case 'single':

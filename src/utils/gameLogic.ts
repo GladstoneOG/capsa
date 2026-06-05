@@ -117,6 +117,55 @@ export function dealCards(playerCount: number): Card[][] {
 }
 
 // Check combination type
+const VALID_STRAIGHTS: Rank[][] = [
+  ['A', '2', '3', '4', '5'],
+  ['2', '3', '4', '5', '6'],
+  ['3', '4', '5', '6', '7'],
+  ['4', '5', '6', '7', '8'],
+  ['5', '6', '7', '8', '9'],
+  ['6', '7', '8', '9', '10'],
+  ['7', '8', '9', '10', 'J'],
+  ['8', '9', '10', 'J', 'Q'],
+  ['9', '10', 'J', 'Q', 'K'],
+  ['10', 'J', 'Q', 'K', 'A'],
+  ['J', 'Q', 'K', 'A', '2']
+];
+
+export function getConsecutiveStraight(cards: Card[]): Card[] | null {
+  if (cards.length !== 5) return null;
+  const cardRanks = cards.map(c => c.rank);
+  for (const seq of VALID_STRAIGHTS) {
+    const isMatch = seq.every(r => cardRanks.includes(r));
+    if (isMatch) {
+      return seq.map(r => cards.find(c => c.rank === r)!);
+    }
+  }
+  return null;
+}
+
+export function getStraightHighCard(cards: Card[]): Card {
+  const ranks = cards.map(c => c.rank);
+  const hasAce = ranks.includes('A');
+  const hasTwo = ranks.includes('2');
+  const hasThree = ranks.includes('3');
+  const hasFour = ranks.includes('4');
+  const hasFive = ranks.includes('5');
+  const hasSix = ranks.includes('6');
+
+  if (hasAce && hasTwo && hasThree && hasFour && hasFive) {
+    return cards.find(c => c.rank === '5')!;
+  }
+  if (hasTwo && hasThree && hasFour && hasFive && hasSix) {
+    return cards.find(c => c.rank === '6')!;
+  }
+  const sorted = [...cards].sort((a, b) => {
+    const rDiff = RANK_ORDER[a.rank] - RANK_ORDER[b.rank];
+    if (rDiff !== 0) return rDiff;
+    return SUIT_ORDER[a.suit] - SUIT_ORDER[b.suit];
+  });
+  return sorted[sorted.length - 1];
+}
+
 export function checkCombination(cards: Card[]): Combination {
   const sorted = sortCards(cards, 'rank');
   const count = sorted.length;
@@ -140,11 +189,12 @@ export function checkCombination(cards: Card[]): Combination {
   }
 
   if (count === 5) {
-    const isS = isStraight(sorted);
+    const consecutiveS = getConsecutiveStraight(sorted);
+    const isS = consecutiveS !== null;
     const isF = isFlush(sorted);
 
     if (isS && isF) {
-      return { type: 'straightflush', cards: sorted };
+      return { type: 'straightflush', cards: consecutiveS };
     }
 
     if (isBomber(sorted)) {
@@ -160,7 +210,7 @@ export function checkCombination(cards: Card[]): Combination {
     }
 
     if (isS) {
-      return { type: 'straight', cards: sorted };
+      return { type: 'straight', cards: consecutiveS };
     }
   }
 
@@ -168,18 +218,7 @@ export function checkCombination(cards: Card[]): Combination {
 }
 
 function isStraight(sorted: Card[]): boolean {
-  // Ranks must be consecutive.
-  // Values: e.g. 3,4,5,6,7. Since sorted is by RANK_ORDER, we check consecutive.
-  // Standard consecutive ranks (no wrapping for 2 to 3, but let's check: J-Q-K-A-2 or A-2-3-4-5? 
-  // Let's stick to standard consecutive RANK_ORDER values:
-  // e.g. 0,1,2,3,4.
-  const vals = sorted.map(c => RANK_ORDER[c.rank]);
-  for (let i = 0; i < 4; i++) {
-    if (vals[i + 1] !== vals[i] + 1) {
-      return false;
-    }
-  }
-  return true;
+  return getConsecutiveStraight(sorted) !== null;
 }
 
 function isFlush(sorted: Card[]): boolean {
@@ -484,7 +523,7 @@ function findFiveCardHands(hand: Card[]): Card[][] {
   for (const combo of combosOf5) {
     const validated = checkCombination(combo);
     if (validated.type !== 'invalid') {
-      results.push(combo);
+      results.push(validated.cards);
     }
   }
   return results;
