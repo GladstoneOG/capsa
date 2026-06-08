@@ -602,6 +602,8 @@ button, select, input {
   display: grid;
   grid-template-columns: 1.2fr 1fr;
   gap: 2rem;
+  position: relative;
+  z-index: 1;
 }
 
 .lobby-header {
@@ -879,7 +881,19 @@ input:checked + .slider:before {
   max-width: 1150px;
   height: 90%;
   max-height: 600px;
-  background: var(--felt-gradient);
+  background: 
+    /* 1. Highlight shine */
+    radial-gradient(circle at 30% 20%, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0) 50%),
+    
+    /* 2. Repeating Card Suits Grid Pattern (Vibrant Watermark) */
+    url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20width%3D%2780%27%20height%3D%2780%27%20viewBox%3D%270%200%2080%2080%27%3E%3Cg%20fill%3D%27rgba%28255%2C255%2C255%2C0.06%29%27%20font-family%3D%27serif%27%20font-size%3D%2714%27%3E%3Ctext%20x%3D%2720%27%20y%3D%2725%27%20text-anchor%3D%27middle%27%3E%E2%99%A0%3C/text%3E%3Ctext%20x%3D%2760%27%20y%3D%2725%27%20text-anchor%3D%27middle%27%3E%E2%99%A5%3C/text%3E%3Ctext%20x%3D%2720%27%20y%3D%2765%27%20text-anchor%3D%27middle%27%3E%E2%99%A6%3C/text%3E%3Ctext%20x%3D%2760%27%20y%3D%2765%27%20text-anchor%3D%27middle%27%3E%E2%99%A3%3C/text%3E%3C/g%3E%3C/svg%3E"),
+    
+    /* 3. Velvet texture cross-hatch */
+    repeating-linear-gradient(45deg, rgba(0, 0, 0, 0.04) 0px, rgba(0, 0, 0, 0.04) 1px, transparent 1px, transparent 8px),
+    repeating-linear-gradient(-45deg, rgba(0, 0, 0, 0.04) 0px, rgba(0, 0, 0, 0.04) 1px, transparent 1px, transparent 8px),
+    
+    /* 4. Base felt gradient (High contrast: rich emerald to deep forest-black edge) */
+    radial-gradient(circle at center, #168a42 0%, #10592b 60%, #083017 100%);
   border-radius: 200px / 120px; /* oval */
   border: 12px solid #14532d;
   box-shadow: inset 0 0 80px rgba(0, 0, 0, 0.8), 0 20px 50px rgba(0, 0, 0, 0.6);
@@ -887,6 +901,48 @@ input:checked + .slider:before {
   display: flex;
   justify-content: center;
   align-items: center;
+}
+
+/* Gold inner double pinstripe with active glow shadow */
+.felt-table::before {
+  content: '';
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  right: 12px;
+  bottom: 12px;
+  border: 3px double rgba(251, 191, 36, 0.5);
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: 0;
+  box-shadow: inset 0 0 30px rgba(251, 191, 36, 0.15), 0 0 15px rgba(251, 191, 36, 0.15);
+}
+
+/* Breathing ambient spotlight effect (Golden/Emerald color-dodge blend) */
+.felt-table::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  border-radius: inherit;
+  background: radial-gradient(circle at 50% 50%, rgba(251, 191, 36, 0.32) 0%, rgba(52, 211, 153, 0.22) 40%, rgba(0, 0, 0, 0) 70%);
+  pointer-events: none;
+  z-index: 0;
+  mix-blend-mode: screen;
+  animation: felt-glow-pulse 6s ease-in-out infinite alternate;
+}
+
+@keyframes felt-glow-pulse {
+  0% {
+    opacity: 0.4;
+    transform: scale(0.96);
+  }
+  100% {
+    opacity: 0.95;
+    transform: scale(1.03);
+  }
 }
 
 /* Player seats around the table */
