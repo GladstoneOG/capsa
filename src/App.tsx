@@ -353,7 +353,12 @@ export default function App() {
     snakesLaddersDice,
     snakesLaddersPhase,
     snakesLaddersRollId,
-    snakesLaddersLastAction
+    snakesLaddersLastAction,
+    bowmastersPhase,
+    bowmastersTurnIdx,
+    bowmastersTurnOrder,
+    bowmastersTerrain,
+    bowmastersWind
   });
 
   useEffect(() => {
@@ -1384,13 +1389,15 @@ export default function App() {
               const diff = difficultyTiers[botHash];
               const terrainHeights = roomState.bowmastersTerrain || [];
               if (terrainHeights.length > 0) {
+                const charType = activePlayer.characterType || 'archer';
+                const projType = (charType === 'archer' ? 'arrow' : charType) as 'arrow' | 'boulder' | 'bomber' | 'spear' | 'slingshot';
                 const shot = calculateBotShot(
                   { x: activePlayer.positionX, y: activePlayer.positionY },
                   { x: target.positionX, y: target.positionY },
                   roomState.bowmastersWind || 0,
                   terrainHeights,
                   diff,
-                  activePlayer.characterType || 'archer'
+                  projType
                 );
                 socketRef.current?.emit('bowmasters-action', {
                   roomCode: roomState.code,
@@ -5058,13 +5065,15 @@ export default function App() {
                 const diff = difficultyTiers[botHash];
                 const terrainHeights = latestBowmastersTerrain || [];
                 if (terrainHeights.length > 0) {
+                  const charType = activePlayer.characterType || 'archer';
+                  const projType = (charType === 'archer' ? 'arrow' : charType) as 'arrow' | 'boulder' | 'bomber' | 'spear' | 'slingshot';
                   const shot = calculateBotShot(
                     { x: activePlayer.positionX || 0, y: activePlayer.positionY || 0 },
                     { x: target.positionX || 0, y: target.positionY || 0 },
                     latestBowmastersWind || 0,
                     terrainHeights,
                     diff,
-                    activePlayer.characterType || 'archer'
+                    projType
                   );
                   handleBowmastersActionSingle('fire', { angle: shot.angle, power: shot.power });
                 }
