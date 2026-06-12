@@ -3439,4 +3439,26 @@ input:checked + .slider:before {
   box-shadow: 0 0 15px var(--primary-glow) !important;
 }
 
+/* ==================== Bowmasters Theme Variables ==================== */
+.theme-bowmasters {
+  --primary: #f39c12; /* orange */
+  --primary-hover: #d35400;
+  --primary-glow: rgba(243, 156, 18, 0.4);
+  --accent-gold: #e67e22;
+  --accent-gold-hover: #d35400;
+}
+
+.mode-card.active-bowmasters {
+  border: 2px solid #e67e22 !important;
+  box-shadow: 0 0 16px rgba(230, 126, 34, 0.35), 0 8px 24px rgba(0, 0, 0, 0.45) !important;
+}
+.mode-card.active-bowmasters .mode-card-icon {
+  text-shadow: 0 0 8px rgba(230, 126, 34, 0.6);
+  transform: scale(1.1);
+}
+.mode-card.active-bowmasters .mode-card-title {
+  color: #e67e22;
+}
+
+
 

@@ -224,8 +224,10 @@ class MockServer {
   rooms: Map<string, Room>;
   reconnectTimers: Map<string, NodeJS.Timeout>;
   roomCounter = 0;
+  port: number;
 
   constructor(port: number) {
+    this.port = port;
     this.app = express();
     this.httpServer = createServer(this.app);
     this.io = new Server(this.httpServer, {
@@ -478,7 +480,7 @@ class MockServer {
 
   start(): Promise<void> {
     return new Promise((resolve) => {
-      this.httpServer.listen(3005, () => {
+      this.httpServer.listen(this.port, () => {
         resolve();
       });
     });

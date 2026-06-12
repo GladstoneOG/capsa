@@ -174,7 +174,9 @@ class MockServer {
     rooms;
     reconnectTimers;
     roomCounter = 0;
+    port;
     constructor(port) {
+        this.port = port;
         this.app = express();
         this.httpServer = createServer(this.app);
         this.io = new Server(this.httpServer, {
@@ -416,7 +418,7 @@ class MockServer {
     }
     start() {
         return new Promise((resolve) => {
-            this.httpServer.listen(3005, () => {
+            this.httpServer.listen(this.port, () => {
                 resolve();
             });
         });

@@ -1,4 +1,4 @@
-﻿const LADDERS = { 2: 38, 7: 14, 8: 31, 15: 26, 21: 42, 28: 84, 36: 44, 51: 67, 71: 91, 78: 98, 87: 94 };
+const LADDERS = { 2: 38, 7: 14, 8: 31, 15: 26, 21: 42, 28: 84, 36: 44, 51: 67, 71: 91, 78: 98, 87: 94 };
 const SNAKES = { 16: 6, 46: 25, 49: 11, 62: 19, 64: 60, 74: 53, 89: 68, 92: 88, 95: 75, 99: 80 };
 
 export function getSanitizedRoomState(room, socketId) {
@@ -84,7 +84,7 @@ export function startRound(room, io) {
 
 export function handleAction(room, socket, action, payload, io) {
   const currentPlayer = room.players[room.turnIndex];
-  if (!currentPlayer || currentPlayer.bankrupt) return;
+  if (!currentPlayer) return;
 
   const isAuthorized = currentPlayer.id === socket.id || (currentPlayer.isBot && room.players.find(p => p.id === socket.id)?.isHost);
   if (!isAuthorized) return;

@@ -17,6 +17,9 @@ import './monopoly.css';
 import { FallingBackground } from './components/FallingBackground';
 import { SnakesLaddersTable } from './components/SnakesLaddersTable';
 import { SNAKES, LADDERS } from './utils/snakesLaddersLogic';
+import { BowmastersTable } from './components/BowmastersTable';
+import { calculateBotShot } from './utils/bowmastersLogic';
+import './bowmasters.css';
 
 type Screen = 'menu' | 'lobby' | 'table';
 
@@ -48,6 +51,14 @@ interface Player {
   oddEvenCards?: number;
   angelCards?: number;
   freeTollCards?: number;
+  characterType?: 'archer' | 'boulder' | 'bomber' | 'spear' | 'slingshot' | null;
+  characterSelected?: boolean;
+  hp?: number;
+  maxHp?: number;
+  positionX?: number;
+  positionY?: number;
+  team?: 'a' | 'b';
+  alive?: boolean;
 }
 
 interface ChatMessage {
@@ -73,6 +84,8 @@ interface RoomRules {
   startingCash?: number;
   turnLimit?: number;
   rollSixBonus?: boolean;
+  mode?: '1v1' | '2v2';
+  windEnabled?: boolean;
 }
 
 const INDONESIAN_NAMES = ['Aris', 'Budi', 'Candra', 'Dewi', 'Eko', 'Fitri', 'Giri', 'Hadi', 'Indra', 'Joko', 'Kartika', 'Laras', 'Mega', 'Nugroho', 'Putri', 'Rian', 'Siti', 'Taufik', 'Utami', 'Wulan'];
@@ -213,7 +226,7 @@ export default function App() {
     startingCash: 1500,
     turnLimit: 0,
   });
-  const [gameType, setGameType] = useState<'capsa' | 'uno' | 'monopoly' | 'snakes_ladders'>('capsa');
+  const [gameType, setGameType] = useState<'capsa' | 'uno' | 'monopoly' | 'snakes_ladders' | 'bowmasters'>('capsa');
   const [unoCurrentColor, setUnoCurrentColor] = useState<string>('red');
   const [unoCurrentValue, setUnoCurrentValue] = useState<string>('0');
   const [unoPlayDirection, setUnoPlayDirection] = useState<number>(1);
@@ -249,6 +262,14 @@ export default function App() {
   const [snakesLaddersRollId, setSnakesLaddersRollId] = useState<string | null>(null);
   const [snakesLaddersPhase, setSnakesLaddersPhase] = useState<'roll' | 'rolling_animation'>('roll');
   const [snakesLaddersLastAction, setSnakesLaddersLastAction] = useState<any | null>(null);
+
+  // Bowmasters States
+  const [bowmastersPhase, setBowmastersPhase] = useState<string>('character_select');
+  const [bowmastersTerrain, setBowmastersTerrain] = useState<number[]>([]);
+  const [bowmastersWind, setBowmastersWind] = useState<number>(0);
+  const [bowmastersTurnOrder, setBowmastersTurnOrder] = useState<string[]>([]);
+  const [bowmastersTurnIdx, setBowmastersTurnIdx] = useState<number>(0);
+  const [bowmastersLastShot, setBowmastersLastShot] = useState<any | null>(null);
 
   // Developer Console State
   const [showDevConsole, setShowDevConsole] = useState<boolean>(false);
@@ -376,7 +397,12 @@ export default function App() {
       snakesLaddersDice,
       snakesLaddersPhase,
       snakesLaddersRollId,
-      snakesLaddersLastAction
+      snakesLaddersLastAction,
+      bowmastersPhase,
+      bowmastersTurnIdx,
+      bowmastersTurnOrder,
+      bowmastersTerrain,
+      bowmastersWind
     };
   }, [
     players,
@@ -409,7 +435,12 @@ export default function App() {
     snakesLaddersDice,
     snakesLaddersPhase,
     snakesLaddersRollId,
-    snakesLaddersLastAction
+    snakesLaddersLastAction,
+    bowmastersPhase,
+    bowmastersTurnIdx,
+    bowmastersTurnOrder,
+    bowmastersTerrain,
+    bowmastersWind
   ]);
 
   // Check query params if we were invited via a URL (e.g. /?room=ABCD)
@@ -713,6 +744,14 @@ export default function App() {
       setSnakesLaddersPhase(room.snakesLaddersPhase || 'roll');
       setSnakesLaddersLastAction(room.snakesLaddersLastAction || null);
     }
+    if (room.gameType === 'bowmasters') {
+      setBowmastersPhase(room.bowmastersPhase || 'character_select');
+      setBowmastersTerrain(room.bowmastersTerrain || []);
+      setBowmastersWind(room.bowmastersWind || 0);
+      setBowmastersTurnOrder(room.bowmastersTurnOrder || []);
+      setBowmastersTurnIdx(room.bowmastersTurnIdx || 0);
+      setBowmastersLastShot(room.bowmastersLastShot || null);
+    }
     if (nextScreen) {
       setScreen(nextScreen);
     }
@@ -881,6 +920,14 @@ export default function App() {
         setSnakesLaddersPhase(room.snakesLaddersPhase || 'roll');
         setSnakesLaddersLastAction(room.snakesLaddersLastAction || null);
       }
+      if (room.gameType === 'bowmasters') {
+        setBowmastersPhase(room.bowmastersPhase || 'character_select');
+        setBowmastersTerrain(room.bowmastersTerrain || []);
+        setBowmastersWind(room.bowmastersWind || 0);
+        setBowmastersTurnOrder(room.bowmastersTurnOrder || []);
+        setBowmastersTurnIdx(room.bowmastersTurnIdx || 0);
+        setBowmastersLastShot(room.bowmastersLastShot || null);
+      }
       setScreen('table');
     });
 
@@ -922,6 +969,14 @@ export default function App() {
         setSnakesLaddersPhase(room.snakesLaddersPhase || 'roll');
         setSnakesLaddersLastAction(room.snakesLaddersLastAction || null);
       }
+      if (room.gameType === 'bowmasters') {
+        setBowmastersPhase(room.bowmastersPhase || 'character_select');
+        setBowmastersTerrain(room.bowmastersTerrain || []);
+        setBowmastersWind(room.bowmastersWind || 0);
+        setBowmastersTurnOrder(room.bowmastersTurnOrder || []);
+        setBowmastersTurnIdx(room.bowmastersTurnIdx || 0);
+        setBowmastersLastShot(room.bowmastersLastShot || null);
+      }
     });
 
     socket.on('round-over', (room) => {
@@ -958,6 +1013,14 @@ export default function App() {
         setSnakesLaddersRollId(room.snakesLaddersRollId || null);
         setSnakesLaddersPhase(room.snakesLaddersPhase || 'roll');
         setSnakesLaddersLastAction(room.snakesLaddersLastAction || null);
+      }
+      if (room.gameType === 'bowmasters') {
+        setBowmastersPhase(room.bowmastersPhase || 'character_select');
+        setBowmastersTerrain(room.bowmastersTerrain || []);
+        setBowmastersWind(room.bowmastersWind || 0);
+        setBowmastersTurnOrder(room.bowmastersTurnOrder || []);
+        setBowmastersTurnIdx(room.bowmastersTurnIdx || 0);
+        setBowmastersLastShot(room.bowmastersLastShot || null);
       }
     });
 
@@ -1173,6 +1236,13 @@ export default function App() {
           targetBotPlayer = currentPlayer;
         }
       }
+    } else if (roomState.gameType === 'bowmasters') {
+      const activePlayerId = roomState.bowmastersTurnOrder[roomState.bowmastersTurnIdx];
+      const currentPlayer = rPlayers.find((p: any) => p.id === activePlayerId);
+      if (currentPlayer && currentPlayer.isBot) {
+        targetBotId = currentPlayer.id;
+        targetBotPlayer = currentPlayer;
+      }
     } else {
       const currentPlayer = rPlayers[rTurnIdx];
       if (currentPlayer && currentPlayer.isBot) {
@@ -1287,6 +1357,48 @@ export default function App() {
               action: decision.action,
               payload: decision.payload
             });
+          }
+        }
+      } else if (roomState.gameType === 'snakes_ladders') {
+        if (roomState.snakesLaddersPhase === 'roll') {
+          socketRef.current?.emit('snakes-ladders-action', {
+            roomCode: roomState.code,
+            action: 'roll-dice'
+          });
+        }
+      } else if (roomState.gameType === 'bowmasters') {
+        if (roomState.bowmastersPhase === 'playing') {
+          const activePlayerId = roomState.bowmastersTurnOrder[roomState.bowmastersTurnIdx];
+          const activePlayer = rPlayers.find((p: any) => p.id === activePlayerId);
+          if (activePlayer) {
+            const opponents = rPlayers.filter((p: any) => p.team !== activePlayer.team && p.alive);
+            if (opponents.length > 0) {
+              opponents.sort((a: any, b: any) => {
+                const distA = Math.abs(a.positionX - activePlayer.positionX);
+                const distB = Math.abs(b.positionX - activePlayer.positionX);
+                return distA - distB;
+              });
+              const target = opponents[0];
+              const difficultyTiers: ('easy' | 'medium' | 'hard')[] = ['easy', 'medium', 'hard'];
+              const botHash = activePlayer.id.charCodeAt(activePlayer.id.length - 1) % 3;
+              const diff = difficultyTiers[botHash];
+              const terrainHeights = roomState.bowmastersTerrain || [];
+              if (terrainHeights.length > 0) {
+                const shot = calculateBotShot(
+                  { x: activePlayer.positionX, y: activePlayer.positionY },
+                  { x: target.positionX, y: target.positionY },
+                  roomState.bowmastersWind || 0,
+                  terrainHeights,
+                  diff,
+                  activePlayer.characterType || 'archer'
+                );
+                socketRef.current?.emit('bowmasters-action', {
+                  roomCode: roomState.code,
+                  action: 'fire',
+                  payload: { angle: shot.angle, power: shot.power }
+                });
+              }
+            }
           }
         }
       } else {
@@ -4161,7 +4273,7 @@ export default function App() {
     if (phase !== 'roll') return;
 
     const currentPlayer = currentPlayers[tIdx];
-    if (!currentPlayer || currentPlayer.bankrupt) return;
+    if (!currentPlayer) return;
 
     const roll = Math.floor(Math.random() * 6) + 1;
     setSnakesLaddersDice([roll]);
@@ -4305,7 +4417,290 @@ export default function App() {
     }, 1500);
   };
 
+  const startSinglePlayerBowmastersGame = () => {
+    sfx.playDeal();
+    setBowmastersPhase('character_select');
+    setBowmastersTurnIdx(0);
+    setBowmastersLastShot(null);
+    setBowmastersWind(0);
+    setBowmastersTerrain([]);
+    setBowmastersTurnOrder([]);
+
+    const requiredPlayers = rules.mode === '2v2' ? 4 : 2;
+    const currentPlayers = [players.find(p => p.id === 'local_user') || {
+      id: 'local_user',
+      name: 'Host',
+      avatar: getRandomAvatar(),
+      isHost: true,
+      isBot: false,
+      cards: [],
+      passed: false,
+      score: 0,
+      lastPlay: null,
+      isReady: true,
+    }];
+
+    const botAvatars = [
+      { skinColor: '#FFDBAC', hairStyle: 'spiky', hairColor: '#1A1A1A', expression: 'cool', clothesColor: '#2F855A' },
+      { skinColor: '#F1C27D', hairStyle: 'bob', hairColor: '#E5C158', expression: 'smile', clothesColor: '#6B46C1' },
+      { skinColor: '#E0AC69', hairStyle: 'short', hairColor: '#B83B1D', expression: 'excited', clothesColor: '#C53030' },
+      { skinColor: '#F1C27D', hairStyle: 'dreads', hairColor: '#4A5568', expression: 'wink', clothesColor: '#3182CE' }
+    ] as AvatarConfig[];
+
+    while (currentPlayers.length < requiredPlayers) {
+      const existingNames = currentPlayers.map(p => p.name);
+      const unusedNames = BOT_NAMES.filter(n => !existingNames.includes(n));
+      const botName = unusedNames.length > 0 
+        ? unusedNames[Math.floor(Math.random() * unusedNames.length)] 
+        : `Bot ${currentPlayers.length + 1}`;
+      const botAvatar = botAvatars[currentPlayers.length % botAvatars.length];
+      
+      currentPlayers.push({
+        id: `bot_${Math.random().toString(36).substr(2, 9)}`,
+        name: botName,
+        avatar: botAvatar,
+        isHost: false,
+        isReady: true,
+        isBot: true,
+        cards: [],
+        passed: false,
+        score: 0,
+        lastPlay: null,
+      });
+    }
+
+    const characterTypes = ['archer', 'boulder', 'bomber', 'spear', 'slingshot'];
+    const updatedPlayers = currentPlayers.map(p => {
+      if (p.isBot) {
+        return {
+          ...p,
+          characterType: characterTypes[Math.floor(Math.random() * characterTypes.length)] as any,
+          characterSelected: true,
+          hp: 100,
+          maxHp: 100,
+          alive: true,
+          positionX: 0,
+          positionY: 0,
+        };
+      }
+      return {
+        ...p,
+        characterType: null,
+        characterSelected: false,
+        hp: 100,
+        maxHp: 100,
+        alive: true,
+        positionX: 0,
+        positionY: 0,
+      };
+    });
+
+    setPlayers(updatedPlayers);
+    setScreen('table');
+    setGameState('playing');
+  };
+
+  const initializeSinglePlayerBowmastersGame = (currentPlayers: Player[]) => {
+    const size = 1024;
+    const heights = new Array(size + 1).fill(0);
+    heights[0] = 350 + Math.random() * 100;
+    heights[size] = 350 + Math.random() * 100;
+    let step = size;
+    let displacement = 0.45 * 200;
+    while (step > 1) {
+      const half = step / 2;
+      for (let i = 0; i < size; i += step) {
+        const left = heights[i];
+        const right = heights[i + step];
+        const mid = (left + right) / 2 + (Math.random() - 0.5) * displacement;
+        heights[i + half] = Math.max(220, Math.min(520, mid));
+      }
+      step = half;
+      displacement *= 0.5;
+    }
+    const finalHeights: number[] = [];
+    const terrainWidth = 1200;
+    for (let x = 0; x < terrainWidth; x++) {
+      const t = x / (terrainWidth - 1);
+      const index = t * size;
+      const i0 = Math.floor(index);
+      const i1 = Math.min(size, i0 + 1);
+      const frac = index - i0;
+      finalHeights.push(Math.round(heights[i0] * (1 - frac) + heights[i1] * frac));
+    }
+
+    setBowmastersTerrain(finalHeights);
+
+    const is2v2 = rules.mode === '2v2' && currentPlayers.length >= 4;
+    let updatedPlayers = currentPlayers.map(p => ({ ...p }));
+    
+    if (is2v2) {
+      const shuffled = [...updatedPlayers].sort(() => Math.random() - 0.5);
+      shuffled.forEach((p, idx) => {
+        p.team = idx < 2 ? 'a' : 'b';
+      });
+
+      const teamA = updatedPlayers.filter(p => p.team === 'a');
+      const teamB = updatedPlayers.filter(p => p.team === 'b');
+
+      teamA[0].positionX = 160;
+      teamA[1].positionX = 290;
+      teamB[0].positionX = 1040;
+      teamB[1].positionX = 910;
+
+      const order = [teamA[0].id, teamB[0].id, teamA[1].id, teamB[1].id];
+      setBowmastersTurnOrder(order);
+    } else {
+      updatedPlayers.forEach((p, idx) => {
+        p.team = idx % 2 === 0 ? 'a' : 'b';
+      });
+
+      const teamA = updatedPlayers.filter(p => p.team === 'a');
+      const teamB = updatedPlayers.filter(p => p.team === 'b');
+
+      teamA.forEach((p, idx) => { p.positionX = 200 + idx * 80; });
+      teamB.forEach((p, idx) => { p.positionX = 1000 - idx * 80; });
+
+      const order: string[] = [];
+      const maxLen = Math.max(teamA.length, teamB.length);
+      for (let i = 0; i < maxLen; i++) {
+        if (teamA[i]) order.push(teamA[i].id);
+        if (teamB[i]) order.push(teamB[i].id);
+      }
+      setBowmastersTurnOrder(order);
+    }
+
+    updatedPlayers.forEach(p => {
+      p.hp = 100;
+      p.maxHp = 100;
+      p.alive = true;
+      p.positionY = finalHeights[Math.floor(p.positionX || 0)];
+    });
+
+    setPlayers(updatedPlayers);
+    setBowmastersTurnIdx(Math.floor(Math.random() * updatedPlayers.length));
+    setBowmastersWind(rules.windEnabled !== false ? (Math.round((Math.random() * 6 - 3) * 10) / 10) : 0);
+    setBowmastersPhase('playing');
+  };
+
+  const handleBowmastersActionSingle = (action: string, payload: any) => {
+    if (action === 'select-character') {
+      const charType = payload.characterType;
+      setPlayers(prev => {
+        const next = prev.map(p => {
+          if (p.id === 'local_user') {
+            return { ...p, characterType: charType, characterSelected: true };
+          }
+          return p;
+        });
+        
+        setTimeout(() => {
+          initializeSinglePlayerBowmastersGame(next);
+        }, 100);
+
+        return next;
+      });
+    }
+
+    else if (action === 'fire') {
+      const activePlayerId = bowmastersTurnOrder[bowmastersTurnIdx];
+      const activePlayer = players.find(p => p.id === activePlayerId);
+      if (activePlayer) {
+        setBowmastersPhase('animating');
+        setBowmastersLastShot({
+          playerId: activePlayer.id,
+          angle: payload.angle,
+          power: payload.power,
+          characterType: activePlayer.characterType
+        });
+      }
+    }
+
+    else if (action === 'resolve-shot') {
+      const { hits = [], terrainDeform, fellOffMapIds = [] } = payload;
+      
+      setPlayers(prev => {
+        let next = prev.map(p => {
+          let updatedP = { ...p };
+          const hit = hits.find((h: any) => h.targetId === p.id);
+          if (hit) {
+            updatedP.hp = Math.max(0, (updatedP.hp || 100) - hit.damage);
+            if (updatedP.hp <= 0) {
+              updatedP.alive = false;
+            }
+          }
+          if (fellOffMapIds.includes(p.id)) {
+            updatedP.hp = 0;
+            updatedP.alive = false;
+          }
+          return updatedP;
+        });
+
+        const teamAAlive = next.some(p => p.team === 'a' && p.alive);
+        const teamBAlive = next.some(p => p.team === 'b' && p.alive);
+
+        if (!teamAAlive || !teamBAlive) {
+          setGameState('gameover');
+          setBowmastersPhase('game_over');
+          next = next.map(p => ({
+            ...p,
+            finishRank: p.team === (teamAAlive ? 'a' : 'b') ? 1 : 2,
+            score: p.team === (teamAAlive ? 'a' : 'b') ? 100 : 0
+          }));
+        } else {
+          let nextTurnIdx = bowmastersTurnIdx;
+          let safety = 0;
+          do {
+            nextTurnIdx = (nextTurnIdx + 1) % bowmastersTurnOrder.length;
+            safety++;
+          } while (!next.find(p => p.id === bowmastersTurnOrder[nextTurnIdx])?.alive && safety < 10);
+
+          setBowmastersTurnIdx(nextTurnIdx);
+          setBowmastersWind(rules.windEnabled !== false ? (Math.round((Math.random() * 6 - 3) * 10) / 10) : 0);
+          setBowmastersLastShot(null);
+          setBowmastersPhase('playing');
+        }
+
+        return next;
+      });
+
+      if (terrainDeform) {
+        setBowmastersTerrain(prevTerrain => {
+          const newHeights = [...prevTerrain];
+          const width = newHeights.length;
+          const { centerX, radius, depth } = terrainDeform;
+          const startX = Math.max(0, Math.floor(centerX - radius));
+          const endX = Math.min(width - 1, Math.ceil(centerX + radius));
+          for (let x = startX; x <= endX; x++) {
+            const dx = x - centerX;
+            if (Math.abs(dx) < radius) {
+              const craterDepth = Math.sqrt(radius * radius - dx * dx) * (depth / radius);
+              newHeights[x] = Math.min(550, newHeights[x] + craterDepth);
+            }
+          }
+          return newHeights;
+        });
+      }
+    }
+  };
+
+  const handleBowmastersActionMultiplayer = (action: string, payload: any) => {
+    socketRef.current?.emit('bowmasters-action', {
+      roomCode,
+      action,
+      payload
+    });
+  };
+
+  const restartSinglePlayerBowmastersGameRound = () => {
+    startSinglePlayerBowmastersGame();
+  };
+
   const startSinglePlayerGame = () => {
+    if (gameType === 'bowmasters') {
+      startSinglePlayerBowmastersGame();
+      return;
+    }
     if (gameType === 'snakes_ladders') {
       startSinglePlayerSnakesLaddersGame();
       return;
@@ -4475,6 +4870,13 @@ export default function App() {
           targetBotPlayer = currentPlayer;
         }
       }
+    } else if (gameType === 'bowmasters') {
+      const activePlayerId = bowmastersTurnOrder[bowmastersTurnIdx];
+      const currentPlayer = players.find(p => p.id === activePlayerId);
+      if (currentPlayer && currentPlayer.isBot) {
+        targetBotId = currentPlayer.id;
+        targetBotPlayer = currentPlayer;
+      }
     } else {
       const currentPlayer = players[turnIndex];
       if (currentPlayer && currentPlayer.isBot) {
@@ -4504,7 +4906,12 @@ export default function App() {
           unoSevenSwappingPlayerId: swappingPlayerId,
           monopolyPhase: latestPhase,
           monopolyAuctionState: latestAuctionState,
-          monopolyActiveTrade: latestActiveTrade
+          monopolyActiveTrade: latestActiveTrade,
+          bowmastersPhase: latestBowmastersPhase,
+          bowmastersTurnIdx: latestBowmastersTurnIdx,
+          bowmastersTurnOrder: latestBowmastersTurnOrder,
+          bowmastersTerrain: latestBowmastersTerrain,
+          bowmastersWind: latestBowmastersWind
         } = stateRef.current;
 
         // Validation guard: Verify game state is still playing
@@ -4633,6 +5040,37 @@ export default function App() {
               handleMonopolyActionSingle(decision.action, decision.payload);
             }
           }
+        } else if (latestGameType === 'bowmasters') {
+          if (latestBowmastersPhase === 'playing') {
+            const activePlayerId = latestBowmastersTurnOrder[latestBowmastersTurnIdx];
+            const activePlayer = latestPlayers.find(p => p.id === activePlayerId);
+            if (activePlayer && activePlayer.id === targetBotId) {
+              const opponents = latestPlayers.filter(p => p.team !== activePlayer.team && p.alive);
+              if (opponents.length > 0) {
+                opponents.sort((a, b) => {
+                  const distA = Math.abs((a.positionX || 0) - (activePlayer.positionX || 0));
+                  const distB = Math.abs((b.positionX || 0) - (activePlayer.positionX || 0));
+                  return distA - distB;
+                });
+                const target = opponents[0];
+                const difficultyTiers: ('easy' | 'medium' | 'hard')[] = ['easy', 'medium', 'hard'];
+                const botHash = activePlayer.id.charCodeAt(activePlayer.id.length - 1) % 3;
+                const diff = difficultyTiers[botHash];
+                const terrainHeights = latestBowmastersTerrain || [];
+                if (terrainHeights.length > 0) {
+                  const shot = calculateBotShot(
+                    { x: activePlayer.positionX || 0, y: activePlayer.positionY || 0 },
+                    { x: target.positionX || 0, y: target.positionY || 0 },
+                    latestBowmastersWind || 0,
+                    terrainHeights,
+                    diff,
+                    activePlayer.characterType || 'archer'
+                  );
+                  handleBowmastersActionSingle('fire', { angle: shot.angle, power: shot.power });
+                }
+              }
+            }
+          }
         } else if (latestGameType === 'snakes_ladders') {
           const activePlayer = latestPlayers[latestTurnIndex];
           if (!activePlayer || activePlayer.id !== targetBotId) return;
@@ -4685,7 +5123,12 @@ export default function App() {
     players,
     monopolyBoard,
     monopolyLandedBuildMaxHouses,
-    snakesLaddersPhase
+    snakesLaddersPhase,
+    bowmastersTurnIdx,
+    bowmastersTurnOrder,
+    bowmastersPhase,
+    bowmastersTerrain,
+    bowmastersWind
   ]);
 
   function playCardsSingle(pId: string, cards: Card[]) {
@@ -5450,7 +5893,6 @@ export default function App() {
                 <div className="mode-card-desc">Interactive 3D board, rolling dice, deals, and bankrupting bots.</div>
               </div>
 
-              {/*
               <div
                 className={`mode-card ${gameType === 'snakes_ladders' ? 'active active-snakes_ladders' : ''}`}
                 onClick={() => {
@@ -5462,7 +5904,18 @@ export default function App() {
                 <div className="mode-card-title">Snakes & Ladders</div>
                 <div className="mode-card-desc">Roll dice, climb ladders, avoid slides, and race to 100!</div>
               </div>
-              */}
+
+              <div
+                className={`mode-card ${gameType === 'bowmasters' ? 'active active-bowmasters' : ''}`}
+                onClick={() => {
+                  setGameType('bowmasters');
+                  setRules(prev => ({ ...prev, pointsToWin: 100, mode: '1v1', windEnabled: true }));
+                }}
+              >
+                <div className="mode-card-icon">🏹</div>
+                <div className="mode-card-title">Bowmasters PvP</div>
+                <div className="mode-card-desc">Drag to aim, adjust for wind, and battle in 2D physics combat!</div>
+              </div>
             </div>
 
             <div className="menu-content-columns">
@@ -5559,14 +6012,16 @@ export default function App() {
                     ? 'linear-gradient(to right, #60a5fa, #4ade80)'
                     : gameType === 'snakes_ladders'
                       ? 'linear-gradient(to right, #6b9080, #f6bd60)'
-                      : 'linear-gradient(to right, #a78bfa, #fbbf24)',
+                      : gameType === 'bowmasters'
+                        ? 'linear-gradient(to right, #f39c12, #d35400)'
+                        : 'linear-gradient(to right, #a78bfa, #fbbf24)',
                 WebkitBackgroundClip: 'text',
                 WebkitTextFillColor: 'transparent'
               }}>
-                {gameType === 'monopoly' ? 'Monopoly' : gameType === 'uno' ? 'UNO' : gameType === 'snakes_ladders' ? 'Snakes & Ladders' : 'Capsa Banting'}
+                {gameType === 'monopoly' ? 'Monopoly' : gameType === 'uno' ? 'UNO' : gameType === 'snakes_ladders' ? 'Snakes & Ladders' : gameType === 'bowmasters' ? 'Bowmasters' : 'Capsa Banting'}
               </h2>
               <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginTop: '0.2rem' }}>
-                {gameType === 'monopoly' ? 'board tycoon' : gameType === 'uno' ? 'house rules' : gameType === 'snakes_ladders' ? 'classic race' : 'gacor kang'}
+                {gameType === 'monopoly' ? 'board tycoon' : gameType === 'uno' ? 'house rules' : gameType === 'snakes_ladders' ? 'classic race' : gameType === 'bowmasters' ? '2D physics shooting' : 'gacor kang'}
               </p>
             </div>
 
@@ -5677,54 +6132,101 @@ export default function App() {
             </h3>
 
             {/* Points to Win / Ruleset */}
-            <div className="settings-row">
-              <label>{gameType === 'monopoly' ? 'Ruleset' : 'Target Points to Win'}</label>
-              {players.find(pl => isSinglePlayer ? pl.id === 'local_user' : pl.id === socketId)?.isHost ? (
-                gameType === 'monopoly' ? (
-                  <select
-                    value={rules.ruleset || 'Default'}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      const updated = { ...rules, ruleset: val };
-                      setRules(updated);
-                      if (!isSinglePlayer) updateRulesOnline(updated);
-                    }}
-                  >
-                    <option value="Default">Default</option>
-                    <option value="Get Rich">Get Rich</option>
-                  </select>
+            {/* Points to Win / Ruleset */}
+            {gameType !== 'bowmasters' && (
+              <div className="settings-row">
+                <label>{gameType === 'monopoly' ? 'Ruleset' : 'Target Points to Win'}</label>
+                {players.find(pl => isSinglePlayer ? pl.id === 'local_user' : pl.id === socketId)?.isHost ? (
+                  gameType === 'monopoly' ? (
+                    <select
+                      value={rules.ruleset || 'Default'}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        const updated = { ...rules, ruleset: val };
+                        setRules(updated);
+                        if (!isSinglePlayer) updateRulesOnline(updated);
+                      }}
+                    >
+                      <option value="Default">Default</option>
+                      <option value="Get Rich">Get Rich</option>
+                    </select>
+                  ) : (
+                    <select
+                      value={rules.pointsToWin}
+                      onChange={(e) => {
+                        const val = Number(e.target.value);
+                        const updated = { ...rules, pointsToWin: val };
+                        setRules(updated);
+                        if (!isSinglePlayer) updateRulesOnline(updated);
+                      }}
+                    >
+                      {gameType === 'uno' ? (
+                        <>
+                          <option value={100}>100 Points</option>
+                          <option value={250}>250 Points</option>
+                          <option value={500}>500 Points</option>
+                        </>
+                      ) : (
+                        <>
+                          <option value={10}>10 Points</option>
+                          <option value={15}>15 Points</option>
+                          <option value={20}>20 Points</option>
+                          <option value={30}>30 Points</option>
+                        </>
+                      )}
+                    </select>
+                  )
                 ) : (
-                  <select
-                    value={rules.pointsToWin}
-                    onChange={(e) => {
-                      const val = Number(e.target.value);
-                      const updated = { ...rules, pointsToWin: val };
-                      setRules(updated);
-                      if (!isSinglePlayer) updateRulesOnline(updated);
-                    }}
-                  >
-                    {gameType === 'uno' ? (
-                      <>
-                        <option value={100}>100 Points</option>
-                        <option value={250}>250 Points</option>
-                        <option value={500}>500 Points</option>
-                      </>
-                    ) : (
-                      <>
-                        <option value={10}>10 Points</option>
-                        <option value={15}>15 Points</option>
-                        <option value={20}>20 Points</option>
-                        <option value={30}>30 Points</option>
-                      </>
-                    )}
-                  </select>
-                )
-              ) : (
-                <span style={{ fontWeight: 'bold' }}>
-                  {gameType === 'monopoly' ? (rules.ruleset || 'Default') : `${rules.pointsToWin} pts`}
-                </span>
-              )}
-            </div>
+                  <span style={{ fontWeight: 'bold' }}>
+                    {gameType === 'monopoly' ? (rules.ruleset || 'Default') : `${rules.pointsToWin} pts`}
+                  </span>
+                )}
+              </div>
+            )}
+
+            {gameType === 'bowmasters' && (
+              <>
+                <div className="settings-row">
+                  <label>Battle Mode</label>
+                  {players.find(pl => isSinglePlayer ? pl.id === 'local_user' : pl.id === socketId)?.isHost ? (
+                    <select
+                      value={rules.mode || '1v1'}
+                      onChange={(e) => {
+                        const val = e.target.value as '1v1' | '2v2';
+                        const updated = { ...rules, mode: val };
+                        setRules(updated);
+                        if (!isSinglePlayer) updateRulesOnline(updated);
+                      }}
+                    >
+                      <option value="1v1">1v1 Match</option>
+                      <option value="2v2">2v2 Team Battle</option>
+                    </select>
+                  ) : (
+                    <span style={{ fontWeight: 'bold' }}>{rules.mode === '2v2' ? '2v2 Team' : '1v1 Match'}</span>
+                  )}
+                </div>
+
+                <div className="settings-row">
+                  <label>Wind Influence</label>
+                  {players.find(pl => isSinglePlayer ? pl.id === 'local_user' : pl.id === socketId)?.isHost ? (
+                    <select
+                      value={rules.windEnabled === false ? 'false' : 'true'}
+                      onChange={(e) => {
+                        const val = e.target.value === 'true';
+                        const updated = { ...rules, windEnabled: val };
+                        setRules(updated);
+                        if (!isSinglePlayer) updateRulesOnline(updated);
+                      }}
+                    >
+                      <option value="true">Wind Enabled</option>
+                      <option value="false">No Wind (Calm)</option>
+                    </select>
+                  ) : (
+                    <span style={{ fontWeight: 'bold' }}>{rules.windEnabled !== false ? 'Windy' : 'No Wind'}</span>
+                  )}
+                </div>
+              </>
+            )}
 
             {gameType === 'monopoly' && (
               <>
@@ -6119,6 +6621,27 @@ export default function App() {
           onRollDice={isSinglePlayer ? rollDiceSnakesLaddersSingle : () => socketRef.current?.emit('snakes-ladders-action', { roomCode, action: 'roll-dice' })}
           onLeaveRoom={leaveRoom}
           onRestartGame={isSinglePlayer ? restartSinglePlayerSnakesLaddersGameRound : restartOnlineGame}
+        />
+      )}
+
+      {screen === 'table' && gameType === 'bowmasters' && (
+        <BowmastersTable
+          playerId={isSinglePlayer ? 'local_user' : socketId}
+          players={players}
+          turnOrder={bowmastersTurnOrder}
+          turnIndex={bowmastersTurnIdx}
+          terrain={bowmastersTerrain}
+          wind={bowmastersWind}
+          lastShot={bowmastersLastShot}
+          phase={bowmastersPhase}
+          gameState={gameState}
+          roomCode={roomCode}
+          isHost={players.find(pl => isSinglePlayer ? pl.id === 'local_user' : pl.id === socketId)?.isHost || false}
+          isSinglePlayer={isSinglePlayer}
+          rules={rules}
+          onBowmastersAction={isSinglePlayer ? handleBowmastersActionSingle : handleBowmastersActionMultiplayer}
+          onLeaveRoom={leaveRoom}
+          onRestartGame={isSinglePlayer ? restartSinglePlayerBowmastersGameRound : restartOnlineGame}
         />
       )}
 

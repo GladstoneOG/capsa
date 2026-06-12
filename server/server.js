@@ -6,6 +6,7 @@ import * as capsaEngine from './games/capsa.js';
 import * as unoEngine from './games/uno.js';
 import * as monopolyEngine from './games/monopoly.js';
 import * as snakesLaddersEngine from './games/snakes_ladders.js';
+import * as bowmastersEngine from './games/bowmasters.js';
 
 const BOT_NAMES = [
   // Indonesian Names
@@ -65,6 +66,7 @@ function emitRoomUpdated(roomCode, room) {
 function getRoomEngine(room) {
   if (room.gameType === 'monopoly') return monopolyEngine;
   if (room.gameType === 'snakes_ladders' || room.gameType === 'snakes-ladders') return snakesLaddersEngine;
+  if (room.gameType === 'bowmasters') return bowmastersEngine;
   return room.gameType === 'uno' ? unoEngine : capsaEngine;
 }
 
@@ -114,6 +116,12 @@ function scheduleRoomCleanup(roomCode) {
 function replacePlayerIdReferences(room, oldId, newId) {
   if (room.lastPlayerPlayedId === oldId) {
     room.lastPlayerPlayedId = newId;
+  }
+  if (room.bowmastersTurnOrder) {
+    room.bowmastersTurnOrder = room.bowmastersTurnOrder.map(id => id === oldId ? newId : id);
+  }
+  if (room.bowmastersLastShot && room.bowmastersLastShot.playerId === oldId) {
+    room.bowmastersLastShot.playerId = newId;
   }
   if (room.sevenSwappingPlayerId === oldId) {
     room.sevenSwappingPlayerId = newId;
@@ -289,6 +297,9 @@ io.on('connection', (socket) => {
       } : (type === 'snakes_ladders' || type === 'snakes-ladders') ? {
         pointsToWin: 100,
         rollSixBonus: true
+      } : type === 'bowmasters' ? {
+        mode: '1v1',
+        windEnabled: true,
       } : {
         pointsToWin: 15,
         turnDuration: 30, // 30 seconds
@@ -495,12 +506,45 @@ io.on('connection', (socket) => {
         return;
       }
       unoEngine.startRound(room, io);
-    } else if (room.gameType === 'snakes_ladders' || room.gameType === 'snakes-ladders') {
-      if (room.players.length < 2 && process.env.PORT !== '3008') {
-        socket.emit('start-error', 'Need at least 2 players to start Snakes & Ladders.');
-        return;
+    } else if (room.gameType === 'bowmasters') {
+      const requiredPlayers = room.rules?.mode === '2v2' ? 4 : 2;
+      const botAvatars = [
+        { skinColor: '#FFDBAC', hairStyle: 'spiky', hairColor: '#1A1A1A', expression: 'cool', clothesColor: '#2F855A' },
+        { skinColor: '#F1C27D', hairStyle: 'bob', hairColor: '#E5C158', expression: 'smile', clothesColor: '#6B46C1' },
+        { skinColor: '#E0AC69', hairStyle: 'short', hairColor: '#B83B1D', expression: 'excited', clothesColor: '#C53030' },
+        { skinColor: '#F1C27D', hairStyle: 'dreads', hairColor: '#4A5568', expression: 'wink', clothesColor: '#3182CE' },
+      ];
+      let botsAdded = false;
+
+      while (room.players.length < requiredPlayers) {
+        const existingNames = room.players.map(p => p.name);
+        const unusedNames = BOT_NAMES.filter(n => !existingNames.includes(n));
+        const botName = unusedNames.length > 0 
+          ? unusedNames[Math.floor(Math.random() * unusedNames.length)] 
+          : `Bot ${room.players.length + 1}`;
+        const botAvatar = botAvatars[room.players.length % botAvatars.length];
+        
+        const bot = {
+          id: `bot_${Math.random().toString(36).substr(2, 9)}`,
+          name: botName,
+          avatar: botAvatar,
+          isHost: false,
+          isReady: true,
+          isBot: true,
+          cards: [],
+          passed: false,
+          score: 0,
+          lastPlay: null,
+        };
+        room.players.push(bot);
+        botsAdded = true;
       }
-      snakesLaddersEngine.startRound(room, io);
+
+      if (botsAdded) {
+        emitRoomUpdated(roomCode, room);
+      }
+
+      bowmastersEngine.startRound(room, io);
     } else {
       // Auto-fill empty slots with bots up to 4 players for Capsa Banting
       const botAvatars = [
@@ -623,6 +667,14 @@ io.on('connection', (socket) => {
     }
   });
 
+  socket.on('bowmasters-action', ({ roomCode, action, payload }) => {
+    const room = rooms.get(roomCode);
+    if (!room || room.gameState !== 'playing') return;
+    if (room.gameType === 'bowmasters') {
+      bowmastersEngine.handleAction(room, socket, action, payload, io);
+    }
+  });
+
   // 10. Restart Game / Next Round
   socket.on('restart-game', ({ roomCode }) => {
     const room = rooms.get(roomCode);
@@ -644,6 +696,8 @@ io.on('connection', (socket) => {
       unoEngine.startRound(room, io);
     } else if (room.gameType === 'snakes_ladders' || room.gameType === 'snakes-ladders') {
       snakesLaddersEngine.startRound(room, io);
+    } else if (room.gameType === 'bowmasters') {
+      bowmastersEngine.startRound(room, io);
     } else {
       capsaEngine.startRound(room, io);
     }

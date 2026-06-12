@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 
 interface FallingBackgroundProps {
-  gameType: 'capsa' | 'uno' | 'monopoly' | 'snakes_ladders';
+  gameType: 'capsa' | 'uno' | 'monopoly' | 'snakes_ladders' | 'bowmasters';
 }
 
 interface Particle {
@@ -12,7 +12,7 @@ interface Particle {
   angle: number;
   rotationSpeed: number;
   scale: number;
-  type: 'playing-card' | 'uno-card' | 'die' | 'bill' | 'snake' | 'ladder';
+  type: 'playing-card' | 'uno-card' | 'die' | 'bill' | 'snake' | 'ladder' | 'arrow' | 'spear' | 'bomb';
   faceUp: boolean;
   suit?: 'H' | 'D' | 'C' | 'S';
   rank?: string;
@@ -90,7 +90,16 @@ export const FallingBackground: React.FC<FallingBackgroundProps> = ({ gameType }
       let dieColor: Particle['dieColor'];
       let billVal: Particle['billVal'];
 
-      if (gameType === 'capsa') {
+      if (gameType === 'bowmasters') {
+        const randVal = Math.random();
+        if (randVal < 0.4) {
+          type = 'arrow';
+        } else if (randVal < 0.7) {
+          type = 'spear';
+        } else {
+          type = 'bomb';
+        }
+      } else if (gameType === 'capsa') {
         type = 'playing-card';
         suit = ['H', 'D', 'C', 'S'][Math.floor(Math.random() * 4)] as any;
         rank = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'][
@@ -606,6 +615,93 @@ export const FallingBackground: React.FC<FallingBackgroundProps> = ({ gameType }
       ctx.restore();
     };
 
+    const drawArrow = (p: Particle) => {
+      const len = 25 * p.scale;
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      ctx.rotate(p.angle);
+
+      ctx.strokeStyle = '#94a3b8';
+      ctx.lineWidth = 1.5 * p.scale;
+      ctx.beginPath();
+      ctx.moveTo(-len / 2, 0);
+      ctx.lineTo(len / 2, 0);
+      ctx.stroke();
+
+      ctx.fillStyle = '#ef4444';
+      ctx.beginPath();
+      ctx.moveTo(-len / 2, 0);
+      ctx.lineTo(-len / 2 - 4 * p.scale, -3 * p.scale);
+      ctx.lineTo(-len / 2 - 1 * p.scale, 0);
+      ctx.lineTo(-len / 2 - 4 * p.scale, 3 * p.scale);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.fillStyle = '#475569';
+      ctx.beginPath();
+      ctx.moveTo(len / 2, 0);
+      ctx.lineTo(len / 2 - 5 * p.scale, -3 * p.scale);
+      ctx.lineTo(len / 2 - 2 * p.scale, 0);
+      ctx.lineTo(len / 2 - 5 * p.scale, 3 * p.scale);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.restore();
+    };
+
+    const drawSpear = (p: Particle) => {
+      const len = 35 * p.scale;
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      ctx.rotate(p.angle);
+
+      ctx.strokeStyle = '#d97706';
+      ctx.lineWidth = 2 * p.scale;
+      ctx.beginPath();
+      ctx.moveTo(-len / 2, 0);
+      ctx.lineTo(len / 2, 0);
+      ctx.stroke();
+
+      ctx.fillStyle = '#f59e0b';
+      ctx.beginPath();
+      ctx.moveTo(len / 2, 0);
+      ctx.lineTo(len / 2 - 8 * p.scale, -3.5 * p.scale);
+      ctx.lineTo(len / 2 - 8 * p.scale, 3.5 * p.scale);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.restore();
+    };
+
+    const drawBomb = (p: Particle) => {
+      const r = 7 * p.scale;
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      ctx.rotate(p.angle);
+
+      ctx.fillStyle = '#1e293b';
+      ctx.beginPath();
+      ctx.arc(0, 0, r, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = '#64748b';
+      ctx.fillRect(-2 * p.scale, -r - 1.5 * p.scale, 4 * p.scale, 2 * p.scale);
+
+      ctx.strokeStyle = '#d97706';
+      ctx.lineWidth = 1 * p.scale;
+      ctx.beginPath();
+      ctx.moveTo(0, -r - 1.5 * p.scale);
+      ctx.quadraticCurveTo(3 * p.scale, -r - 4 * p.scale, 1.5 * p.scale, -r - 7 * p.scale);
+      ctx.stroke();
+
+      ctx.fillStyle = '#f97316';
+      ctx.beginPath();
+      ctx.arc(1.5 * p.scale, -r - 7 * p.scale, 1.5 * p.scale, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.restore();
+    };
+
     // ANIMATION LOOP
     const tick = () => {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -635,6 +731,12 @@ export const FallingBackground: React.FC<FallingBackgroundProps> = ({ gameType }
           drawSnake(p);
         } else if (p.type === 'ladder') {
           drawLadder(p);
+        } else if (p.type === 'arrow') {
+          drawArrow(p);
+        } else if (p.type === 'spear') {
+          drawSpear(p);
+        } else if (p.type === 'bomb') {
+          drawBomb(p);
         }
       });
 
