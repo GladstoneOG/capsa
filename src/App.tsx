@@ -4526,7 +4526,7 @@ export default function App() {
       displacement *= 0.5;
     }
     const finalHeights: number[] = [];
-    const terrainWidth = 1200;
+    const terrainWidth = 2000;
     for (let x = 0; x < terrainWidth; x++) {
       const t = x / (terrainWidth - 1);
       const index = t * size;
@@ -4550,10 +4550,10 @@ export default function App() {
       const teamA = updatedPlayers.filter(p => p.team === 'a');
       const teamB = updatedPlayers.filter(p => p.team === 'b');
 
-      teamA[0].positionX = 160;
-      teamA[1].positionX = 290;
-      teamB[0].positionX = 1040;
-      teamB[1].positionX = 910;
+      teamA[0].positionX = 300;
+      teamA[1].positionX = 450;
+      teamB[0].positionX = 1700;
+      teamB[1].positionX = 1550;
 
       const order = [teamA[0].id, teamB[0].id, teamA[1].id, teamB[1].id];
       setBowmastersTurnOrder(order);
@@ -4565,8 +4565,8 @@ export default function App() {
       const teamA = updatedPlayers.filter(p => p.team === 'a');
       const teamB = updatedPlayers.filter(p => p.team === 'b');
 
-      teamA.forEach((p, idx) => { p.positionX = 200 + idx * 80; });
-      teamB.forEach((p, idx) => { p.positionX = 1000 - idx * 80; });
+      teamA.forEach((p, idx) => { p.positionX = 400 + idx * 80; });
+      teamB.forEach((p, idx) => { p.positionX = 1600 - idx * 80; });
 
       const order: string[] = [];
       const maxLen = Math.max(teamA.length, teamB.length);
@@ -4624,7 +4624,7 @@ export default function App() {
     }
 
     else if (action === 'resolve-shot') {
-      const { hits = [], terrainDeform, fellOffMapIds = [] } = payload;
+      const { hits = [], terrainDeform, fellOffMapIds = [], movedPositions = [] } = payload;
       
       setPlayers(prev => {
         let next = prev.map(p => {
@@ -4639,6 +4639,12 @@ export default function App() {
           if (fellOffMapIds.includes(p.id)) {
             updatedP.hp = 0;
             updatedP.alive = false;
+          }
+          // Apply post-knockback positions so movement persists
+          const mp = movedPositions.find((m: any) => m.id === p.id);
+          if (mp && updatedP.alive) {
+            updatedP.positionX = mp.x;
+            updatedP.positionY = mp.y;
           }
           return updatedP;
         });
@@ -4685,6 +4691,16 @@ export default function App() {
               newHeights[x] = Math.min(550, newHeights[x] + craterDepth);
             }
           }
+
+          // Snap alive players to updated terrain heights at their current positions
+          setPlayers(prev => prev.map(p => {
+            if (p.alive && p.positionX !== undefined) {
+              const xIdx = Math.max(0, Math.min(width - 1, Math.floor(p.positionX)));
+              return { ...p, positionY: newHeights[xIdx] };
+            }
+            return p;
+          }));
+
           return newHeights;
         });
       }

@@ -72,6 +72,16 @@ export const BowmastersTable: React.FC<BowmastersTableProps> = ({
   const [cameraOffsetX, setCameraOffsetX] = useState(0);
   const [cameraOffsetY, setCameraOffsetY] = useState(0);
 
+  // Camera animation refs
+  const cameraOffsetXRef = useRef(0);
+  const cameraOffsetYRef = useRef(0);
+  const isManualPanRef = useRef(false);
+
+  // Reset manual panning when turn changes
+  useEffect(() => {
+    isManualPanRef.current = false;
+  }, [turnIndex]);
+
   // Aim cancellation state
   const [isAimCancelled, setIsAimCancelled] = useState(false);
 
@@ -101,10 +111,10 @@ export const BowmastersTable: React.FC<BowmastersTableProps> = ({
   // Authoritative terrain deformation details to report
   const terrainDeformRef = useRef<any>(null);
 
-  // Selected preset (visuals)
+  // Selected preset (visuals) - Premium Blue and Twilight theme defaults
   const [colorTheme, setColorTheme] = useState({
-    skyGradient: ['#7dd3fc', '#0284c7'],
-    terrainGradient: ['#4ade80', '#22c55e', '#15803d'],
+    skyGradient: ['#1A365D', '#2B6CB0'], // Midnight Lapis Blue
+    terrainGradient: ['#55a630', '#2b9348', '#007f5f'],
     sunColor: '#facc15'
   });
 
@@ -116,19 +126,19 @@ export const BowmastersTable: React.FC<BowmastersTableProps> = ({
     const hash = roomCode.charCodeAt(0) || 0;
     const themes = [
       {
-        skyGradient: ['#87CEEB', '#4682B4'], // Alpine Meadows
+        skyGradient: ['#1A365D', '#2B6CB0'], // Lapis Skyline Day
         terrainGradient: ['#55a630', '#2b9348', '#007f5f'],
         sunColor: '#facc15'
       },
       {
-        skyGradient: ['#fda085', '#f6d365'], // Crimson Canyons
-        terrainGradient: ['#e67e22', '#d35400', '#873600'],
-        sunColor: '#ff7675'
+        skyGradient: ['#0B132B', '#1C2541'], // Dark Cyber Space
+        terrainGradient: ['#22c55e', '#15803d', '#14532d'],
+        sunColor: '#ffd700'
       },
       {
-        skyGradient: ['#3a7bd5', '#3a6073'], // Nordic Tundra
+        skyGradient: ['#0F172A', '#1D4ED8'], // Deep Twilight Horizon
         terrainGradient: ['#f4f6f7', '#bdc3c7', '#7f8c8d'],
-        sunColor: '#ecf0f1'
+        sunColor: '#facc15'
       }
     ];
     setColorTheme(themes[hash % themes.length]);
@@ -140,12 +150,14 @@ export const BowmastersTable: React.FC<BowmastersTableProps> = ({
       setCameraZoom(1.0);
       return;
     }
+    const worldW = terrain.length || 1200;
     const maxOffsetX = 600 * (1 - 1 / cameraZoom);
+    const minOffsetX = 600 * (1 + 1 / cameraZoom) - worldW;
     const maxOffsetY = 300 * (1 - 1 / cameraZoom);
 
-    setCameraOffsetX(prev => Math.max(-maxOffsetX, Math.min(maxOffsetX, prev)));
+    setCameraOffsetX(prev => Math.max(minOffsetX, Math.min(maxOffsetX, prev)));
     setCameraOffsetY(prev => Math.max(-maxOffsetY, Math.min(maxOffsetY, prev)));
-  }, [cameraZoom]);
+  }, [cameraZoom, terrain]);
 
   // Manually bind wheel event to prevent browser window scrolling while zooming
   useEffect(() => {
@@ -173,9 +185,16 @@ export const BowmastersTable: React.FC<BowmastersTableProps> = ({
     
     characterBodiesRef.current = players.map(p => {
       const existing = characterBodiesRef.current.find(b => b.id === p.id);
+      // During animation (knockback in progress), preserve the local physics position
+      // so mid-animation server broadcasts don't reset characters to pre-knockback positions.
+      // Once the phase transitions back to 'playing' (after resolve-shot), server positions
+      // are used which contain the correct post-knockback coordinates.
+      const preserveLocalPosition = existing && phase === 'animating';
       return {
         id: p.id,
-        position: { x: p.positionX || 200, y: p.positionY || terrain[Math.floor(p.positionX || 200)] },
+        position: preserveLocalPosition
+          ? { ...existing.position }
+          : { x: p.positionX || 200, y: p.positionY || terrain[Math.floor(p.positionX || 200)] },
         velocity: existing?.velocity || { x: 0, y: 0 },
         hp: p.hp !== undefined ? p.hp : 100,
         maxHp: p.maxHp || 100,
@@ -218,7 +237,9 @@ export const BowmastersTable: React.FC<BowmastersTableProps> = ({
           rollTimer: 0,
           trail: [],
           angle: rad,
-          spin: 0
+          spin: 0,
+          hitCharacterIds: new Set([activePlayer.id]), // Prevent hitting self; tracks all hit characters
+          shooterTeam: activePlayer.team
         };
 
         accumulatedHitsRef.current = [];
@@ -287,6 +308,7 @@ export const BowmastersTable: React.FC<BowmastersTableProps> = ({
       // 1. Setup Scaling (Independent Logical resolution 1200x600)
       const logicalW = 1200;
       const logicalH = 600;
+      const worldW = terrain.length || 1200;
       
       const width = canvas.width = containerRef.current?.clientWidth || window.innerWidth;
       const height = canvas.height = containerRef.current?.clientHeight || 600;
@@ -304,24 +326,157 @@ export const BowmastersTable: React.FC<BowmastersTableProps> = ({
 
       ctx.scale(width / logicalW, height / logicalH);
 
-      // 2. Draw Sky Background
+      // 2. Draw Sky Background (always dynamic blue based on colorTheme)
       const skyGrad = ctx.createLinearGradient(0, 0, 0, logicalH);
       skyGrad.addColorStop(0, colorTheme.skyGradient[0]);
       skyGrad.addColorStop(1, colorTheme.skyGradient[1]);
       ctx.fillStyle = skyGrad;
       ctx.fillRect(0, 0, logicalW, logicalH);
 
-      // Draw Sun
+      // Draw Sun/Moon
       ctx.fillStyle = colorTheme.sunColor;
       ctx.beginPath();
       ctx.arc(600, 120, 35, 0, Math.PI * 2);
       ctx.fill();
 
-      // Apply camera zoom & offset for the game world elements
+      // --- Far Background: City silhouettes (moves at 0.15x parallax) ---
+      ctx.save();
+      ctx.translate(600, 300);
+      ctx.scale(1 + (cameraZoom - 1) * 0.15, 1 + (cameraZoom - 1) * 0.15);
+      ctx.translate(-600 + cameraOffsetXRef.current * 0.15, -300 + cameraOffsetYRef.current * 0.15);
+      
+      ctx.fillStyle = 'rgba(26, 54, 93, 0.14)';
+      ctx.beginPath();
+      const buildingsFar = [
+        { x: -300, w: 90, h: 220 }, { x: -210, w: 70, h: 180 }, { x: -140, w: 100, h: 260 },
+        { x: -40, w: 80, h: 200 }, { x: 40, w: 60, h: 240 }, { x: 100, w: 110, h: 170 },
+        { x: 210, w: 70, h: 290 }, { x: 280, w: 90, h: 210 }, { x: 370, w: 120, h: 150 },
+        { x: 490, w: 80, h: 270 }, { x: 570, w: 70, h: 230 }, { x: 640, w: 100, h: 190 },
+        { x: 740, w: 60, h: 250 }, { x: 800, w: 110, h: 180 }, { x: 910, w: 80, h: 280 },
+        { x: 990, w: 70, h: 210 }, { x: 1060, w: 90, h: 160 }, { x: 1150, w: 100, h: 260 },
+        { x: 1250, w: 80, h: 200 }, { x: 1330, w: 60, h: 240 }, { x: 1390, w: 110, h: 175 },
+        { x: 1500, w: 80, h: 295 }, { x: 1580, w: 90, h: 215 }, { x: 1670, w: 120, h: 155 },
+        { x: 1790, w: 80, h: 275 }, { x: 1870, w: 70, h: 235 }, { x: 1940, w: 100, h: 195 },
+        { x: 2040, w: 65, h: 255 }, { x: 2105, w: 115, h: 185 }, { x: 2220, w: 85, h: 285 },
+        { x: 2300, w: 100, h: 210 }
+      ];
+      buildingsFar.forEach(b => {
+        ctx.rect(b.x, 600 - b.h, b.w, b.h);
+        if (b.h > 240) {
+          ctx.moveTo(b.x + b.w / 2, 600 - b.h);
+          ctx.lineTo(b.x + b.w / 2, 600 - b.h - 15);
+        }
+      });
+      ctx.fill();
+      ctx.restore();
+
+      // --- Near Background: Closer city silhouettes (moves at 0.3x parallax) ---
+      ctx.save();
+      ctx.translate(600, 300);
+      ctx.scale(1 + (cameraZoom - 1) * 0.3, 1 + (cameraZoom - 1) * 0.3);
+      ctx.translate(-600 + cameraOffsetXRef.current * 0.3, -300 + cameraOffsetYRef.current * 0.3);
+      
+      ctx.fillStyle = 'rgba(21, 47, 86, 0.25)';
+      ctx.beginPath();
+      const buildingsNear = [
+        { x: -260, w: 100, h: 140 }, { x: -160, w: 80, h: 190 }, { x: -80, w: 90, h: 150 },
+        { x: 10, w: 70, h: 170 }, { x: 80, w: 110, h: 130 }, { x: 190, w: 90, h: 185 },
+        { x: 280, w: 60, h: 120 }, { x: 340, w: 100, h: 210 }, { x: 440, w: 80, h: 145 },
+        { x: 520, w: 90, h: 175 }, { x: 610, w: 70, h: 135 }, { x: 680, w: 110, h: 195 },
+        { x: 790, w: 60, h: 125 }, { x: 850, w: 100, h: 215 }, { x: 950, w: 80, h: 150 },
+        { x: 1030, w: 90, h: 180 }, { x: 1120, w: 70, h: 140 }, { x: 1190, w: 110, h: 200 },
+        { x: 1300, w: 60, h: 130 }, { x: 1360, w: 100, h: 220 }, { x: 1460, w: 80, h: 155 },
+        { x: 1540, w: 90, h: 185 }, { x: 1630, w: 70, h: 145 }, { x: 1700, w: 110, h: 205 },
+        { x: 1810, w: 60, h: 135 }, { x: 1870, w: 100, h: 225 }, { x: 1970, w: 80, h: 160 },
+        { x: 2050, w: 90, h: 190 }, { x: 2140, w: 70, h: 150 }, { x: 2210, w: 110, h: 210 },
+        { x: 2320, w: 80, h: 140 }
+      ];
+      buildingsNear.forEach(b => {
+        ctx.rect(b.x, 600 - b.h, b.w, b.h);
+      });
+      ctx.fill();
+      ctx.restore();
+
+      // --- Midground: rolling hills and trees (moves at 0.5x parallax) ---
+      ctx.save();
+      ctx.translate(600, 300);
+      ctx.scale(1 + (cameraZoom - 1) * 0.5, 1 + (cameraZoom - 1) * 0.5);
+      ctx.translate(-600 + cameraOffsetXRef.current * 0.5, -300 + cameraOffsetYRef.current * 0.5);
+      
+      // Draw hills
+      ctx.fillStyle = 'rgba(21, 100, 61, 0.25)'; // Blend forest green with blue
+      ctx.beginPath();
+      ctx.moveTo(-300, 600);
+      ctx.quadraticCurveTo(150, 370, 500, 440);
+      ctx.quadraticCurveTo(850, 510, 1200, 420);
+      ctx.quadraticCurveTo(1550, 330, 1900, 450);
+      ctx.quadraticCurveTo(2250, 570, 2600, 480);
+      ctx.lineTo(2600, 600);
+      ctx.closePath();
+      ctx.fill();
+
+      // Draw tree silhouettes on midground hills
+      const treePositions = [
+        { x: -180, y: 450, r: 15 }, { x: -140, y: 442, r: 18 },
+        { x: 20, y: 420, r: 16 }, { x: 60, y: 410, r: 20 }, { x: 100, y: 415, r: 14 },
+        { x: 450, y: 432, r: 15 }, { x: 490, y: 438, r: 18 }, { x: 530, y: 445, r: 13 },
+        { x: 810, y: 488, r: 17 }, { x: 850, y: 480, r: 22 }, { x: 890, y: 485, r: 15 },
+        { x: 1140, y: 428, r: 16 }, { x: 1180, y: 420, r: 20 }, { x: 1220, y: 425, r: 14 },
+        { x: 1500, y: 362, r: 18 }, { x: 1540, y: 355, r: 24 }, { x: 1580, y: 368, r: 16 },
+        { x: 1840, y: 436, r: 15 }, { x: 1880, y: 442, r: 19 }, { x: 1920, y: 448, r: 14 },
+        { x: 2200, y: 510, r: 18 }, { x: 2240, y: 502, r: 22 }, { x: 2280, y: 508, r: 15 }
+      ];
+      
+      treePositions.forEach(t => {
+        // Trunk
+        ctx.fillStyle = 'rgba(100, 65, 40, 0.3)';
+        ctx.fillRect(t.x - 3, t.y, 6, 25);
+        // Foliage
+        ctx.fillStyle = 'rgba(21, 120, 61, 0.38)';
+        ctx.beginPath();
+        ctx.arc(t.x, t.y - t.r * 0.6, t.r, 0, Math.PI * 2);
+        ctx.arc(t.x - t.r * 0.5, t.y - t.r * 1.1, t.r * 0.8, 0, Math.PI * 2);
+        ctx.arc(t.x + t.r * 0.5, t.y - t.r * 1.1, t.r * 0.8, 0, Math.PI * 2);
+        ctx.fill();
+      });
+      ctx.restore();
+
+      // Smooth Camera tracking logic
+      const proj = activeProjRef.current;
+      const activeShooterId = turnOrder[turnIndex];
+      const activeChar = characterBodiesRef.current.find(b => b.id === activeShooterId);
+
+      let targetX = cameraOffsetX;
+      let targetY = cameraOffsetY;
+
+      if (proj && proj.active) {
+        // Follow the active projectile
+        isManualPanRef.current = false;
+        targetX = 600 - proj.pos.x;
+        targetY = 300 - proj.pos.y;
+      } else if (!isManualPanRef.current && activeChar && activeChar.alive) {
+        // Center on active player
+        targetX = 600 - activeChar.position.x;
+        targetY = 300 - (activeChar.position.y - 30);
+      }
+
+      // Constrain target offsets to world boundaries
+      const maxOffsetX = 600 * (1 - 1 / cameraZoom);
+      const minOffsetX = 600 * (1 + 1 / cameraZoom) - worldW;
+      const maxOffsetY = 300 * (1 - 1 / cameraZoom);
+
+      const clampedTargetX = Math.max(minOffsetX, Math.min(maxOffsetX, targetX));
+      const clampedTargetY = Math.max(-maxOffsetY, Math.min(maxOffsetY, targetY));
+
+      // 60fps linear interpolation for camera offsets
+      cameraOffsetXRef.current += (clampedTargetX - cameraOffsetXRef.current) * 0.08;
+      cameraOffsetYRef.current += (clampedTargetY - cameraOffsetYRef.current) * 0.08;
+
+      // Apply camera zoom & offset for the main game world
       ctx.save();
       ctx.translate(logicalW / 2, logicalH / 2);
       ctx.scale(cameraZoom, cameraZoom);
-      ctx.translate(-logicalW / 2 + cameraOffsetX, -logicalH / 2 + cameraOffsetY);
+      ctx.translate(-logicalW / 2 + cameraOffsetXRef.current, -logicalH / 2 + cameraOffsetYRef.current);
 
       // 3. Draw Terrain Heights
       if (terrain.length > 0) {
@@ -333,10 +488,10 @@ export const BowmastersTable: React.FC<BowmastersTableProps> = ({
         ctx.fillStyle = colorTheme.terrainGradient[1]; // Earth
         ctx.beginPath();
         ctx.moveTo(0, logicalH);
-        for (let x = 0; x < logicalW; x++) {
+        for (let x = 0; x < worldW; x++) {
           ctx.lineTo(x, localHeights[x]);
         }
-        ctx.lineTo(logicalW, logicalH);
+        ctx.lineTo(worldW, logicalH);
         ctx.closePath();
         ctx.fill();
 
@@ -345,7 +500,7 @@ export const BowmastersTable: React.FC<BowmastersTableProps> = ({
         ctx.lineWidth = 5;
         ctx.beginPath();
         ctx.moveTo(0, localHeights[0]);
-        for (let x = 1; x < logicalW; x++) {
+        for (let x = 1; x < worldW; x++) {
           ctx.lineTo(x, localHeights[x]);
         }
         ctx.stroke();
@@ -357,28 +512,32 @@ export const BowmastersTable: React.FC<BowmastersTableProps> = ({
         ctx.fillStyle = earthGrad;
         ctx.beginPath();
         ctx.moveTo(0, logicalH);
-        for (let x = 0; x < logicalW; x++) {
+        for (let x = 0; x < worldW; x++) {
           ctx.lineTo(x, localHeights[x]);
         }
-        ctx.lineTo(logicalW, logicalH);
+        ctx.lineTo(worldW, logicalH);
         ctx.closePath();
         ctx.fill();
       }
 
       // 4. Draw Characters (Rigged Puppet Renderer)
       characterBodiesRef.current.forEach(char => {
-        resolveCharacterPhysics(char, { heights: localHeights, width: logicalW });
+        resolveCharacterPhysics(char, { heights: localHeights, width: worldW });
 
         if (!char.alive && char.position.y > logicalH + 100) {
           // Off screen dead players, skip
           return;
         }
 
-        ctx.save();
-        ctx.translate(char.position.x, char.position.y);
+        // Active shooter idle bobbing animation
+        const isActiveShooter = turnOrder[turnIndex] === char.id && phase === 'playing';
+        const activeBob = (isActiveShooter && char.alive) ? Math.sin(Date.now() * 0.005) * 1.5 : 0;
 
-        // Flip character sprite horizontally if they are on the right side of the screen
-        const shouldFlip = char.position.x > 600;
+        ctx.save();
+        ctx.translate(char.position.x, char.position.y + activeBob);
+
+        // Flip character sprite horizontally if they are team b
+        const shouldFlip = char.team === 'b';
         if (shouldFlip) {
           ctx.scale(-1, 1);
         }
@@ -397,9 +556,14 @@ export const BowmastersTable: React.FC<BowmastersTableProps> = ({
         const hairStyle = avatar.hairStyle || 'short';
         const expression = avatar.expression || 'smile';
 
+        // Apply a premium drop shadow to torso/legs/head
+        ctx.shadowColor = 'rgba(15, 23, 42, 0.35)';
+        ctx.shadowBlur = 5;
+        ctx.shadowOffsetY = 2;
+
         // Simple rigged puppet parts (Offsets relative to base/feet at 0,0)
         // Draw Legs
-        ctx.strokeStyle = '#2c3e50';
+        ctx.strokeStyle = '#1e293b';
         ctx.lineWidth = 4;
         ctx.lineCap = 'round';
 
@@ -432,8 +596,8 @@ export const BowmastersTable: React.FC<BowmastersTableProps> = ({
         ctx.beginPath();
         ctx.roundRect(-7, -38, 14, 22, 4);
         ctx.fill();
-        ctx.strokeStyle = '#2c3e50';
-        ctx.lineWidth = 1.5;
+        ctx.strokeStyle = '#1e293b';
+        ctx.lineWidth = 1.8;
         ctx.stroke();
 
         // Draw Head
@@ -443,9 +607,14 @@ export const BowmastersTable: React.FC<BowmastersTableProps> = ({
         ctx.beginPath();
         ctx.arc(0, hy, 8, 0, Math.PI * 2);
         ctx.fill();
-        ctx.strokeStyle = '#2c3e50';
-        ctx.lineWidth = 1.5;
+        ctx.strokeStyle = '#1e293b';
+        ctx.lineWidth = 1.8;
         ctx.stroke();
+
+        // Reset shadow for fine expressions and details so they remain sharp
+        ctx.shadowColor = 'transparent';
+        ctx.shadowBlur = 0;
+        ctx.shadowOffsetY = 0;
 
         // Draw customized face expression / dead face
         const hs = 8 / 22; // Scale factor from SVG (radius 22) to Canvas (radius 8)
@@ -694,8 +863,6 @@ export const BowmastersTable: React.FC<BowmastersTableProps> = ({
         }
 
         // Draw Arms
-        const isActiveShooter = turnOrder[turnIndex] === char.id && phase === 'playing';
-        
         ctx.strokeStyle = skinColor;
         ctx.lineWidth = 3.5;
 
@@ -803,7 +970,6 @@ export const BowmastersTable: React.FC<BowmastersTableProps> = ({
           const uiBaseY = -47; // Base height above feet
 
           // 1. Draw Bouncing Turn Arrow if this character is the active shooter
-          const isActiveShooter = turnOrder[turnIndex] === char.id && phase === 'playing';
           if (isActiveShooter) {
             const arrowBob = Math.sin(Date.now() * 0.007) * 4;
             const arrowY = uiBaseY - 36 + arrowBob;
@@ -877,16 +1043,15 @@ export const BowmastersTable: React.FC<BowmastersTableProps> = ({
       });
 
       // 5. Draw Projectile & Trajectory physics ticks
-      const proj = activeProjRef.current;
       if (proj && proj.active) {
         // Run physics steps in visual simulation
         const isBoulderRolling = proj.type === 'boulder' && proj.rollTimer > 0;
         
         let stepResult;
         if (isBoulderRolling) {
-          stepResult = rollBoulderStep(proj, { heights: localHeights, width: logicalW }, characterBodiesRef.current, 1);
+          stepResult = rollBoulderStep(proj, { heights: localHeights, width: worldW }, characterBodiesRef.current, 1);
         } else {
-          stepResult = simulateProjectileStep(proj, { heights: localHeights, width: logicalW }, characterBodiesRef.current, wind);
+          stepResult = simulateProjectileStep(proj, { heights: localHeights, width: worldW }, characterBodiesRef.current, wind);
         }
 
         // Draw fading trajectory trail
@@ -1022,7 +1187,7 @@ export const BowmastersTable: React.FC<BowmastersTableProps> = ({
 
             // Deform heightmap locally instantly for immediate visual feedback
             localHeights = deformTerrain(
-              { heights: localHeights, width: logicalW },
+              { heights: localHeights, width: worldW },
               stepResult.explosionX,
               stepResult.explosionRadius!,
               35
@@ -1059,6 +1224,7 @@ export const BowmastersTable: React.FC<BowmastersTableProps> = ({
             const blastRad = stepResult.explosionRadius!;
             characterBodiesRef.current.forEach(char => {
               if (!char.alive) return;
+              if (proj.shooterTeam && char.team === proj.shooterTeam) return;
               const dx = char.position.x - stepResult.explosionX!;
               const dy = (char.position.y - 25) - stepResult.explosionY!; // Middle of torso
               const dist = Math.sqrt(dx * dx + dy * dy);
@@ -1127,17 +1293,30 @@ export const BowmastersTable: React.FC<BowmastersTableProps> = ({
             const fellOffMapIdsReport: string[] = [];
             // Check if anyone fell below screen/map boundary
             characterBodiesRef.current.forEach(char => {
-              if (char.alive && (char.position.x < 0 || char.position.x >= logicalW || char.position.y > 590)) {
+              if (char.alive && (char.position.x < 0 || char.position.x >= worldW || char.position.y > 590)) {
                 fellOffMapIdsReport.push(char.id);
               }
             });
 
             // Report results after a short delay so visual effects/damage numbers can show
             setTimeout(() => {
+              // Collect final positions of all alive characters so knockback movement persists
+              const movedPositions: { id: string; x: number; y: number }[] = [];
+              characterBodiesRef.current.forEach(char => {
+                if (char.alive) {
+                  movedPositions.push({
+                    id: char.id,
+                    x: Math.round(char.position.x),
+                    y: Math.round(char.position.y)
+                  });
+                }
+              });
+
               onBowmastersAction('resolve-shot', {
                 hits: accumulatedHitsRef.current,
                 fellOffMapIds: fellOffMapIdsReport,
-                terrainDeform: terrainDeformRef.current
+                terrainDeform: terrainDeformRef.current,
+                movedPositions
               });
             }, 800);
           }
@@ -1193,7 +1372,6 @@ export const BowmastersTable: React.FC<BowmastersTableProps> = ({
       });
 
       // 9. Draw Slingshot Trajectory Prediction Dots
-      const activeShooterId = turnOrder[turnIndex];
       const activePlayerBody = characterBodiesRef.current.find(b => b.id === activeShooterId);
       const isMyTurn = activeShooterId === playerId && phase === 'playing';
 
@@ -1219,7 +1397,7 @@ export const BowmastersTable: React.FC<BowmastersTableProps> = ({
           tx += tvx;
           ty += tvy;
           
-          if (tx < 0 || tx >= logicalW || ty > 600) break;
+          if (tx < 0 || tx >= worldW || ty > 600) break;
           
           ctx.beginPath();
           ctx.arc(tx, ty, 2, 0, Math.PI * 2);
@@ -1262,9 +1440,9 @@ export const BowmastersTable: React.FC<BowmastersTableProps> = ({
     const screenX = ((e.clientX - rect.left) / rect.width) * 1200;
     const screenY = ((e.clientY - rect.top) / rect.height) * 600;
 
-    // Unproject screen coordinates to world logical coordinates
-    const worldX = (screenX - 600) / cameraZoom + 600 - cameraOffsetX;
-    const worldY = (screenY - 300) / cameraZoom + 300 - cameraOffsetY;
+    // Unproject screen coordinates to world logical coordinates using refs
+    const worldX = (screenX - 600) / cameraZoom + 600 - cameraOffsetXRef.current;
+    const worldY = (screenY - 300) / cameraZoom + 300 - cameraOffsetYRef.current;
 
     let clickedNearPlayer = false;
     if (isMyTurn) {
@@ -1286,6 +1464,9 @@ export const BowmastersTable: React.FC<BowmastersTableProps> = ({
       setIsAimCancelled(true);
     } else {
       setDragMode('pan');
+      isManualPanRef.current = true;
+      setCameraOffsetX(cameraOffsetXRef.current);
+      setCameraOffsetY(cameraOffsetYRef.current);
       setLastMousePos({ x: e.clientX, y: e.clientY });
     }
   };
@@ -1318,10 +1499,12 @@ export const BowmastersTable: React.FC<BowmastersTableProps> = ({
       const scaleX = 1200 / rect.width;
       const scaleY = 600 / rect.height;
 
-      // Pan camera with limits
+      // Pan camera with dynamic world limits
+      const worldW = terrain.length || 1200;
       const maxOffsetX = 600 * (1 - 1 / cameraZoom);
+      const minOffsetX = 600 * (1 + 1 / cameraZoom) - worldW;
       const maxOffsetY = 300 * (1 - 1 / cameraZoom);
-      setCameraOffsetX(prev => Math.max(-maxOffsetX, Math.min(maxOffsetX, prev + (dx * scaleX) / cameraZoom)));
+      setCameraOffsetX(prev => Math.max(minOffsetX, Math.min(maxOffsetX, prev + (dx * scaleX) / cameraZoom)));
       setCameraOffsetY(prev => Math.max(-maxOffsetY, Math.min(maxOffsetY, prev + (dy * scaleY) / cameraZoom)));
       setLastMousePos({ x: e.clientX, y: e.clientY });
     }
@@ -1361,8 +1544,8 @@ export const BowmastersTable: React.FC<BowmastersTableProps> = ({
       const screenX = ((touch.clientX - rect.left) / rect.width) * 1200;
       const screenY = ((touch.clientY - rect.top) / rect.height) * 600;
 
-      const worldX = (screenX - 600) / cameraZoom + 600 - cameraOffsetX;
-      const worldY = (screenY - 300) / cameraZoom + 300 - cameraOffsetY;
+      const worldX = (screenX - 600) / cameraZoom + 600 - cameraOffsetXRef.current;
+      const worldY = (screenY - 300) / cameraZoom + 300 - cameraOffsetYRef.current;
 
       let clickedNearPlayer = false;
       if (isMyTurn) {
@@ -1384,6 +1567,9 @@ export const BowmastersTable: React.FC<BowmastersTableProps> = ({
         setIsAimCancelled(true);
       } else {
         setDragMode('pan');
+        isManualPanRef.current = true;
+        setCameraOffsetX(cameraOffsetXRef.current);
+        setCameraOffsetY(cameraOffsetYRef.current);
         setLastMousePos({ x: touch.clientX, y: touch.clientY });
       }
     } else if (e.touches.length === 2) {
@@ -1429,9 +1615,12 @@ export const BowmastersTable: React.FC<BowmastersTableProps> = ({
         const scaleX = 1200 / rect.width;
         const scaleY = 600 / rect.height;
 
+        // Pan camera with dynamic world limits
+        const worldW = terrain.length || 1200;
         const maxOffsetX = 600 * (1 - 1 / cameraZoom);
+        const minOffsetX = 600 * (1 + 1 / cameraZoom) - worldW;
         const maxOffsetY = 300 * (1 - 1 / cameraZoom);
-        setCameraOffsetX(prev => Math.max(-maxOffsetX, Math.min(maxOffsetX, prev + (dx * scaleX) / cameraZoom)));
+        setCameraOffsetX(prev => Math.max(minOffsetX, Math.min(maxOffsetX, prev + (dx * scaleX) / cameraZoom)));
         setCameraOffsetY(prev => Math.max(-maxOffsetY, Math.min(maxOffsetY, prev + (dy * scaleY) / cameraZoom)));
         setLastMousePos({ x: touch.clientX, y: touch.clientY });
       }
@@ -1458,48 +1647,7 @@ export const BowmastersTable: React.FC<BowmastersTableProps> = ({
   return (
     <div className="bowmasters-table-container" ref={containerRef}>
       
-      {/* 2D Scrolling Parallax background decoration from Monopoly */}
-      <div className="bowmasters-sky-wrapper">
-        <div className="scrolling-clouds-ribbon">
-          <div className="clouds-panel">
-            <span style={{ top: '35%', left: '10%', position: 'absolute', fontSize: '3rem', opacity: 0.6 }}>☁️</span>
-            <span style={{ top: '15%', left: '40%', position: 'absolute', fontSize: '2.5rem', opacity: 0.5 }}>☁️</span>
-            <span style={{ top: '45%', left: '70%', position: 'absolute', fontSize: '3.2rem', opacity: 0.7 }}>☁️</span>
-          </div>
-          <div className="clouds-panel">
-            <span style={{ top: '35%', left: '10%', position: 'absolute', fontSize: '3rem', opacity: 0.6 }}>☁️</span>
-            <span style={{ top: '15%', left: '40%', position: 'absolute', fontSize: '2.5rem', opacity: 0.5 }}>☁️</span>
-            <span style={{ top: '45%', left: '70%', position: 'absolute', fontSize: '3.2rem', opacity: 0.7 }}>☁️</span>
-          </div>
-        </div>
-
-        <div className="scrolling-hills-ribbon">
-          <div className="hills-panel">
-            {/* Background rolling green hill SVG */}
-            <svg style={{ width: '100%', height: '100%', position: 'absolute', bottom: 0 }} viewBox="0 0 1000 120" preserveAspectRatio="none">
-              <path d="M0 120 Q 250 50, 500 80 T 1000 70 L 1000 120 Z" fill={colorTheme.terrainGradient[2]} opacity="0.3" />
-            </svg>
-          </div>
-          <div className="hills-panel">
-            <svg style={{ width: '100%', height: '100%', position: 'absolute', bottom: 0 }} viewBox="0 0 1000 120" preserveAspectRatio="none">
-              <path d="M0 120 Q 250 50, 500 80 T 1000 70 L 1000 120 Z" fill={colorTheme.terrainGradient[2]} opacity="0.3" />
-            </svg>
-          </div>
-        </div>
-
-        <div className="scrolling-trees-ribbon">
-          <div className="trees-panel">
-            <span className="sway-tree t1" style={{ bottom: '10px', left: '15%', position: 'absolute' }}>🌳</span>
-            <span className="sway-tree t2" style={{ bottom: '5px', left: '50%', position: 'absolute' }}>🌲</span>
-            <span className="sway-tree t3" style={{ bottom: '8px', left: '80%', position: 'absolute' }}>🌳</span>
-          </div>
-          <div className="trees-panel">
-            <span className="sway-tree t1" style={{ bottom: '10px', left: '15%', position: 'absolute' }}>🌳</span>
-            <span className="sway-tree t2" style={{ bottom: '5px', left: '50%', position: 'absolute' }}>🌲</span>
-            <span className="sway-tree t3" style={{ bottom: '8px', left: '80%', position: 'absolute' }}>🌳</span>
-          </div>
-        </div>
-      </div>
+      {/* Background is now rendered on canvas with premium parallax city/hills layers */}
 
       {/* Main Canvas rendering viewport */}
       {terrain.length > 0 && (

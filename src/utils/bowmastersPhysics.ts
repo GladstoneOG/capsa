@@ -18,6 +18,8 @@ export interface Projectile {
   trail: Vec2[];
   angle: number;
   spin: number;
+  hitCharacterIds: Set<string>; // Characters already hit by this projectile (prevents multi-hit)
+  shooterTeam?: 'a' | 'b';
 }
 
 export interface TerrainMap {
@@ -148,10 +150,10 @@ export function getTerrainNormal(terrain: TerrainMap, x: number): Vec2 {
   const dx = 2;
   const len = Math.sqrt(dx * dx + dy * dy);
   
-  // Normal is (-dy, dx) normalized
+  // Normal pointing UP (away from surface) in canvas coords (Y-down): (dy, -dx)
   return {
-    x: -dy / len,
-    y: dx / len
+    x: dy / len,
+    y: -dx / len
   };
 }
 
@@ -224,6 +226,10 @@ export function simulateProjectileStep(
   // 1. Check Character Collisions (Only against alive, opposite team if multiplayer, or all for testing)
   for (const char of characters) {
     if (!char.alive) continue;
+    // Skip teammates (phase through teammates)
+    if (proj.shooterTeam && char.team === proj.shooterTeam) continue;
+    // Skip characters already hit by this projectile (prevents piercing multi-hit)
+    if (proj.hitCharacterIds.has(char.id)) continue;
     
     // Check hit limbs
     for (const limb of char.limbs) {
@@ -283,6 +289,7 @@ export function simulateProjectileStep(
         char.velocity.x = kbVelX;
 
         // Spears pierce through players! Others stop.
+        proj.hitCharacterIds.add(char.id);
         if (proj.type !== 'spear') {
           proj.active = false;
         }
@@ -376,13 +383,13 @@ export function rollBoulderStep(
   }
 
   const normal = getTerrainNormal(terrain, x);
-  // Tangent direction is (normal.y, -normal.x)
-  const tangentX = normal.y;
-  const tangentY = -normal.x;
+  // Tangent direction along surface (pointing generally right): (-normal.y, normal.x)
+  const tangentX = -normal.y;
+  const tangentY = normal.x;
 
-  // Apply gravity along slope: gravity pulls down (y increases downwards)
-  // Acceleration = gravity * sin(theta) = gravity * -tangentY
-  const slopeAccel = 0.15 * -tangentY;
+  // Apply gravity along slope: gravity pulls down (y increases downwards in canvas)
+  // Project gravity (0, 0.15) onto tangent: dot((0, 0.15), tangent) = 0.15 * tangentY
+  const slopeAccel = 0.15 * tangentY;
   proj.vel.x += slopeAccel * tangentX;
   
   // Friction
@@ -400,9 +407,10 @@ export function rollBoulderStep(
   proj.pos.y = terrain.heights[nextXIdx];
   proj.spin += proj.vel.x * 0.15; // Spin faster
 
-  // Check rolling hits on characters
   for (const char of characters) {
     if (!char.alive) continue;
+    // Skip teammates (phase through teammates)
+    if (proj.shooterTeam && char.team === proj.shooterTeam) continue;
     
     // Simplistic bounding check for rolling boulder (lower limbs only or general feet position check)
     const dist = Math.abs(char.position.x - proj.pos.x);

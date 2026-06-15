@@ -153,7 +153,7 @@ function checkCharacterSelectionComplete(room, io) {
   room.bowmastersPhase = 'playing';
 
   // 1. Generate Terrain (Authoritative server heightmap)
-  const terrainWidth = 1200;
+  const terrainWidth = 2000;
   room.bowmastersTerrain = generateServerTerrain(terrainWidth, 0.45);
 
   // 2. Assign teams & spawn positions
@@ -169,11 +169,11 @@ function checkCharacterSelectionComplete(room, io) {
     const teamAPlayers = room.players.filter(p => p.team === 'a');
     const teamBPlayers = room.players.filter(p => p.team === 'b');
 
-    // Spawn X positions: Team A on left (e.g. 150, 280), Team B on right (e.g. 920, 1050)
-    teamAPlayers[0].positionX = 160;
-    teamAPlayers[1].positionX = 290;
-    teamBPlayers[0].positionX = 1040;
-    teamBPlayers[1].positionX = 910;
+    // Spawn X positions: Team A on left, Team B on right, with buffer
+    teamAPlayers[0].positionX = 300;
+    teamAPlayers[1].positionX = 450;
+    teamBPlayers[0].positionX = 1700;
+    teamBPlayers[1].positionX = 1550;
 
     // Turn order: A1 -> B1 -> A2 -> B2
     room.bowmastersTurnOrder = [
@@ -194,12 +194,12 @@ function checkCharacterSelectionComplete(room, io) {
     const teamAPlayers = room.players.filter(p => p.team === 'a');
     const teamBPlayers = room.players.filter(p => p.team === 'b');
 
-    // Spawn positions: 200 vs 1000
+    // Spawn positions: 400 vs 1600
     teamAPlayers.forEach((p, idx) => {
-      p.positionX = 200 + idx * 80;
+      p.positionX = 400 + idx * 80;
     });
     teamBPlayers.forEach((p, idx) => {
-      p.positionX = 1000 - idx * 80;
+      p.positionX = 1600 - idx * 80;
     });
 
     // Turn order: alternate A & B
@@ -236,15 +236,8 @@ function checkCharacterSelectionComplete(room, io) {
 }
 
 export function handleAction(room, socket, action, payload, io) {
-  const activePlayerId = room.bowmastersTurnOrder[room.bowmastersTurnIdx];
-  const activePlayer = room.players.find(p => p.id === activePlayerId);
-
-  if (!activePlayer) return;
-
-  // Verify authorization: is current active player, or is bot triggered by host
-  const isAuthorized = activePlayer.id === socket.id || (activePlayer.isBot && room.players.find(p => p.id === socket.id)?.isHost);
-  if (!isAuthorized) return;
-
+  // Character selection is handled before turn-based auth, since all players
+  // need to select during character_select phase (turn order isn't set yet).
   if (action === 'select-character') {
     if (room.bowmastersPhase !== 'character_select') return;
     
@@ -265,9 +258,19 @@ export function handleAction(room, socket, action, payload, io) {
     });
 
     checkCharacterSelectionComplete(room, io);
+    return;
   }
 
-  else if (action === 'fire') {
+  const activePlayerId = room.bowmastersTurnOrder[room.bowmastersTurnIdx];
+  const activePlayer = room.players.find(p => p.id === activePlayerId);
+
+  if (!activePlayer) return;
+
+  // Verify authorization: is current active player, or is bot triggered by host
+  const isAuthorized = activePlayer.id === socket.id || (activePlayer.isBot && room.players.find(p => p.id === socket.id)?.isHost);
+  if (!isAuthorized) return;
+
+  if (action === 'fire') {
     if (room.bowmastersPhase !== 'playing') return;
 
     const { angle, power } = payload;
@@ -295,8 +298,8 @@ export function handleAction(room, socket, action, payload, io) {
     if (room.bowmastersPhase !== 'animating') return;
 
     // Authoritative host reports results:
-    // payload: { hits: [{targetId, damage, limb}], terrainDeform: {centerX, radius, depth} }
-    const { hits = [], terrainDeform, fellOffMapIds = [] } = payload;
+    // payload: { hits: [{targetId, damage, limb}], terrainDeform: {centerX, radius, depth}, movedPositions: [{id, x, y}] }
+    const { hits = [], terrainDeform, fellOffMapIds = [], movedPositions = [] } = payload;
 
     // 1. Process Hits
     hits.forEach(hit => {
@@ -362,7 +365,20 @@ export function handleAction(room, socket, action, payload, io) {
       });
     }
 
-    // 4. Check Victory Conditions
+    // 4. Apply post-knockback positions reported by the host client
+    if (movedPositions.length > 0) {
+      movedPositions.forEach(mp => {
+        const target = room.players.find(p => p.id === mp.id);
+        if (target && target.alive) {
+          target.positionX = mp.x;
+          // Snap Y to terrain height at the new X position
+          const x = Math.max(0, Math.min(room.bowmastersTerrain.length - 1, Math.floor(mp.x)));
+          target.positionY = room.bowmastersTerrain[x];
+        }
+      });
+    }
+
+    // 5. Check Victory Conditions
     const teamAAlive = room.players.some(p => p.team === 'a' && p.alive);
     const teamBAlive = room.players.some(p => p.team === 'b' && p.alive);
 
@@ -400,7 +416,7 @@ export function handleAction(room, socket, action, payload, io) {
       return;
     }
 
-    // 5. Advance Turn Order to Next Alive Player
+    // 6. Advance Turn Order to Next Alive Player
     let safetyCounter = 0;
     do {
       room.bowmastersTurnIdx = (room.bowmastersTurnIdx + 1) % room.bowmastersTurnOrder.length;
