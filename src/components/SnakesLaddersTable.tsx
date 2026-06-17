@@ -20,6 +20,7 @@ interface TableProps {
   onRollDice: () => void;
   onLeaveRoom: () => void;
   onRestartGame: () => void;
+  onAnimationStateChange?: (animating: boolean) => void;
 }
 
 export const SnakesLaddersTable: React.FC<TableProps> = ({
@@ -34,7 +35,8 @@ export const SnakesLaddersTable: React.FC<TableProps> = ({
   isHost,
   onRollDice,
   onLeaveRoom,
-  onRestartGame
+  onRestartGame,
+  onAnimationStateChange
 }) => {
   const [cellCenters, setCellCenters] = useState<Record<number, { x: number; y: number }>>({});
   const [visualPositions, setVisualPositions] = useState<Record<string, number>>({});
@@ -43,6 +45,9 @@ export const SnakesLaddersTable: React.FC<TableProps> = ({
   
   const boardRef = useRef<HTMLDivElement>(null);
   const activeAnimationRef = useRef<string | null>(null);
+  const isAnimatingRef = useRef(false);
+  const onAnimationStateChangeRef = useRef(onAnimationStateChange);
+  onAnimationStateChangeRef.current = onAnimationStateChange;
 
   // Computes the grid index for boustrophedon layout (1 at bottom-left, 100 at top-left)
   const getCellNumber = (row: number, col: number): number => {
@@ -85,16 +90,17 @@ export const SnakesLaddersTable: React.FC<TableProps> = ({
     };
   }, [players]);
 
-  // Synchronize non-animating players
+  // Synchronize non-animating players — use the ref to avoid the race condition
+  // where players and lastAction update in the same render cycle
   useEffect(() => {
-    if (!isAnimating) {
+    if (!isAnimatingRef.current) {
       const newPos: Record<string, number> = {};
       players.forEach(p => {
         newPos[p.id] = p.position || 1;
       });
       setVisualPositions(newPos);
     }
-  }, [players, isAnimating]);
+  }, [players]);
 
   // Handle dice roll cycle animation
   useEffect(() => {
@@ -115,7 +121,10 @@ export const SnakesLaddersTable: React.FC<TableProps> = ({
     if (!action || !action.rollId || activeAnimationRef.current === action.rollId) return;
     activeAnimationRef.current = action.rollId;
 
+    // Set the ref immediately (same tick) to gate the sync effect
+    isAnimatingRef.current = true;
     setIsAnimating(true);
+    onAnimationStateChangeRef.current?.(true);
     const { playerId: animPlayerId, oldPos, finalPos, landedEffect } = action;
 
     // Sync start position
@@ -162,7 +171,9 @@ export const SnakesLaddersTable: React.FC<TableProps> = ({
       await new Promise(resolve => setTimeout(resolve, 850));
     }
 
+    isAnimatingRef.current = false;
     setIsAnimating(false);
+    onAnimationStateChangeRef.current?.(false);
   };
 
   useEffect(() => {

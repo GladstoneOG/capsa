@@ -262,6 +262,7 @@ export default function App() {
   const [snakesLaddersRollId, setSnakesLaddersRollId] = useState<string | null>(null);
   const [snakesLaddersPhase, setSnakesLaddersPhase] = useState<'roll' | 'rolling_animation'>('roll');
   const [snakesLaddersLastAction, setSnakesLaddersLastAction] = useState<any | null>(null);
+  const [snakesLaddersAnimating, setSnakesLaddersAnimating] = useState(false);
 
   // Bowmasters States
   const [bowmastersPhase, setBowmastersPhase] = useState<string>('character_select');
@@ -1148,7 +1149,7 @@ export default function App() {
     console.log('[BOT COORD] triggerBotLogicForMultiplayer called for phase:', roomState.monopolyPhase);
     if (botTimerRef.current) clearTimeout(botTimerRef.current);
 
-    const isMovingOrWillMoveOrBuilding = roomState.gameType === 'monopoly' && (
+    const isMovingOrWillMoveOrBuilding = (roomState.gameType === 'monopoly' && (
       isMonopolyAnimating ||
       roomState.monopolyPhase === 'rolling_animation' ||
       (roomState.players || []).some((p: any) => {
@@ -1168,7 +1169,7 @@ export default function App() {
           return diff;
         })
       )
-    );
+    )) || (roomState.gameType === 'snakes_ladders' && snakesLaddersAnimating);
 
     console.log('[BOT COORD] isMovingOrWillMoveOrBuilding:', isMovingOrWillMoveOrBuilding, 'isMonopolyAnimating:', isMonopolyAnimating);
 
@@ -4278,6 +4279,7 @@ export default function App() {
   const rollDiceSnakesLaddersSingle = () => {
     const { snakesLaddersPhase: phase, turnIndex: tIdx, players: currentPlayers } = stateRef.current;
     if (phase !== 'roll') return;
+    if (snakesLaddersAnimating) return;
 
     const currentPlayer = currentPlayers[tIdx];
     if (!currentPlayer) return;
@@ -4346,6 +4348,7 @@ export default function App() {
       };
 
       const updatedLastAction = {
+        rollId: stateRef.current.snakesLaddersRollId || Math.random().toString(36).substring(2, 9),
         playerId: freshCurrentPlayer.id,
         roll,
         oldPos,
@@ -4550,10 +4553,10 @@ export default function App() {
       const teamA = updatedPlayers.filter(p => p.team === 'a');
       const teamB = updatedPlayers.filter(p => p.team === 'b');
 
-      teamA[0].positionX = 300;
-      teamA[1].positionX = 450;
-      teamB[0].positionX = 1700;
-      teamB[1].positionX = 1550;
+      teamA[0].positionX = 500;
+      teamA[1].positionX = 600;
+      teamB[0].positionX = 1500;
+      teamB[1].positionX = 1400;
 
       const order = [teamA[0].id, teamB[0].id, teamA[1].id, teamB[1].id];
       setBowmastersTurnOrder(order);
@@ -4565,8 +4568,8 @@ export default function App() {
       const teamA = updatedPlayers.filter(p => p.team === 'a');
       const teamB = updatedPlayers.filter(p => p.team === 'b');
 
-      teamA.forEach((p, idx) => { p.positionX = 400 + idx * 80; });
-      teamB.forEach((p, idx) => { p.positionX = 1600 - idx * 80; });
+      teamA.forEach((p, idx) => { p.positionX = 570 + idx * 80; });
+      teamB.forEach((p, idx) => { p.positionX = 1430 - idx * 80; });
 
       const order: string[] = [];
       const maxLen = Math.max(teamA.length, teamB.length);
@@ -4829,6 +4832,7 @@ export default function App() {
     prevMultiplayerPlayersRef.current = players;
 
     if (isMonopolyAnimating) return;
+    if (snakesLaddersAnimating) return;
 
     if (lastBotSyncRoomStateRef.current) {
       const roomState = lastBotSyncRoomStateRef.current;
@@ -4837,6 +4841,7 @@ export default function App() {
     }
   }, [
     isMonopolyAnimating,
+    snakesLaddersAnimating,
     gameState,
     isSinglePlayer,
     players,
@@ -4852,7 +4857,7 @@ export default function App() {
       return;
     }
     if (isMonopolyAnimating) return;
-
+    if (snakesLaddersAnimating) return;
     let targetBotId: string | null = null;
     let targetBotPlayer: Player | null = null;
 
@@ -5149,6 +5154,7 @@ export default function App() {
     monopolyBoard,
     monopolyLandedBuildMaxHouses,
     snakesLaddersPhase,
+    snakesLaddersAnimating,
     bowmastersTurnIdx,
     bowmastersTurnOrder,
     bowmastersPhase,
@@ -6646,6 +6652,7 @@ export default function App() {
           onRollDice={isSinglePlayer ? rollDiceSnakesLaddersSingle : () => socketRef.current?.emit('snakes-ladders-action', { roomCode, action: 'roll-dice' })}
           onLeaveRoom={leaveRoom}
           onRestartGame={isSinglePlayer ? restartSinglePlayerSnakesLaddersGameRound : restartOnlineGame}
+          onAnimationStateChange={setSnakesLaddersAnimating}
         />
       )}
 

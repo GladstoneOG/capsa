@@ -545,6 +545,12 @@ io.on('connection', (socket) => {
       }
 
       bowmastersEngine.startRound(room, io);
+    } else if (room.gameType === 'snakes_ladders' || room.gameType === 'snakes-ladders') {
+      if (room.players.length < 2) {
+        socket.emit('start-error', 'Need at least 2 players to start Snakes & Ladders.');
+        return;
+      }
+      snakesLaddersEngine.startRound(room, io);
     } else {
       // Auto-fill empty slots with bots up to 4 players for Capsa Banting
       const botAvatars = [

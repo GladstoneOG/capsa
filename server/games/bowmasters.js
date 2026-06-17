@@ -169,11 +169,11 @@ function checkCharacterSelectionComplete(room, io) {
     const teamAPlayers = room.players.filter(p => p.team === 'a');
     const teamBPlayers = room.players.filter(p => p.team === 'b');
 
-    // Spawn X positions: Team A on left, Team B on right, with buffer
-    teamAPlayers[0].positionX = 300;
-    teamAPlayers[1].positionX = 450;
-    teamBPlayers[0].positionX = 1700;
-    teamBPlayers[1].positionX = 1550;
+    // Spawn X positions: Team A on left, Team B on right, with buffer (closer spawn by ~28% of original distance to center)
+    teamAPlayers[0].positionX = 500;
+    teamAPlayers[1].positionX = 600;
+    teamBPlayers[0].positionX = 1500;
+    teamBPlayers[1].positionX = 1400;
 
     // Turn order: A1 -> B1 -> A2 -> B2
     room.bowmastersTurnOrder = [
@@ -194,12 +194,12 @@ function checkCharacterSelectionComplete(room, io) {
     const teamAPlayers = room.players.filter(p => p.team === 'a');
     const teamBPlayers = room.players.filter(p => p.team === 'b');
 
-    // Spawn positions: 400 vs 1600
+    // Spawn positions: 570 vs 1430 (closer spawn by ~28% of original distance to center)
     teamAPlayers.forEach((p, idx) => {
-      p.positionX = 400 + idx * 80;
+      p.positionX = 570 + idx * 80;
     });
     teamBPlayers.forEach((p, idx) => {
-      p.positionX = 1600 - idx * 80;
+      p.positionX = 1430 - idx * 80;
     });
 
     // Turn order: alternate A & B

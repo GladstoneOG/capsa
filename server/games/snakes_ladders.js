@@ -160,6 +160,7 @@ export function handleAction(room, socket, action, payload, io) {
       });
 
       room.snakesLaddersLastAction = {
+        rollId: room.snakesLaddersRollId,
         playerId: currentPlayer.id,
         roll,
         oldPos,
