@@ -111,6 +111,13 @@ export const BowmastersTable: React.FC<BowmastersTableProps> = ({
   // Authoritative terrain deformation details to report
   const terrainDeformRef = useRef<any>(null);
 
+  // Stable ref for the action callback so render loop setTimeout closures always use latest
+  const onBowmastersActionRef = useRef(onBowmastersAction);
+  onBowmastersActionRef.current = onBowmastersAction;
+
+  // Safety fallback timeout ref to ensure resolve-shot is always sent
+  const resolveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   // Selected preset (visuals) - Premium Blue and Twilight theme defaults
   const [colorTheme, setColorTheme] = useState({
     skyGradient: ['#1A365D', '#2B6CB0'], // Midnight Lapis Blue
@@ -214,6 +221,12 @@ export const BowmastersTable: React.FC<BowmastersTableProps> = ({
 
   // Listen to incoming lastShot triggers from server or local controls
   useEffect(() => {
+    // Clear any previous safety fallback timeout
+    if (resolveTimeoutRef.current) {
+      clearTimeout(resolveTimeoutRef.current);
+      resolveTimeoutRef.current = null;
+    }
+
     if (lastShot && terrain.length > 0) {
       const activePlayer = characterBodiesRef.current.find(b => b.id === lastShot.playerId);
       if (activePlayer) {
@@ -252,11 +265,45 @@ export const BowmastersTable: React.FC<BowmastersTableProps> = ({
         else if (lastShot.characterType === 'slingshot') sfx.playSlingshot();
         else if (lastShot.characterType === 'bomber') sfx.playWhoosh(); // fuse trail sound
         else sfx.playRockThud();
+
+        // Safety fallback: if the host's render loop doesn't emit resolve-shot
+        // within 12 seconds (e.g., due to stale closures or missed projectile),
+        // force-emit it here with whatever data we have.
+        if (isHost) {
+          resolveTimeoutRef.current = setTimeout(() => {
+            if (!resolveEmittedRef.current) {
+              resolveEmittedRef.current = true;
+              const movedPositions: { id: string; x: number; y: number }[] = [];
+              characterBodiesRef.current.forEach(char => {
+                if (char.alive) {
+                  movedPositions.push({
+                    id: char.id,
+                    x: Math.round(char.position.x),
+                    y: Math.round(char.position.y)
+                  });
+                }
+              });
+              onBowmastersActionRef.current('resolve-shot', {
+                hits: accumulatedHitsRef.current,
+                fellOffMapIds: [],
+                terrainDeform: terrainDeformRef.current,
+                movedPositions
+              });
+            }
+          }, 12000);
+        }
       }
     } else {
       activeProjRef.current = null;
     }
-  }, [lastShot, terrain]);
+
+    return () => {
+      if (resolveTimeoutRef.current) {
+        clearTimeout(resolveTimeoutRef.current);
+        resolveTimeoutRef.current = null;
+      }
+    };
+  }, [lastShot, terrain, isHost]);
 
   // Spawns impact particles
   const spawnImpactParticles = (x: number, y: number, color: string, count: number = 15, isExplosion: boolean = false) => {
@@ -1312,7 +1359,7 @@ export const BowmastersTable: React.FC<BowmastersTableProps> = ({
                 }
               });
 
-              onBowmastersAction('resolve-shot', {
+              onBowmastersActionRef.current('resolve-shot', {
                 hits: accumulatedHitsRef.current,
                 fellOffMapIds: fellOffMapIdsReport,
                 terrainDeform: terrainDeformRef.current,
