@@ -261,41 +261,12 @@ export function handleAction(room, socket, action, payload, io) {
     return;
   }
 
-  const activePlayerId = room.bowmastersTurnOrder[room.bowmastersTurnIdx];
-  const activePlayer = room.players.find(p => p.id === activePlayerId);
-
-  if (!activePlayer) return;
-
-  // Verify authorization: is current active player, or is bot triggered by host
-  const isAuthorized = activePlayer.id === socket.id || (activePlayer.isBot && room.players.find(p => p.id === socket.id)?.isHost);
-  if (!isAuthorized) return;
-
-  if (action === 'fire') {
-    if (room.bowmastersPhase !== 'playing') return;
-
-    const { angle, power } = payload;
-    room.bowmastersPhase = 'animating';
-    room.bowmastersLastShot = {
-      playerId: activePlayer.id,
-      angle,
-      power,
-      characterType: activePlayer.characterType
-    };
-
-    io.to(room.code).emit('chat-message', {
-      id: `sys_${Math.random()}`,
-      senderName: 'System',
-      senderId: 'system',
-      text: `🏹 ${activePlayer.name} fired a shot!`,
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      system: true,
-    });
-
-    broadcastGameUpdate(room, io);
-  }
-
-  else if (action === 'resolve-shot') {
+  if (action === 'resolve-shot') {
     if (room.bowmastersPhase !== 'animating') return;
+
+    // Verify authorization: only host can resolve the shot authoritatively
+    const sender = room.players.find(p => p.id === socket.id);
+    if (!sender || !sender.isHost) return;
 
     // Authoritative host reports results:
     // payload: { hits: [{targetId, damage, limb}], terrainDeform: {centerX, radius, depth}, movedPositions: [{id, x, y}] }
@@ -431,5 +402,39 @@ export function handleAction(room, socket, action, payload, io) {
     room.bowmastersPhase = 'playing';
 
     broadcastGameUpdate(room, io);
+  } else {
+    // Normal turn-based actions (e.g. fire)
+    const activePlayerId = room.bowmastersTurnOrder[room.bowmastersTurnIdx];
+    const activePlayer = room.players.find(p => p.id === activePlayerId);
+
+    if (!activePlayer) return;
+
+    // Verify authorization: is current active player, or is bot triggered by host
+    const isAuthorized = activePlayer.id === socket.id || (activePlayer.isBot && room.players.find(p => p.id === socket.id)?.isHost);
+    if (!isAuthorized) return;
+
+    if (action === 'fire') {
+      if (room.bowmastersPhase !== 'playing') return;
+
+      const { angle, power } = payload;
+      room.bowmastersPhase = 'animating';
+      room.bowmastersLastShot = {
+        playerId: activePlayer.id,
+        angle,
+        power,
+        characterType: activePlayer.characterType
+      };
+
+      io.to(room.code).emit('chat-message', {
+        id: `sys_${Math.random()}`,
+        senderName: 'System',
+        senderId: 'system',
+        text: `🏹 ${activePlayer.name} fired a shot!`,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        system: true,
+      });
+
+      broadcastGameUpdate(room, io);
+    }
   }
 }

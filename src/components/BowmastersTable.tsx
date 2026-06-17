@@ -1676,19 +1676,26 @@ export const BowmastersTable: React.FC<BowmastersTableProps> = ({
       {phase !== 'character_select' && (
         <div className="bowmasters-hud">
           <div className="hud-top-bar">
-            {/* Wind Info */}
-            <div className="hud-wind-indicator">
-              <span className="wind-label">Wind</span>
-              <span
-                className="wind-arrow"
-                style={{
-                  transform: `rotate(${wind >= 0 ? 0 : 180}deg)`,
-                  color: Math.abs(wind) > 2 ? '#e74c3c' : Math.abs(wind) > 1 ? '#f1c40f' : '#2ecc71'
-                }}
-              >
-                ➡️
-              </span>
-              <span className="wind-value">{Math.abs(wind)}</span>
+            {/* Left controls: Exit Button & Wind Indicator */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem', pointerEvents: 'auto' }}>
+              <button className="exit-lobby-btn" onClick={onLeaveRoom}>
+                🚪 Exit to Lobby
+              </button>
+              
+              {/* Wind Info */}
+              <div className="hud-wind-indicator">
+                <span className="wind-label">Wind</span>
+                <span
+                  className="wind-arrow"
+                  style={{
+                    transform: `rotate(${wind >= 0 ? 0 : 180}deg)`,
+                    color: Math.abs(wind) > 2 ? '#e74c3c' : Math.abs(wind) > 1 ? '#f1c40f' : '#2ecc71'
+                  }}
+                >
+                  ➡️
+                </span>
+                <span className="wind-value">{Math.abs(wind)}</span>
+              </div>
             </div>
 
             {/* Turn Banner */}
@@ -1799,6 +1806,14 @@ export const BowmastersTable: React.FC<BowmastersTableProps> = ({
               <span>⏳ Waiting for other players to choose...</span>
             </div>
           )}
+
+          <button
+            className="exit-lobby-btn"
+            onClick={onLeaveRoom}
+            style={{ marginTop: '2rem', minWidth: '160px' }}
+          >
+            🚪 Exit to Lobby
+          </button>
         </div>
       )}
 

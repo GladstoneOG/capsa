@@ -456,3 +456,29 @@
   background: #d35400;
   box-shadow: 0 8px 22px rgba(211, 84, 0, 0.45);
 }
+
+/* Exit to Lobby Button */
+.exit-lobby-btn {
+  pointer-events: auto;
+  background: rgba(239, 68, 68, 0.15);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  border-radius: 8px;
+  padding: 0.5rem 1rem;
+  color: #fca5a5;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+}
+
+.exit-lobby-btn:hover {
+  background: rgba(239, 68, 68, 0.3);
+  border-color: rgba(239, 68, 68, 0.6);
+  color: #fff;
+  box-shadow: 0 0 12px rgba(239, 68, 68, 0.2);
+}
