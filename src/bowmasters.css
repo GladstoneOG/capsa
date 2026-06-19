@@ -7,7 +7,13 @@
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  background: linear-gradient(to bottom, #87CEEB 0%, #4682B4 100%); /* Daylight sky default */
+  background: linear-gradient(to bottom, #bae6fd 0%, #38bdf8 100%); /* Bright daylight sky */
+  --bm-primary: #38bdf8;
+  --bm-primary-dark: #0ea5e9;
+  --bm-primary-glow: rgba(56, 189, 248, 0.4);
+  --bm-accent: #22c55e;
+  --bm-accent-dark: #16a34a;
+  --bm-accent-glow: rgba(34, 197, 94, 0.4);
 }
 
 /* ==================== Parallax Background moved to Canvas ==================== */
@@ -32,7 +38,7 @@
   font-weight: 800;
   color: #fff;
   margin-bottom: 0.5rem;
-  text-shadow: 0 0 10px rgba(230, 126, 34, 0.5);
+  text-shadow: 0 0 10px var(--bm-primary-glow);
   text-transform: uppercase;
 }
 
@@ -69,14 +75,14 @@
 .char-card:hover {
   transform: translateY(-8px);
   background: rgba(30, 41, 59, 0.85);
-  border-color: rgba(230, 126, 34, 0.4);
+  border-color: var(--bm-primary-glow);
   box-shadow: 0 12px 30px rgba(0, 0, 0, 0.3);
 }
 
 .char-card.selected {
-  border-color: #e67e22;
-  background: rgba(230, 126, 34, 0.15);
-  box-shadow: 0 0 20px rgba(230, 126, 34, 0.25);
+  border-color: var(--bm-accent);
+  background: var(--bm-accent-glow);
+  box-shadow: 0 0 20px var(--bm-accent-glow);
 }
 
 .char-card-icon-wrapper {
@@ -138,14 +144,14 @@
 }
 
 .char-card:hover .char-select-btn {
-  background: #e67e22;
-  border-color: #e67e22;
+  background: var(--bm-accent);
+  border-color: var(--bm-accent);
 }
 
 .char-card.selected .char-select-btn {
-  background: #e67e22;
-  border-color: #e67e22;
-  box-shadow: 0 0 10px rgba(230, 126, 34, 0.4);
+  background: var(--bm-accent);
+  border-color: var(--bm-accent);
+  box-shadow: 0 0 10px var(--bm-accent-glow);
 }
 
 .char-select-waiting {
@@ -210,7 +216,7 @@
   pointer-events: auto;
   background: rgba(30, 41, 59, 0.85);
   backdrop-filter: blur(8px);
-  border: 2px solid #e67e22;
+  border: 2px solid var(--bm-accent);
   border-radius: 16px;
   padding: 0.8rem 2.5rem;
   display: flex;
@@ -221,8 +227,8 @@
 }
 
 @keyframes pulse-border {
-  0% { border-color: rgba(230, 126, 34, 0.5); }
-  100% { border-color: rgba(230, 126, 34, 1); box-shadow: 0 0 12px rgba(230, 126, 34, 0.2); }
+  0% { border-color: rgba(34, 197, 94, 0.5); }
+  100% { border-color: rgba(34, 197, 94, 1); box-shadow: 0 0 12px rgba(34, 197, 94, 0.2); }
 }
 
 .hud-turn-title {
@@ -439,7 +445,7 @@
 
 .restart-btn {
   padding: 0.8rem 2.5rem;
-  background: #e67e22;
+  background: var(--bm-accent);
   border: none;
   border-radius: 12px;
   color: #fff;
@@ -447,14 +453,14 @@
   font-weight: 700;
   font-size: 1.1rem;
   cursor: pointer;
-  box-shadow: 0 6px 18px rgba(230, 126, 34, 0.35);
+  box-shadow: 0 6px 18px var(--bm-accent-glow);
   transition: all 0.2s ease;
 }
 
 .restart-btn:hover {
   transform: translateY(-2px);
-  background: #d35400;
-  box-shadow: 0 8px 22px rgba(211, 84, 0, 0.45);
+  background: var(--bm-accent-dark);
+  box-shadow: 0 8px 22px var(--bm-accent-glow);
 }
 
 /* Exit to Lobby Button */

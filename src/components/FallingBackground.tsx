@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 
 interface FallingBackgroundProps {
-  gameType: 'capsa' | 'uno' | 'monopoly' | 'snakes_ladders' | 'bowmasters';
+  gameType: 'capsa' | 'uno' | 'monopoly' | 'snakes_ladders' | 'bowmasters' | 'sumo';
 }
 
 interface Particle {
@@ -12,7 +12,7 @@ interface Particle {
   angle: number;
   rotationSpeed: number;
   scale: number;
-  type: 'playing-card' | 'uno-card' | 'die' | 'bill' | 'snake' | 'ladder' | 'arrow' | 'spear' | 'bomb';
+  type: 'playing-card' | 'uno-card' | 'die' | 'bill' | 'snake' | 'ladder' | 'arrow' | 'spear' | 'bomb' | 'yinyang' | 'sakura' | 'fan';
   faceUp: boolean;
   suit?: 'H' | 'D' | 'C' | 'S';
   rank?: string;
@@ -98,6 +98,15 @@ export const FallingBackground: React.FC<FallingBackgroundProps> = ({ gameType }
           type = 'spear';
         } else {
           type = 'bomb';
+        }
+      } else if (gameType === 'sumo') {
+        const randVal = Math.random();
+        if (randVal < 0.35) {
+          type = 'yinyang';
+        } else if (randVal < 0.7) {
+          type = 'sakura';
+        } else {
+          type = 'fan';
         }
       } else if (gameType === 'capsa') {
         type = 'playing-card';
@@ -702,6 +711,133 @@ export const FallingBackground: React.FC<FallingBackgroundProps> = ({ gameType }
       ctx.restore();
     };
 
+    const drawYinyang = (p: Particle) => {
+      const r = 9 * p.scale;
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      ctx.rotate(p.angle);
+
+      // Draw outer circle border
+      ctx.strokeStyle = '#1e293b';
+      ctx.lineWidth = 1 * p.scale;
+      ctx.beginPath();
+      ctx.arc(0, 0, r, 0, Math.PI * 2);
+      ctx.stroke();
+
+      // Draw white background
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.arc(0, 0, r, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Draw black half (right side)
+      ctx.fillStyle = '#1e293b';
+      ctx.beginPath();
+      ctx.arc(0, 0, r, -Math.PI / 2, Math.PI / 2);
+      ctx.fill();
+
+      // Draw top S-curve circle (black)
+      ctx.beginPath();
+      ctx.arc(0, -r / 2, r / 2, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Draw bottom S-curve circle (white)
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.arc(0, r / 2, r / 2, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Draw top small white dot
+      ctx.beginPath();
+      ctx.arc(0, -r / 2, r / 6, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Draw bottom small black dot
+      ctx.fillStyle = '#1e293b';
+      ctx.beginPath();
+      ctx.arc(0, r / 2, r / 6, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.restore();
+    };
+
+    const drawSakura = (p: Particle) => {
+      const size = 10 * p.scale;
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      ctx.rotate(p.angle);
+
+      // Soft pink color
+      ctx.fillStyle = '#fda4af';
+      ctx.strokeStyle = '#f43f5e';
+      ctx.lineWidth = 0.5 * p.scale;
+
+      // Draw 5 petals
+      ctx.beginPath();
+      for (let i = 0; i < 5; i++) {
+        const angle = (i * 2 * Math.PI) / 5;
+        const x1 = Math.cos(angle) * size * 0.4;
+        const y1 = Math.sin(angle) * size * 0.4;
+        const x2 = Math.cos(angle) * size;
+        const y2 = Math.sin(angle) * size;
+        const cp1x = Math.cos(angle - 0.4) * size * 0.8;
+        const cp1y = Math.sin(angle - 0.4) * size * 0.8;
+        const cp2x = Math.cos(angle + 0.4) * size * 0.8;
+        const cp2y = Math.sin(angle + 0.4) * size * 0.8;
+
+        ctx.moveTo(x1, y1);
+        ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, x2, y2);
+        ctx.bezierCurveTo(cp2x, cp2y, cp1x, cp1y, x1, y1);
+      }
+      ctx.fill();
+      ctx.stroke();
+
+      // Center detail
+      ctx.fillStyle = '#e11d48';
+      ctx.beginPath();
+      ctx.arc(0, 0, 1.5 * p.scale, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.restore();
+    };
+
+    const drawFan = (p: Particle) => {
+      const r = 12 * p.scale;
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      ctx.rotate(p.angle);
+
+      // Draw folding fan shape
+      ctx.fillStyle = '#fee2e2';
+      ctx.strokeStyle = '#b91c1c';
+      ctx.lineWidth = 1 * p.scale;
+
+      ctx.beginPath();
+      ctx.arc(0, r * 0.4, r, -Math.PI * 0.75, -Math.PI * 0.25);
+      ctx.lineTo(0, r * 0.4);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      // Draw spokes/folds
+      ctx.strokeStyle = 'rgba(185, 28, 28, 0.4)';
+      ctx.lineWidth = 0.5 * p.scale;
+      for (let angle = -Math.PI * 0.7; angle <= -Math.PI * 0.3; angle += Math.PI * 0.1) {
+        ctx.beginPath();
+        ctx.moveTo(0, r * 0.4);
+        ctx.lineTo(Math.cos(angle) * r, r * 0.4 + Math.sin(angle) * r);
+        ctx.stroke();
+      }
+
+      // Draw red circle in center (Japanese flag motif)
+      ctx.fillStyle = '#dc2626';
+      ctx.beginPath();
+      ctx.arc(0, -r * 0.2, r * 0.25, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.restore();
+    };
+
     // ANIMATION LOOP
     const tick = () => {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -737,6 +873,12 @@ export const FallingBackground: React.FC<FallingBackgroundProps> = ({ gameType }
           drawSpear(p);
         } else if (p.type === 'bomb') {
           drawBomb(p);
+        } else if (p.type === 'yinyang') {
+          drawYinyang(p);
+        } else if (p.type === 'sakura') {
+          drawSakura(p);
+        } else if (p.type === 'fan') {
+          drawFan(p);
         }
       });
 

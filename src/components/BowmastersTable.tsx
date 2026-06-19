@@ -89,6 +89,29 @@ export const BowmastersTable: React.FC<BowmastersTableProps> = ({
   const [dragMode, setDragMode] = useState<'none' | 'aim' | 'pan'>('none');
   const [lastMousePos, setLastMousePos] = useState<Vec2 | null>(null);
 
+  const latestAimingStateRef = useRef({ 
+    dragMode, 
+    dragStart, 
+    aimAngle, 
+    aimPower, 
+    lastMousePos, 
+    isAimCancelled, 
+    cameraZoom, 
+    terrain, 
+    onBowmastersAction 
+  });
+  latestAimingStateRef.current = { 
+    dragMode, 
+    dragStart, 
+    aimAngle, 
+    aimPower, 
+    lastMousePos, 
+    isAimCancelled, 
+    cameraZoom, 
+    terrain, 
+    onBowmastersAction 
+  };
+
   // Touch pinch zoom states
   const [pinchStartDist, setPinchStartDist] = useState<number | null>(null);
   const [pinchStartZoom, setPinchStartZoom] = useState<number>(1.0);
@@ -120,32 +143,111 @@ export const BowmastersTable: React.FC<BowmastersTableProps> = ({
 
   // Selected preset (visuals) - Premium Blue and Twilight theme defaults
   const [colorTheme, setColorTheme] = useState({
-    skyGradient: ['#1A365D', '#2B6CB0'], // Midnight Lapis Blue
-    terrainGradient: ['#55a630', '#2b9348', '#007f5f'],
-    sunColor: '#facc15'
+    skyGradient: ['#bae6fd', '#38bdf8'], // Sky Blue Day
+    terrainGradient: ['#4ade80', '#22c55e', '#16a34a'],
+    sunColor: '#ffffff'
   });
 
   // Keep track of characters bodies locally for simulation
   const characterBodiesRef = useRef<CharacterBody[]>([]);
+
+  // Listen to window pointer events when dragging (aiming or panning via mouse)
+  // to prevent premature release when pointer leaves canvas or hovers other elements.
+  useEffect(() => {
+    if (dragMode === 'none') return;
+
+    const handleWindowPointerMove = (e: PointerEvent) => {
+      // Only process mouse pointer types, let touch events be handled by standard onTouchMove
+      if (e.pointerType !== 'mouse') return;
+
+      const state = latestAimingStateRef.current;
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+
+      const rect = canvas.getBoundingClientRect();
+
+      if (state.dragMode === 'aim' && state.dragStart) {
+        const screenX = ((e.clientX - rect.left) / rect.width) * 1200;
+        const screenY = ((e.clientY - rect.top) / rect.height) * 600;
+
+        // Inverted pull back (slingshot aim)
+        const dx = state.dragStart.x - screenX;
+        const dy = screenY - state.dragStart.y;
+
+        const angle = Math.atan2(dy, dx);
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        const power = Math.max(10, Math.min(100, Math.round(distance * 0.45)));
+
+        setAimAngle(angle);
+        setAimPower(power);
+        setIsAimCancelled(distance < 20);
+      } else if (state.dragMode === 'pan' && state.lastMousePos) {
+        const dx = e.clientX - state.lastMousePos.x;
+        const dy = e.clientY - state.lastMousePos.y;
+
+        const scaleX = 1200 / rect.width;
+        const scaleY = 600 / rect.height;
+
+        const worldW = state.terrain.length || 1200;
+        const maxOffsetX = 600 * (1 - 1 / state.cameraZoom);
+        const minOffsetX = 600 * (1 + 1 / state.cameraZoom) - worldW;
+        const maxOffsetY = 300 * (1 - 1 / state.cameraZoom);
+
+        setCameraOffsetX(prev => Math.max(minOffsetX, Math.min(maxOffsetX, prev + (dx * scaleX) / state.cameraZoom)));
+        setCameraOffsetY(prev => Math.max(-maxOffsetY, Math.min(maxOffsetY, prev + (dy * scaleY) / state.cameraZoom)));
+        setLastMousePos({ x: e.clientX, y: e.clientY });
+      }
+    };
+
+    const handleWindowPointerUp = (e: PointerEvent) => {
+      if (e.pointerType !== 'mouse') return;
+
+      const latestState = latestAimingStateRef.current;
+      if (latestState.dragMode === 'aim') {
+        setIsAiming(false);
+        if (!latestState.isAimCancelled) {
+          let angleDeg = (latestState.aimAngle * 180) / Math.PI;
+          angleDeg = (angleDeg + 360) % 360;
+
+          latestState.onBowmastersAction('fire', {
+            angle: angleDeg,
+            power: latestState.aimPower
+          });
+        }
+        setDragStart(null);
+        setIsAimCancelled(false);
+      }
+      setDragMode('none');
+      setLastMousePos(null);
+    };
+
+    window.addEventListener('pointermove', handleWindowPointerMove);
+    window.addEventListener('pointerup', handleWindowPointerUp);
+
+    return () => {
+      window.removeEventListener('pointermove', handleWindowPointerMove);
+      window.removeEventListener('pointerup', handleWindowPointerUp);
+    };
+  }, [dragMode]);
 
   // Choose a color theme randomly based on roomCode
   useEffect(() => {
     const hash = roomCode.charCodeAt(0) || 0;
     const themes = [
       {
-        skyGradient: ['#1A365D', '#2B6CB0'], // Lapis Skyline Day
-        terrainGradient: ['#55a630', '#2b9348', '#007f5f'],
-        sunColor: '#facc15'
+        skyGradient: ['#bae6fd', '#38bdf8'], // Sky Blue Day
+        terrainGradient: ['#4ade80', '#22c55e', '#16a34a'],
+        sunColor: '#ffffff'
       },
       {
-        skyGradient: ['#0B132B', '#1C2541'], // Dark Cyber Space
-        terrainGradient: ['#22c55e', '#15803d', '#14532d'],
-        sunColor: '#ffd700'
+        skyGradient: ['#e0f2fe', '#7dd3fc'], // Soft Day Sky
+        terrainGradient: ['#86efac', '#4ade80', '#22c55e'],
+        sunColor: '#ffffff'
       },
       {
-        skyGradient: ['#0F172A', '#1D4ED8'], // Deep Twilight Horizon
-        terrainGradient: ['#f4f6f7', '#bdc3c7', '#7f8c8d'],
-        sunColor: '#facc15'
+        skyGradient: ['#f0f9ff', '#e0f2fe'], // Bright Morning Sky
+        terrainGradient: ['#a7f3d0', '#34d399', '#059669'],
+        sunColor: '#ffffff'
       }
     ];
     setColorTheme(themes[hash % themes.length]);
@@ -392,7 +494,7 @@ export const BowmastersTable: React.FC<BowmastersTableProps> = ({
       ctx.scale(1 + (cameraZoom - 1) * 0.15, 1 + (cameraZoom - 1) * 0.15);
       ctx.translate(-600 + cameraOffsetXRef.current * 0.15, -300 + cameraOffsetYRef.current * 0.15);
       
-      ctx.fillStyle = 'rgba(26, 54, 93, 0.14)';
+      ctx.fillStyle = 'rgba(125, 211, 252, 0.2)';
       ctx.beginPath();
       const buildingsFar = [
         { x: -300, w: 90, h: 220 }, { x: -210, w: 70, h: 180 }, { x: -140, w: 100, h: 260 },
@@ -423,7 +525,7 @@ export const BowmastersTable: React.FC<BowmastersTableProps> = ({
       ctx.scale(1 + (cameraZoom - 1) * 0.3, 1 + (cameraZoom - 1) * 0.3);
       ctx.translate(-600 + cameraOffsetXRef.current * 0.3, -300 + cameraOffsetYRef.current * 0.3);
       
-      ctx.fillStyle = 'rgba(21, 47, 86, 0.25)';
+      ctx.fillStyle = 'rgba(56, 189, 248, 0.25)';
       ctx.beginPath();
       const buildingsNear = [
         { x: -260, w: 100, h: 140 }, { x: -160, w: 80, h: 190 }, { x: -80, w: 90, h: 150 },
@@ -451,7 +553,7 @@ export const BowmastersTable: React.FC<BowmastersTableProps> = ({
       ctx.translate(-600 + cameraOffsetXRef.current * 0.5, -300 + cameraOffsetYRef.current * 0.5);
       
       // Draw hills
-      ctx.fillStyle = 'rgba(21, 100, 61, 0.25)'; // Blend forest green with blue
+      ctx.fillStyle = 'rgba(74, 222, 128, 0.25)'; // Blend forest green with blue
       ctx.beginPath();
       ctx.moveTo(-300, 600);
       ctx.quadraticCurveTo(150, 370, 500, 440);
@@ -476,10 +578,10 @@ export const BowmastersTable: React.FC<BowmastersTableProps> = ({
       
       treePositions.forEach(t => {
         // Trunk
-        ctx.fillStyle = 'rgba(100, 65, 40, 0.3)';
+        ctx.fillStyle = 'rgba(120, 80, 50, 0.3)';
         ctx.fillRect(t.x - 3, t.y, 6, 25);
         // Foliage
-        ctx.fillStyle = 'rgba(21, 120, 61, 0.38)';
+        ctx.fillStyle = 'rgba(34, 197, 94, 0.35)';
         ctx.beginPath();
         ctx.arc(t.x, t.y - t.r * 0.6, t.r, 0, Math.PI * 2);
         ctx.arc(t.x - t.r * 0.5, t.y - t.r * 1.1, t.r * 0.8, 0, Math.PI * 2);
@@ -1465,7 +1567,8 @@ export const BowmastersTable: React.FC<BowmastersTableProps> = ({
   }, [terrain, turnIndex, turnOrder, phase, aimAngle, aimPower, isAiming, isAimCancelled, colorTheme, cameraZoom, cameraOffsetX, cameraOffsetY]);
 
   // Handle drag starts to aim slingshot style or pan the camera
-  const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
+  const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (e.pointerType !== 'mouse') return;
     if (e.button === 2) {
       e.preventDefault();
       if (dragMode === 'aim' || isAiming) {
@@ -1514,45 +1617,6 @@ export const BowmastersTable: React.FC<BowmastersTableProps> = ({
       isManualPanRef.current = true;
       setCameraOffsetX(cameraOffsetXRef.current);
       setCameraOffsetY(cameraOffsetYRef.current);
-      setLastMousePos({ x: e.clientX, y: e.clientY });
-    }
-  };
-
-  const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    const rect = canvas.getBoundingClientRect();
-
-    if (dragMode === 'aim' && dragStart) {
-      const screenX = ((e.clientX - rect.left) / rect.width) * 1200;
-      const screenY = ((e.clientY - rect.top) / rect.height) * 600;
-
-      // Inverted pull back (slingshot aim)
-      const dx = dragStart.x - screenX;
-      const dy = screenY - dragStart.y;
-
-      const angle = Math.atan2(dy, dx);
-      const distance = Math.sqrt(dx * dx + dy * dy);
-      const power = Math.max(10, Math.min(100, Math.round(distance * 0.45)));
-
-      setAimAngle(angle);
-      setAimPower(power);
-      setIsAimCancelled(distance < 20);
-    } else if (dragMode === 'pan' && lastMousePos) {
-      const dx = e.clientX - lastMousePos.x;
-      const dy = e.clientY - lastMousePos.y;
-
-      const scaleX = 1200 / rect.width;
-      const scaleY = 600 / rect.height;
-
-      // Pan camera with dynamic world limits
-      const worldW = terrain.length || 1200;
-      const maxOffsetX = 600 * (1 - 1 / cameraZoom);
-      const minOffsetX = 600 * (1 + 1 / cameraZoom) - worldW;
-      const maxOffsetY = 300 * (1 - 1 / cameraZoom);
-      setCameraOffsetX(prev => Math.max(minOffsetX, Math.min(maxOffsetX, prev + (dx * scaleX) / cameraZoom)));
-      setCameraOffsetY(prev => Math.max(-maxOffsetY, Math.min(maxOffsetY, prev + (dy * scaleY) / cameraZoom)));
       setLastMousePos({ x: e.clientX, y: e.clientY });
     }
   };
@@ -1700,10 +1764,7 @@ export const BowmastersTable: React.FC<BowmastersTableProps> = ({
       {terrain.length > 0 && (
         <canvas
           ref={canvasRef}
-          onMouseDown={handleMouseDown}
-          onMouseMove={handleMouseMove}
-          onMouseUp={handleMouseUp}
-          onMouseLeave={handleMouseUp}
+          onPointerDown={handlePointerDown}
           onContextMenu={(e) => e.preventDefault()}
           onTouchStart={handleTouchStart}
           onTouchMove={handleTouchMove}

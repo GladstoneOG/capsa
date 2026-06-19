@@ -3441,23 +3441,121 @@ input:checked + .slider:before {
 
 /* ==================== Bowmasters Theme Variables ==================== */
 .theme-bowmasters {
-  --primary: #f39c12; /* orange */
-  --primary-hover: #d35400;
-  --primary-glow: rgba(243, 156, 18, 0.4);
-  --accent-gold: #e67e22;
-  --accent-gold-hover: #d35400;
+  --bg-gradient: radial-gradient(circle at top, #0284c7 0%, #166534 100%) !important;
+  background: var(--bg-gradient) !important;
+
+  --primary: #38bdf8 !important; /* light blue */
+  --primary-hover: #0ea5e9 !important;
+  --primary-glow: rgba(56, 189, 248, 0.4) !important;
+
+  --accent-gold: #22c55e !important; /* green */
+  --accent-gold-hover: #16a34a !important;
+  --accent-gold-glow: rgba(34, 197, 94, 0.3) !important;
+}
+
+.theme-bowmasters .glow-orb-1 {
+  background: radial-gradient(circle, rgba(56, 189, 248, 0.3) 0%, rgba(0,0,0,0) 70%) !important;
+}
+
+.theme-bowmasters .glow-orb-2 {
+  background: radial-gradient(circle, rgba(34, 197, 94, 0.3) 0%, rgba(0,0,0,0) 70%) !important;
+}
+
+.theme-bowmasters .btn-primary {
+  background: linear-gradient(135deg, var(--primary) 0%, #0284c7 100%) !important;
+  box-shadow: 0 4px 15px var(--primary-glow) !important;
+  color: #ffffff !important;
+}
+
+.theme-bowmasters .btn-primary:hover {
+  box-shadow: 0 6px 20px rgba(56, 189, 248, 0.6) !important;
+}
+
+.theme-bowmasters .btn-gold {
+  background: linear-gradient(135deg, var(--accent-gold) 0%, #15803d 100%) !important;
+  box-shadow: 0 4px 15px var(--accent-gold-glow) !important;
+  color: #ffffff !important;
+}
+
+.theme-bowmasters .btn-gold:hover {
+  box-shadow: 0 6px 20px rgba(34, 197, 94, 0.5) !important;
 }
 
 .mode-card.active-bowmasters {
-  border: 2px solid #e67e22 !important;
-  box-shadow: 0 0 16px rgba(230, 126, 34, 0.35), 0 8px 24px rgba(0, 0, 0, 0.45) !important;
+  border: 2px solid #38bdf8 !important;
+  box-shadow: 0 0 16px rgba(56, 189, 248, 0.35), 0 8px 24px rgba(0, 0, 0, 0.45) !important;
 }
 .mode-card.active-bowmasters .mode-card-icon {
-  text-shadow: 0 0 8px rgba(230, 126, 34, 0.6);
+  text-shadow: 0 0 8px rgba(56, 189, 248, 0.6);
   transform: scale(1.1);
 }
 .mode-card.active-bowmasters .mode-card-title {
-  color: #e67e22;
+  color: #38bdf8;
+}
+
+/* ==================== Sumo Theme Variables ==================== */
+.theme-sumo {
+  --bg-gradient: radial-gradient(circle at top, #4a2c11 0%, #221205 100%) !important;
+  background: var(--bg-gradient) !important;
+
+  --primary: #8b5a2b !important; /* dark brown */
+  --primary-hover: #5c3a21 !important;
+  --primary-glow: rgba(139, 90, 43, 0.4) !important;
+
+  --accent-gold: #ff7a00 !important;
+  --accent-gold-hover: #ff4b00 !important;
+  --accent-gold-glow: rgba(255, 122, 0, 0.3) !important;
+}
+
+.theme-sumo .glow-orb-1 {
+  background: radial-gradient(circle, rgba(139, 90, 43, 0.3) 0%, rgba(0,0,0,0) 70%) !important;
+}
+
+.theme-sumo .glow-orb-2 {
+  background: radial-gradient(circle, rgba(255, 122, 0, 0.2) 0%, rgba(0,0,0,0) 70%) !important;
+}
+
+.theme-sumo .btn-primary {
+  background: linear-gradient(135deg, var(--primary) 0%, #5c3a21 100%) !important;
+  box-shadow: 0 4px 15px var(--primary-glow) !important;
+  color: #ffffff !important;
+}
+
+.theme-sumo .btn-primary:hover {
+  box-shadow: 0 6px 20px rgba(139, 90, 43, 0.6) !important;
+}
+
+.theme-sumo .btn-gold {
+  background: linear-gradient(135deg, var(--accent-gold) 0%, #cc5f00 100%) !important;
+  box-shadow: 0 4px 15px var(--accent-gold-glow) !important;
+  color: #ffffff !important;
+}
+
+.theme-sumo .btn-gold:hover {
+  box-shadow: 0 6px 20px rgba(255, 122, 0, 0.5) !important;
+}
+
+.theme-sumo .lobby-code-badge {
+  background: rgba(255, 255, 255, 0.1) !important;
+  border: 1px solid rgba(139, 90, 43, 0.3) !important;
+  color: #f8fafc !important;
+}
+
+.theme-sumo .mode-card.active {
+  border-color: var(--primary) !important;
+  box-shadow: 0 0 15px var(--primary-glow) !important;
+}
+
+.mode-card.active-sumo {
+  border: 2px solid #ff7a00 !important;
+  box-shadow: 0 0 16px rgba(255, 122, 0, 0.35), 0 8px 24px rgba(0, 0, 0, 0.45) !important;
+}
+.mode-card.active-sumo .mode-card-icon {
+  text-shadow: 0 0 8px rgba(255, 122, 0, 0.6);
+  transform: scale(1.1);
+}
+.mode-card.active-sumo .mode-card-title {
+  color: #ff7a00;
 }
 
 

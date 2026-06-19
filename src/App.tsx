@@ -20,6 +20,10 @@ import { SNAKES, LADDERS } from './utils/snakesLaddersLogic';
 import { BowmastersTable } from './components/BowmastersTable';
 import { calculateBotShot } from './utils/bowmastersLogic';
 import './bowmasters.css';
+import { SumoTable } from './components/SumoTable';
+import { calculateSumoBotMove } from './utils/sumoLogic';
+import { getSumoSpawns } from './utils/sumoPhysics';
+import './sumo.css';
 
 type Screen = 'menu' | 'lobby' | 'table';
 
@@ -57,7 +61,11 @@ interface Player {
   maxHp?: number;
   positionX?: number;
   positionY?: number;
-  team?: 'a' | 'b';
+  velocityX?: number;
+  velocityY?: number;
+  radius?: number;
+  mass?: number;
+  team?: string;
   alive?: boolean;
 }
 
@@ -86,6 +94,8 @@ interface RoomRules {
   rollSixBonus?: boolean;
   mode?: '1v1' | '2v2';
   windEnabled?: boolean;
+  bumpersCount?: number;
+  shrinkingArena?: boolean;
 }
 
 const INDONESIAN_NAMES = ['Aris', 'Budi', 'Candra', 'Dewi', 'Eko', 'Fitri', 'Giri', 'Hadi', 'Indra', 'Joko', 'Kartika', 'Laras', 'Mega', 'Nugroho', 'Putri', 'Rian', 'Siti', 'Taufik', 'Utami', 'Wulan'];
@@ -226,7 +236,7 @@ export default function App() {
     startingCash: 1500,
     turnLimit: 0,
   });
-  const [gameType, setGameType] = useState<'capsa' | 'uno' | 'monopoly' | 'snakes_ladders' | 'bowmasters'>('capsa');
+  const [gameType, setGameType] = useState<'capsa' | 'uno' | 'monopoly' | 'snakes_ladders' | 'bowmasters' | 'sumo'>('capsa');
   const [unoCurrentColor, setUnoCurrentColor] = useState<string>('red');
   const [unoCurrentValue, setUnoCurrentValue] = useState<string>('0');
   const [unoPlayDirection, setUnoPlayDirection] = useState<number>(1);
@@ -272,6 +282,14 @@ export default function App() {
   const [bowmastersTurnIdx, setBowmastersTurnIdx] = useState<number>(0);
   const [bowmastersLastShot, setBowmastersLastShot] = useState<any | null>(null);
 
+  // Sumo States
+  const [sumoPhase, setSumoPhase] = useState<string>('aiming');
+  const [sumoArenaRadius, setSumoArenaRadius] = useState<number>(300);
+  const [sumoBumpers, setSumoBumpers] = useState<any[]>([]);
+  const [sumoMoves, setSumoMoves] = useState<Record<string, { angle: number; power: number }>>({});
+  const [sumoTurnTimer, setSumoTurnTimer] = useState<number>(10);
+  const [sumoRoundCount, setSumoRoundCount] = useState<number>(0);
+
   // Developer Console State
   const [showDevConsole, setShowDevConsole] = useState<boolean>(false);
   const [devConsoleCommand, setDevConsoleCommand] = useState<string>('');
@@ -308,6 +326,8 @@ export default function App() {
   // Refs
   const socketRef = useRef<Socket | null>(null);
   const botTimerRef = useRef<any>(null);
+  const sumoTimerRef = useRef<any>(null);
+  const queuedSumoMoveRef = useRef<{ angle: number; power: number } | null>(null);
   const hasConnectedRef = useRef<boolean>(false);
   const roomCodeRef = useRef<string>(roomCode);
   const screenRef = useRef<Screen>(screen);
@@ -758,6 +778,14 @@ export default function App() {
       setBowmastersTurnIdx(room.bowmastersTurnIdx || 0);
       setBowmastersLastShot(room.bowmastersLastShot || null);
     }
+    if (room.gameType === 'sumo') {
+      setSumoPhase(room.sumoPhase || 'aiming');
+      setSumoArenaRadius(room.sumoArenaRadius || 300);
+      setSumoBumpers(room.sumoBumpers || []);
+      setSumoMoves(room.sumoMoves || {});
+      setSumoTurnTimer(room.sumoTurnTimer !== undefined ? room.sumoTurnTimer : 10);
+      setSumoRoundCount(room.sumoRoundCount || 0);
+    }
     if (nextScreen) {
       setScreen(nextScreen);
     }
@@ -934,6 +962,14 @@ export default function App() {
         setBowmastersTurnIdx(room.bowmastersTurnIdx || 0);
         setBowmastersLastShot(room.bowmastersLastShot || null);
       }
+      if (room.gameType === 'sumo') {
+        setSumoPhase(room.sumoPhase || 'aiming');
+        setSumoArenaRadius(room.sumoArenaRadius || 300);
+        setSumoBumpers(room.sumoBumpers || []);
+        setSumoMoves(room.sumoMoves || {});
+        setSumoTurnTimer(room.sumoTurnTimer !== undefined ? room.sumoTurnTimer : 10);
+        setSumoRoundCount(room.sumoRoundCount || 0);
+      }
       setScreen('table');
     });
 
@@ -983,6 +1019,14 @@ export default function App() {
         setBowmastersTurnIdx(room.bowmastersTurnIdx || 0);
         setBowmastersLastShot(room.bowmastersLastShot || null);
       }
+      if (room.gameType === 'sumo') {
+        setSumoPhase(room.sumoPhase || 'aiming');
+        setSumoArenaRadius(room.sumoArenaRadius || 300);
+        setSumoBumpers(room.sumoBumpers || []);
+        setSumoMoves(room.sumoMoves || {});
+        setSumoTurnTimer(room.sumoTurnTimer !== undefined ? room.sumoTurnTimer : 10);
+        setSumoRoundCount(room.sumoRoundCount || 0);
+      }
     });
 
     socket.on('round-over', (room) => {
@@ -1027,6 +1071,14 @@ export default function App() {
         setBowmastersTurnOrder(room.bowmastersTurnOrder || []);
         setBowmastersTurnIdx(room.bowmastersTurnIdx || 0);
         setBowmastersLastShot(room.bowmastersLastShot || null);
+      }
+      if (room.gameType === 'sumo') {
+        setSumoPhase(room.sumoPhase || 'aiming');
+        setSumoArenaRadius(room.sumoArenaRadius || 300);
+        setSumoBumpers(room.sumoBumpers || []);
+        setSumoMoves(room.sumoMoves || {});
+        setSumoTurnTimer(room.sumoTurnTimer !== undefined ? room.sumoTurnTimer : 10);
+        setSumoRoundCount(room.sumoRoundCount || 0);
       }
     });
 
@@ -1201,12 +1253,54 @@ export default function App() {
       console.log('[BOT COORD] Exiting: game state is not playing:', rGameSt);
       return;
     }
-
     // Only host client coordinates bot logic for multiplayer
     const localPlayer = (stateRef.current.players || []).find((p: any) => p.id === socketId || p.id === socketRef.current?.id);
     const isHost = localPlayer?.isHost;
     console.log('[BOT COORD] localPlayer:', localPlayer?.name, 'isHost:', isHost, 'socketId:', socketId, 'socketRef ID:', socketRef.current?.id);
     if (!isHost) return;
+
+    if (roomState.gameType === 'sumo') {
+      if (roomState.sumoPhase === 'aiming') {
+        rPlayers.forEach((p: any) => {
+          if (p.isBot && p.alive && !roomState.sumoMoves[p.id]) {
+            const sumoChars = rPlayers.map((pl: any) => ({
+              id: pl.id,
+              name: pl.name,
+              pos: { x: pl.positionX || 400, y: pl.positionY || 400 },
+              vel: { x: pl.velocityX || 0, y: pl.velocityY || 0 },
+              radius: pl.radius || 18,
+              mass: pl.mass || 1,
+              alive: pl.alive !== false,
+              isBot: pl.isBot || false,
+              avatar: pl.avatar,
+              team: pl.team
+            }));
+            const botChar = sumoChars.find((c: any) => c.id === p.id);
+            const bumpers = (roomState.sumoBumpers || []).map((b: any) => ({
+              pos: { ...b.pos },
+              radius: b.radius,
+              restitution: b.restitution,
+              pulseTimer: b.pulseTimer
+            }));
+            if (botChar) {
+              const move = calculateSumoBotMove(
+                botChar,
+                sumoChars,
+                bumpers,
+                roomState.sumoArenaRadius,
+                'medium'
+              );
+              socketRef.current?.emit('sumo-action', {
+                roomCode: roomState.code,
+                action: 'submit-move',
+                payload: { playerId: p.id, angle: move.angle, power: move.power, locked: true }
+              });
+            }
+          }
+        });
+      }
+      return;
+    }
 
     // Determine who needs to make a decision right now
     let targetBotId = null;
@@ -4427,6 +4521,101 @@ export default function App() {
     }, 1500);
   };
 
+  const startSinglePlayerSumoGame = () => {
+    sfx.playDeal();
+    setSumoPhase('aiming');
+    setSumoArenaRadius(300);
+    setSumoMoves({});
+    setSumoRoundCount(0);
+    queuedSumoMoveRef.current = null;
+
+    const requiredPlayers = 4;
+    const currentPlayers = [players.find(p => p.id === 'local_user') || {
+      id: 'local_user',
+      name: playerName || 'Host',
+      avatar: avatar || getRandomAvatar(),
+      isHost: true,
+      isBot: false,
+      cards: [],
+      passed: false,
+      score: 0,
+      lastPlay: null,
+      isReady: true,
+    }];
+
+    const botAvatars = [
+      { skinColor: '#FFDBAC', hairStyle: 'spiky', hairColor: '#1A1A1A', expression: 'cool', clothesColor: '#2F855A' },
+      { skinColor: '#F1C27D', hairStyle: 'bob', hairColor: '#E5C158', expression: 'smile', clothesColor: '#6B46C1' },
+      { skinColor: '#E0AC69', hairStyle: 'short', hairColor: '#B83B1D', expression: 'excited', clothesColor: '#C53030' },
+      { skinColor: '#F1C27D', hairStyle: 'dreads', hairColor: '#4A5568', expression: 'wink', clothesColor: '#3182CE' }
+    ] as AvatarConfig[];
+
+    while (currentPlayers.length < requiredPlayers) {
+      const existingNames = currentPlayers.map(p => p.name);
+      const unusedNames = BOT_NAMES.filter(n => !existingNames.includes(n));
+      const botName = unusedNames.length > 0 
+        ? unusedNames[Math.floor(Math.random() * unusedNames.length)] 
+        : `Bot ${currentPlayers.length + 1}`;
+      const botAvatar = botAvatars[currentPlayers.length % botAvatars.length];
+      
+      currentPlayers.push({
+        id: `bot_${Math.random().toString(36).substr(2, 9)}`,
+        name: botName,
+        avatar: botAvatar,
+        isHost: false,
+        isReady: true,
+        isBot: true,
+        cards: [],
+        passed: false,
+        score: 0,
+        lastPlay: null,
+      });
+    }
+
+    const centerX = 400;
+    const centerY = 400;
+    const spawnRadius = 180;
+    const spawns = getSumoSpawns(requiredPlayers, centerX, centerY, spawnRadius);
+
+    const updatedPlayers = currentPlayers.map((p, idx) => ({
+      ...p,
+      positionX: spawns[idx].x,
+      positionY: spawns[idx].y,
+      velocityX: 0,
+      velocityY: 0,
+      radius: 18,
+      mass: 1,
+      alive: true,
+      team: p.id
+    }));
+
+    const bumpersCount = rules.bumpersCount ?? 2;
+    const bumpers = [];
+    for (let i = 0; i < bumpersCount; i++) {
+      const angle = (i * (2 * Math.PI / bumpersCount)) + 0.3;
+      const dist = 120;
+      bumpers.push({
+        pos: {
+          x: centerX + Math.cos(angle) * dist,
+          y: centerY + Math.sin(angle) * dist
+        },
+        radius: 20,
+        restitution: 1.6,
+        pulseTimer: 0
+      });
+    }
+    setSumoBumpers(bumpers);
+
+    setPlayers(updatedPlayers);
+    setScreen('table');
+    setGameState('playing');
+
+    setSumoTurnTimer(10);
+    setTimeout(() => {
+      startSinglePlayerSumoTimer();
+    }, 100);
+  };
+
   const startSinglePlayerBowmastersGame = () => {
     sfx.playDeal();
     setBowmastersPhase('character_select');
@@ -4718,11 +4907,222 @@ export default function App() {
     });
   };
 
+  const startSinglePlayerSumoTimer = () => {
+    if (sumoTimerRef.current) clearInterval(sumoTimerRef.current);
+    
+    setSumoTurnTimer(10);
+    queuedSumoMoveRef.current = null;
+    
+    sumoTimerRef.current = setInterval(() => {
+      setSumoTurnTimer(prev => {
+        if (prev <= 1) {
+          clearInterval(sumoTimerRef.current);
+          sumoTimerRef.current = null;
+          executeSinglePlayerSumoTurn();
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  };
+
+  const executeSinglePlayerSumoTurn = (playerMove?: { angle: number, power: number, locked?: boolean }) => {
+    if (sumoTimerRef.current) {
+      clearInterval(sumoTimerRef.current);
+      sumoTimerRef.current = null;
+    }
+
+    setSumoPhase('animating');
+
+    // Compute moves for all bots and local user
+    setPlayers(currentPlayers => {
+      const moves: Record<string, { angle: number, power: number, locked?: boolean }> = {};
+      
+      const fallbackMove = queuedSumoMoveRef.current || { angle: 0, power: 0 };
+      moves['local_user'] = playerMove || { ...fallbackMove, locked: true };
+
+      currentPlayers.forEach(p => {
+        if (p.isBot && p.alive) {
+          const sumoChars = currentPlayers.map(pl => ({
+            id: pl.id,
+            name: pl.name,
+            pos: { x: pl.positionX || 400, y: pl.positionY || 400 },
+            vel: { x: pl.velocityX || 0, y: pl.velocityY || 0 },
+            radius: pl.radius || 18,
+            mass: pl.mass || 1,
+            alive: pl.alive !== false,
+            isBot: pl.isBot || false,
+            avatar: pl.avatar,
+            team: pl.team
+          }));
+
+          const botChar = sumoChars.find(c => c.id === p.id);
+          const bumpers = sumoBumpers.map(b => ({
+            pos: { ...b.pos },
+            radius: b.radius,
+            restitution: b.restitution,
+            pulseTimer: b.pulseTimer
+          }));
+
+          if (botChar) {
+            const move = calculateSumoBotMove(
+              botChar,
+              sumoChars,
+              bumpers,
+              sumoArenaRadius,
+              'medium'
+            );
+            moves[p.id] = { ...move, locked: true };
+          }
+        }
+      });
+
+      setSumoMoves(moves);
+      return currentPlayers;
+    });
+  };
+
+  const handleSumoActionSingle = (action: string, payload: any) => {
+    if (action === 'submit-move') {
+      const { angle, power, locked } = payload;
+      
+      // Store locally in Ref for synchronous retrieval during execution
+      queuedSumoMoveRef.current = { angle, power };
+
+      // Update state for table rendering
+      setSumoMoves(prev => ({
+        ...prev,
+        'local_user': { angle, power, locked }
+      }));
+
+      // Only execute immediately if explicitly locked-in
+      if (locked) {
+        executeSinglePlayerSumoTurn({ angle, power, locked: true });
+      }
+    }
+
+    else if (action === 'resolve-turn') {
+      const { playerStates, eliminations = [] } = payload;
+      
+      setPlayers(prev => {
+        const next = prev.map(p => {
+          const state = playerStates.find((s: any) => s.id === p.id);
+          if (state) {
+            return {
+              ...p,
+              positionX: state.x,
+              positionY: state.y,
+              velocityX: state.vx,
+              velocityY: state.vy,
+              alive: state.alive
+            };
+          }
+          return p;
+        });
+
+        const nextRadius = rules.shrinkingArena !== false ? Math.max(100, sumoArenaRadius - 15) : sumoArenaRadius;
+        setSumoArenaRadius(nextRadius);
+        setSumoRoundCount(prev => prev + 1);
+        setSumoMoves({});
+        queuedSumoMoveRef.current = null;
+
+        if (eliminations.length > 0) {
+          eliminations.forEach((elimId: string) => {
+            const el = next.find(pl => pl.id === elimId);
+            if (el) {
+              setChatMessages(m => [
+                ...m,
+                {
+                  id: `sys_${Math.random()}`,
+                  senderName: 'System',
+                  senderId: 'system',
+                  text: `💥 ${el.name} fell off the arena!`,
+                  timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                  system: true
+                }
+              ]);
+            }
+          });
+        }
+
+        if (rules.shrinkingArena !== false) {
+          setChatMessages(m => [
+            ...m,
+            {
+              id: `sys_${Math.random()}`,
+              senderName: 'System',
+              senderId: 'system',
+              text: `⚠️ The arena is shrinking! Radius: ${nextRadius}px`,
+              timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+              system: true
+            }
+          ]);
+        }
+
+        const alivePlayers = next.filter(p => p.alive);
+        if (alivePlayers.length <= 1) {
+          setGameState('gameover');
+          setSumoPhase('gameover');
+
+          if (alivePlayers.length === 1) {
+            const winner = alivePlayers[0];
+            setChatMessages(m => [
+              ...m,
+              {
+                id: `sys_${Math.random()}`,
+                senderName: 'System',
+                senderId: 'system',
+                text: `👑 ${winner.name} wins the match!`,
+                timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                system: true
+              }
+            ]);
+          } else {
+            setChatMessages(m => [
+              ...m,
+              {
+                id: `sys_${Math.random()}`,
+                senderName: 'System',
+                senderId: 'system',
+                text: "🤝 It's a draw! Everyone fell off.",
+                timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                system: true
+              }
+            ]);
+          }
+        } else {
+          setSumoPhase('aiming');
+          setTimeout(() => {
+            startSinglePlayerSumoTimer();
+          }, 100);
+        }
+
+        return next;
+      });
+    }
+  };
+
+  const handleSumoActionMultiplayer = (action: string, payload: any) => {
+    socketRef.current?.emit('sumo-action', {
+      roomCode,
+      action,
+      payload
+    });
+  };
+
+  const restartSinglePlayerSumoGameRound = () => {
+    startSinglePlayerSumoGame();
+  };
+
   const restartSinglePlayerBowmastersGameRound = () => {
     startSinglePlayerBowmastersGame();
   };
 
   const startSinglePlayerGame = () => {
+    if (gameType === 'sumo') {
+      startSinglePlayerSumoGame();
+      return;
+    }
     if (gameType === 'bowmasters') {
       startSinglePlayerBowmastersGame();
       return;
@@ -5475,6 +5875,10 @@ export default function App() {
 
   const leaveRoom = () => {
     if (botTimerRef.current) clearTimeout(botTimerRef.current);
+    if (sumoTimerRef.current) {
+      clearInterval(sumoTimerRef.current);
+      sumoTimerRef.current = null;
+    }
     if (socketRef.current) {
       socketRef.current.disconnect();
       socketRef.current = null;
@@ -5878,6 +6282,177 @@ export default function App() {
                     Sarang Judi
                   </h1>
                 </div>
+              ) : gameType === 'bowmasters' ? (
+                <div className="bowmasters-title-wrapper" style={{
+                  display: 'inline-block',
+                  position: 'relative',
+                  padding: '1.25rem 3.5rem',
+                  margin: '0 auto 0.75rem',
+                }}>
+                  {/* Backdrop Grass/Sky Plate */}
+                  <div style={{
+                    position: 'absolute',
+                    top: '50%',
+                    left: '50%',
+                    transform: 'translate(-50%, -50%)',
+                    width: '100%',
+                    height: '100%',
+                    background: 'linear-gradient(135deg, #e0f2fe 0%, #dcfce7 100%)',
+                    border: '3px solid #22c55e',
+                    borderRadius: '16px',
+                    boxShadow: '0 6px 20px rgba(34, 197, 94, 0.35), inset 0 0 10px rgba(255,255,255,0.6)',
+                    zIndex: 2,
+                    pointerEvents: 'none'
+                  }} />
+
+                  {/* Archery target peaking from left */}
+                  <div style={{
+                    position: 'absolute',
+                    left: '-2.2rem',
+                    top: '50%',
+                    transform: 'translateY(-50%) rotate(-10deg)',
+                    zIndex: 3,
+                    width: '45px',
+                    height: '45px',
+                    borderRadius: '50%',
+                    background: 'repeating-radial-gradient(circle, #facc15 0px, #facc15 5px, #ef4444 5px, #ef4444 10px, #3b82f6 10px, #3b82f6 15px, #000000 15px, #000000 20px, #ffffff 20px, #ffffff 25px)',
+                    border: '2px solid #1e293b',
+                    boxShadow: '0 4px 10px rgba(0,0,0,0.3)',
+                    pointerEvents: 'none'
+                  }}>
+                    {/* Tiny arrow sticking in target */}
+                    <div style={{
+                      position: 'absolute',
+                      top: '10px',
+                      left: '20px',
+                      width: '25px',
+                      height: '3px',
+                      background: '#94a3b8',
+                      transform: 'rotate(-45deg)',
+                      transformOrigin: 'left center'
+                    }} />
+                    <div style={{
+                      position: 'absolute',
+                      top: '3px',
+                      left: '35px',
+                      fontSize: '8px',
+                      color: '#ef4444',
+                      transform: 'rotate(-45deg)'
+                    }}>🪶</div>
+                  </div>
+
+                  {/* Bow & Arrow peaking from right */}
+                  <div style={{
+                    position: 'absolute',
+                    right: '-2.2rem',
+                    top: '50%',
+                    transform: 'translateY(-50%) rotate(15deg)',
+                    zIndex: 3,
+                    fontSize: '2.5rem',
+                    pointerEvents: 'none'
+                  }}>🏹</div>
+
+                  {/* Archery Themed Gradient Title Text */}
+                  <h1 className="menu-title-bowmasters" style={{
+                    position: 'relative',
+                    zIndex: 4,
+                    fontFamily: "'Outfit', sans-serif",
+                    fontSize: '2.6rem',
+                    fontWeight: 900,
+                    textTransform: 'uppercase',
+                    textAlign: 'center',
+                    margin: 0,
+                    lineHeight: 1,
+                    letterSpacing: '1px',
+                    background: 'linear-gradient(to bottom, #0284c7 0%, #16a34a 100%)',
+                    WebkitBackgroundClip: 'text',
+                    WebkitTextFillColor: 'transparent',
+                    textShadow: '0 2px 4px rgba(0,0,0,0.15)',
+                  }}>
+                    Sarang Judi
+                  </h1>
+                </div>
+              ) : gameType === 'sumo' ? (
+                <div className="sumo-title-wrapper" style={{
+                  display: 'inline-block',
+                  position: 'relative',
+                  padding: '1.25rem 3.5rem',
+                  margin: '0 auto 0.75rem',
+                }}>
+                  {/* Dojo Wooden Sign / Scroll Plate */}
+                  <div style={{
+                    position: 'absolute',
+                    top: '50%',
+                    left: '50%',
+                    transform: 'translate(-50%, -50%)',
+                    width: '100%',
+                    height: '100%',
+                    background: 'linear-gradient(135deg, #3e2723 0%, #1a0c00 100%)',
+                    border: '3px solid #d84315',
+                    borderRadius: '8px',
+                    boxShadow: '0 6px 20px rgba(0,0,0,0.6), inset 0 0 10px rgba(255,255,255,0.1)',
+                    zIndex: 2,
+                    pointerEvents: 'none'
+                  }} />
+
+                  {/* Red Enso / Rising Sun behind title */}
+                  <div style={{
+                    position: 'absolute',
+                    left: '50%',
+                    top: '50%',
+                    transform: 'translate(-50%, -50%)',
+                    width: '75px',
+                    height: '75px',
+                    borderRadius: '50%',
+                    background: 'radial-gradient(circle, rgba(239, 68, 68, 0.45) 0%, rgba(239, 68, 68, 0) 70%)',
+                    zIndex: 3,
+                    pointerEvents: 'none'
+                  }} />
+
+                  {/* Yin-Yang symbol peaking from left */}
+                  <div style={{
+                    position: 'absolute',
+                    left: '-2.2rem',
+                    top: '50%',
+                    transform: 'translateY(-50%) rotate(-15deg)',
+                    zIndex: 3,
+                    fontSize: '2.2rem',
+                    pointerEvents: 'none',
+                    filter: 'drop-shadow(0 4px 6px rgba(0,0,0,0.5))'
+                  }}>☯️</div>
+
+                  {/* Cherry Blossom peaking from right */}
+                  <div style={{
+                    position: 'absolute',
+                    right: '-2.2rem',
+                    top: '50%',
+                    transform: 'translateY(-50%) rotate(15deg)',
+                    zIndex: 3,
+                    fontSize: '2.2rem',
+                    pointerEvents: 'none',
+                    filter: 'drop-shadow(0 4px 6px rgba(0,0,0,0.5))'
+                  }}>🌸</div>
+
+                  {/* Martial Arts Brush Calligraphy Styled Title Text */}
+                  <h1 className="menu-title-sumo" style={{
+                    position: 'relative',
+                    zIndex: 4,
+                    fontFamily: "'Outfit', sans-serif",
+                    fontSize: '2.6rem',
+                    fontWeight: 900,
+                    textTransform: 'uppercase',
+                    textAlign: 'center',
+                    margin: 0,
+                    lineHeight: 1,
+                    letterSpacing: '2px',
+                    background: 'linear-gradient(to bottom, #ffffff 0%, #f5f5f5 50%, #d84315 100%)',
+                    WebkitBackgroundClip: 'text',
+                    WebkitTextFillColor: 'transparent',
+                    textShadow: '0 2px 4px rgba(0,0,0,0.6)',
+                  }}>
+                    Sarang Judi
+                  </h1>
+                </div>
               ) : (
                 <h1 className="menu-title" style={{ transition: 'all 0.3s' }}>
                   Sarang Judi
@@ -5944,8 +6519,26 @@ export default function App() {
                 }}
               >
                 <div className="mode-card-icon">🏹</div>
-                <div className="mode-card-title">Bowmasters PvP</div>
+                <div className="mode-card-title">Bowmasters</div>
                 <div className="mode-card-desc">Drag to aim, adjust for wind, and battle in 2D physics combat!</div>
+              </div>
+
+              <div
+                className={`mode-card ${gameType === 'sumo' ? 'active active-sumo' : ''}`}
+                onClick={() => {
+                  setGameType('sumo');
+                  setRules(prev => ({ 
+                    ...prev, 
+                    turnDuration: 10, 
+                    arenaRadius: 300, 
+                    shrinkingArena: true,
+                    bumpersCount: 2 
+                  }));
+                }}
+              >
+                <div className="mode-card-icon">🤼</div>
+                <div className="mode-card-title">Turn Sumo</div>
+                <div className="mode-card-desc">Push opponents off a circular shrinking arena in simultaneous action!</div>
               </div>
             </div>
 
@@ -6674,6 +7267,27 @@ export default function App() {
           onBowmastersAction={isSinglePlayer ? handleBowmastersActionSingle : handleBowmastersActionMultiplayer}
           onLeaveRoom={leaveRoom}
           onRestartGame={isSinglePlayer ? restartSinglePlayerBowmastersGameRound : restartOnlineGame}
+        />
+      )}
+
+      {screen === 'table' && gameType === 'sumo' && (
+        <SumoTable
+          playerId={isSinglePlayer ? 'local_user' : socketId}
+          players={players}
+          roomCode={roomCode}
+          isHost={players.find(pl => isSinglePlayer ? pl.id === 'local_user' : pl.id === socketId)?.isHost || false}
+          isSinglePlayer={isSinglePlayer}
+          rules={rules}
+          gameState={gameState}
+          sumoPhase={sumoPhase}
+          sumoArenaRadius={sumoArenaRadius}
+          sumoBumpers={sumoBumpers}
+          sumoMoves={sumoMoves}
+          sumoTurnTimer={sumoTurnTimer}
+          sumoRoundCount={sumoRoundCount}
+          onSumoAction={isSinglePlayer ? handleSumoActionSingle : handleSumoActionMultiplayer}
+          onLeaveRoom={leaveRoom}
+          onRestartGame={isSinglePlayer ? restartSinglePlayerSumoGameRound : restartOnlineGame}
         />
       )}
 
