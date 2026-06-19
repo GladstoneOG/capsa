@@ -286,6 +286,7 @@ export default function App() {
   const [sumoPhase, setSumoPhase] = useState<string>('aiming');
   const [sumoArenaRadius, setSumoArenaRadius] = useState<number>(300);
   const [sumoBumpers, setSumoBumpers] = useState<any[]>([]);
+  const [sumoObstacles, setSumoObstacles] = useState<any[]>([]);
   const [sumoMoves, setSumoMoves] = useState<Record<string, { angle: number; power: number }>>({});
   const [sumoTurnTimer, setSumoTurnTimer] = useState<number>(10);
   const [sumoRoundCount, setSumoRoundCount] = useState<number>(0);
@@ -782,6 +783,7 @@ export default function App() {
       setSumoPhase(room.sumoPhase || 'aiming');
       setSumoArenaRadius(room.sumoArenaRadius || 300);
       setSumoBumpers(room.sumoBumpers || []);
+      setSumoObstacles(room.sumoObstacles || []);
       setSumoMoves(room.sumoMoves || {});
       setSumoTurnTimer(room.sumoTurnTimer !== undefined ? room.sumoTurnTimer : 10);
       setSumoRoundCount(room.sumoRoundCount || 0);
@@ -966,6 +968,7 @@ export default function App() {
         setSumoPhase(room.sumoPhase || 'aiming');
         setSumoArenaRadius(room.sumoArenaRadius || 300);
         setSumoBumpers(room.sumoBumpers || []);
+        setSumoObstacles(room.sumoObstacles || []);
         setSumoMoves(room.sumoMoves || {});
         setSumoTurnTimer(room.sumoTurnTimer !== undefined ? room.sumoTurnTimer : 10);
         setSumoRoundCount(room.sumoRoundCount || 0);
@@ -1023,6 +1026,7 @@ export default function App() {
         setSumoPhase(room.sumoPhase || 'aiming');
         setSumoArenaRadius(room.sumoArenaRadius || 300);
         setSumoBumpers(room.sumoBumpers || []);
+        setSumoObstacles(room.sumoObstacles || []);
         setSumoMoves(room.sumoMoves || {});
         setSumoTurnTimer(room.sumoTurnTimer !== undefined ? room.sumoTurnTimer : 10);
         setSumoRoundCount(room.sumoRoundCount || 0);
@@ -1076,6 +1080,7 @@ export default function App() {
         setSumoPhase(room.sumoPhase || 'aiming');
         setSumoArenaRadius(room.sumoArenaRadius || 300);
         setSumoBumpers(room.sumoBumpers || []);
+        setSumoObstacles(room.sumoObstacles || []);
         setSumoMoves(room.sumoMoves || {});
         setSumoTurnTimer(room.sumoTurnTimer !== undefined ? room.sumoTurnTimer : 10);
         setSumoRoundCount(room.sumoRoundCount || 0);
@@ -4521,6 +4526,29 @@ export default function App() {
     }, 1500);
   };
 
+  const generateLocalSumoObstacles = () => {
+    const count = 2 + Math.floor(Math.random() * 3); // 2 to 4 obstacles
+    const obstacles = [];
+    const centerX = 400;
+    const centerY = 400;
+    for (let i = 0; i < count; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const dist = 60 + Math.random() * 140;
+      const type = Math.random() < 0.5 ? 'speed_boost' : 'slime';
+      const obstacleAngle = Math.random() * Math.PI * 2;
+      obstacles.push({
+        pos: {
+          x: centerX + Math.cos(angle) * dist,
+          y: centerY + Math.sin(angle) * dist
+        },
+        type,
+        radius: 26 + Math.random() * 8, // influence radius
+        angle: obstacleAngle
+      });
+    }
+    return obstacles;
+  };
+
   const startSinglePlayerSumoGame = () => {
     sfx.playDeal();
     setSumoPhase('aiming');
@@ -4542,6 +4570,14 @@ export default function App() {
       lastPlay: null,
       isReady: true,
     }];
+
+    // Reuse existing bots if they are already in the players list
+    const existingBots = players.filter(p => p.isBot);
+    existingBots.forEach(bot => {
+      if (currentPlayers.length < requiredPlayers && !currentPlayers.some(p => p.id === bot.id)) {
+        currentPlayers.push(bot);
+      }
+    });
 
     const botAvatars = [
       { skinColor: '#FFDBAC', hairStyle: 'spiky', hairColor: '#1A1A1A', expression: 'cool', clothesColor: '#2F855A' },
@@ -4576,6 +4612,7 @@ export default function App() {
     const centerY = 400;
     const spawnRadius = 180;
     const spawns = getSumoSpawns(requiredPlayers, centerX, centerY, spawnRadius);
+    const sumoColors = ['#C53030', '#3182CE', '#2F855A', '#D69E2E', '#6B46C1', '#ED8936', '#38B2AC', '#E2E8F0'];
 
     const updatedPlayers = currentPlayers.map((p, idx) => ({
       ...p,
@@ -4586,25 +4623,56 @@ export default function App() {
       radius: 18,
       mass: 1,
       alive: true,
-      team: p.id
+      team: p.id,
+      avatar: {
+        ...(p.avatar || getRandomAvatar()),
+        clothesColor: sumoColors[idx % sumoColors.length]
+      }
     }));
 
     const bumpersCount = rules.bumpersCount ?? 2;
     const bumpers = [];
+    const startAngle = Math.random() * Math.PI * 2;
+    const shapes = ['circle', 'triangle', 'square', 'line'];
+
     for (let i = 0; i < bumpersCount; i++) {
-      const angle = (i * (2 * Math.PI / bumpersCount)) + 0.3;
-      const dist = 120;
+      const angle = startAngle + (i * (2 * Math.PI / bumpersCount)) + (Math.random() * 0.4 - 0.2);
+      const dist = 100 + Math.random() * 60;
+      
+      const type = shapes[Math.floor(Math.random() * shapes.length)] as 'circle' | 'triangle' | 'square' | 'line';
+      const shapeAngle = Math.random() * Math.PI * 2;
+      
+      let size = 20;
+      let radius = 20;
+      if (type === 'square') {
+        size = 30 + Math.random() * 10;
+        radius = size * 0.707;
+      } else if (type === 'triangle') {
+        size = 25 + Math.random() * 10;
+        radius = size;
+      } else if (type === 'line') {
+        size = 50 + Math.random() * 20;
+        radius = size / 2;
+      } else { // circle
+        size = 18 + Math.random() * 8;
+        radius = size;
+      }
+
       bumpers.push({
         pos: {
           x: centerX + Math.cos(angle) * dist,
           y: centerY + Math.sin(angle) * dist
         },
-        radius: 20,
+        type,
+        size,
+        angle: shapeAngle,
+        radius,
         restitution: 1.6,
         pulseTimer: 0
       });
     }
     setSumoBumpers(bumpers);
+    setSumoObstacles(generateLocalSumoObstacles());
 
     setPlayers(updatedPlayers);
     setScreen('table');
@@ -5060,12 +5128,21 @@ export default function App() {
         }
 
         const alivePlayers = next.filter(p => p.alive);
+        let finalPlayers = next;
+
         if (alivePlayers.length <= 1) {
-          setGameState('gameover');
+          setGameState('roundover');
           setSumoPhase('gameover');
 
           if (alivePlayers.length === 1) {
             const winner = alivePlayers[0];
+            finalPlayers = next.map(p => {
+              if (p.id === winner.id) {
+                return { ...p, score: (p.score || 0) + 1 };
+              }
+              return p;
+            });
+
             setChatMessages(m => [
               ...m,
               {
@@ -5092,12 +5169,13 @@ export default function App() {
           }
         } else {
           setSumoPhase('aiming');
+          setSumoObstacles(generateLocalSumoObstacles());
           setTimeout(() => {
             startSinglePlayerSumoTimer();
           }, 100);
         }
 
-        return next;
+        return finalPlayers;
       });
     }
   };
@@ -7282,6 +7360,7 @@ export default function App() {
           sumoPhase={sumoPhase}
           sumoArenaRadius={sumoArenaRadius}
           sumoBumpers={sumoBumpers}
+          sumoObstacles={sumoObstacles}
           sumoMoves={sumoMoves}
           sumoTurnTimer={sumoTurnTimer}
           sumoRoundCount={sumoRoundCount}

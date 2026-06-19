@@ -27,6 +27,16 @@ export interface SumoBumper {
   radius: number;
   restitution: number;
   pulseTimer: number; // for bounce visual feedback
+  type?: 'circle' | 'triangle' | 'square' | 'line';
+  size?: number;
+  angle?: number;
+}
+
+export interface SumoObstacle {
+  pos: Vec2;
+  radius: number;
+  type: 'speed_boost' | 'slime';
+  angle: number;
 }
 
 export interface SumoPhysicsResult {
@@ -49,6 +59,16 @@ export function getSumoSpawns(numPlayers: number, centerX = 400, centerY = 400, 
   return spawns;
 }
 
+function closestPointOnSegment(pt: Vec2, p1: Vec2, p2: Vec2): Vec2 {
+  const ab = { x: p2.x - p1.x, y: p2.y - p1.y };
+  const ap = { x: pt.x - p1.x, y: pt.y - p1.y };
+  const abLenSq = ab.x * ab.x + ab.y * ab.y;
+  if (abLenSq < 0.001) return { ...p1 };
+  let t = (ap.x * ab.x + ap.y * ab.y) / abLenSq;
+  t = Math.max(0, Math.min(1, t));
+  return { x: p1.x + t * ab.x, y: p1.y + t * ab.y };
+}
+
 // Perform a single step of the physics simulation (deterministic update)
 export function simulatePhysicsStep(
   characters: SumoCharacter[],
@@ -56,7 +76,8 @@ export function simulatePhysicsStep(
   arenaRadius: number,
   friction = 0.04,
   centerX = 400,
-  centerY = 400
+  centerY = 400,
+  obstacles: SumoObstacle[] = []
 ): SumoPhysicsResult {
   const result: SumoPhysicsResult = {
     collisions: [],
@@ -167,34 +188,190 @@ export function simulatePhysicsStep(
       const dx = char.pos.x - bumper.pos.x;
       const dy = char.pos.y - bumper.pos.y;
       const distSq = dx * dx + dy * dy;
-      const minDist = char.radius + bumper.radius;
+      
+      // Broad phase check using bounding radius
+      const maxDistance = char.radius + bumper.radius;
 
-      if (distSq < minDist * minDist) {
-        const dist = Math.sqrt(distSq) || 0.001;
-        const overlap = minDist - dist;
+      if (distSq < maxDistance * maxDistance) {
+        let collided = false;
+        let nx = 0;
+        let ny = 0;
+        let overlap = 0;
 
-        // Normal pointing outwards from bumper to player
-        const nx = dx / dist;
-        const ny = dy / dist;
+        const bType = bumper.type || 'circle';
+        const bAngle = bumper.angle || 0;
+        const bSize = bumper.size || bumper.radius * 2;
 
-        // Static resolution: push player out of the bumper
-        char.pos.x += nx * overlap;
-        char.pos.y += ny * overlap;
+        if (bType === 'circle') {
+          const dist = Math.sqrt(distSq) || 0.001;
+          const minDist = char.radius + bumper.radius;
+          if (dist < minDist) {
+            collided = true;
+            nx = dx / dist;
+            ny = dy / dist;
+            overlap = minDist - dist;
+          }
+        } 
+        else if (bType === 'line') {
+          const halfL = bSize / 2;
+          const cosA = Math.cos(bAngle);
+          const sinA = Math.sin(bAngle);
+          const p1 = { x: bumper.pos.x - cosA * halfL, y: bumper.pos.y - sinA * halfL };
+          const p2 = { x: bumper.pos.x + cosA * halfL, y: bumper.pos.y + sinA * halfL };
 
-        // Dynamic bounce: reverse player velocity and apply high force
-        
-        // If moving towards or even static, launch outwards
-        const incomingSpeed = Math.sqrt(char.vel.x * char.vel.x + char.vel.y * char.vel.y);
-        const launchSpeed = Math.max(incomingSpeed * bumper.restitution, 8); // Minimum launch kick
+          const cp = closestPointOnSegment(char.pos, p1, p2);
+          const cdx = char.pos.x - cp.x;
+          const cdy = char.pos.y - cp.y;
+          const cdistSq = cdx * cdx + cdy * cdy;
+          const minDist = char.radius + 4; // line thickness padding
 
-        char.vel.x = nx * launchSpeed;
-        char.vel.y = ny * launchSpeed;
+          if (cdistSq < minDist * minDist) {
+            collided = true;
+            const cdist = Math.sqrt(cdistSq) || 0.001;
+            nx = cdx / cdist;
+            ny = cdy / cdist;
+            overlap = minDist - cdist;
+          }
+        } 
+        else if (bType === 'square') {
+          const halfS = bSize / 2;
+          const cosA = Math.cos(bAngle);
+          const sinA = Math.sin(bAngle);
 
-        bumper.pulseTimer = 15; // Set pulse feedback frames
-        result.bumperHits.push({
-          playerId: char.id,
-          bumperIdx: bIdx
-        });
+          // Local coordinates
+          const ldx = char.pos.x - bumper.pos.x;
+          const ldy = char.pos.y - bumper.pos.y;
+          const localX = ldx * cosA + ldy * sinA;
+          const localY = -ldx * sinA + ldy * cosA;
+
+          const clampedX = Math.max(-halfS, Math.min(halfS, localX));
+          const clampedY = Math.max(-halfS, Math.min(halfS, localY));
+
+          const localDistX = localX - clampedX;
+          const localDistY = localY - clampedY;
+          const localDist = Math.sqrt(localDistX * localDistX + localDistY * localDistY);
+
+          if (localDist < char.radius) {
+            collided = true;
+            let lnx = 0;
+            let lny = 0;
+            if (localDist > 0.001) {
+              lnx = localDistX / localDist;
+              lny = localDistY / localDist;
+              overlap = char.radius - localDist;
+            } else {
+              // Circle center is inside square, push out to closest edge
+              const distX = halfS - Math.abs(localX);
+              const distY = halfS - Math.abs(localY);
+              if (distX < distY) {
+                lnx = localX >= 0 ? 1 : -1;
+                lny = 0;
+                overlap = char.radius + distX;
+              } else {
+                lnx = 0;
+                lny = localY >= 0 ? 1 : -1;
+                overlap = char.radius + distY;
+              }
+            }
+            // Rotate local normal back to world
+            nx = lnx * cosA - lny * sinA;
+            ny = lnx * sinA + lny * cosA;
+          }
+        } 
+        else if (bType === 'triangle') {
+          const r = bSize;
+          const vAngle0 = bAngle - Math.PI / 2;
+          const vAngle1 = bAngle + 5 * Math.PI / 6;
+          const vAngle2 = bAngle + Math.PI / 6;
+
+          const v0 = { x: bumper.pos.x + Math.cos(vAngle0) * r, y: bumper.pos.y + Math.sin(vAngle0) * r };
+          const v1 = { x: bumper.pos.x + Math.cos(vAngle1) * r, y: bumper.pos.y + Math.sin(vAngle1) * r };
+          const v2 = { x: bumper.pos.x + Math.cos(vAngle2) * r, y: bumper.pos.y + Math.sin(vAngle2) * r };
+
+          const cp0 = closestPointOnSegment(char.pos, v0, v1);
+          const cp1 = closestPointOnSegment(char.pos, v1, v2);
+          const cp2 = closestPointOnSegment(char.pos, v2, v0);
+
+          const d0Sq = (char.pos.x - cp0.x)**2 + (char.pos.y - cp0.y)**2;
+          const d1Sq = (char.pos.x - cp1.x)**2 + (char.pos.y - cp1.y)**2;
+          const d2Sq = (char.pos.x - cp2.x)**2 + (char.pos.y - cp2.y)**2;
+
+          let cp = cp0;
+          let minDistSq = d0Sq;
+          if (d1Sq < minDistSq) { cp = cp1; minDistSq = d1Sq; }
+          if (d2Sq < minDistSq) { cp = cp2; minDistSq = d2Sq; }
+
+          const dist = Math.sqrt(minDistSq) || 0.001;
+
+          // Check if inside
+          const det1 = (v1.x - v0.x) * (char.pos.y - v0.y) - (v1.y - v0.y) * (char.pos.x - v0.x);
+          const det2 = (v2.x - v1.x) * (char.pos.y - v1.y) - (v2.y - v1.y) * (char.pos.x - v1.x);
+          const det3 = (v0.x - v2.x) * (char.pos.y - v2.y) - (v0.y - v2.y) * (char.pos.x - v2.x);
+          const inside = (det1 >= 0 && det2 >= 0 && det3 >= 0) || (det1 <= 0 && det2 <= 0 && det3 <= 0);
+
+          if (inside || dist < char.radius) {
+            collided = true;
+            if (inside) {
+              const dx_dir = cp.x - char.pos.x;
+              const dy_dir = cp.y - char.pos.y;
+              const d_len = Math.sqrt(dx_dir * dx_dir + dy_dir * dy_dir) || 0.001;
+              nx = dx_dir / d_len;
+              ny = dy_dir / d_len;
+              overlap = char.radius + dist;
+            } else {
+              const dx_dir = char.pos.x - cp.x;
+              const dy_dir = char.pos.y - cp.y;
+              const d_len = Math.sqrt(dx_dir * dx_dir + dy_dir * dy_dir) || 0.001;
+              nx = dx_dir / d_len;
+              ny = dy_dir / d_len;
+              overlap = char.radius - dist;
+            }
+          }
+        }
+
+        if (collided) {
+          // Static resolution: push player out of the bumper
+          char.pos.x += nx * overlap;
+          char.pos.y += ny * overlap;
+
+          // Dynamic bounce: reverse player velocity and apply high force
+          const incomingSpeed = Math.sqrt(char.vel.x * char.vel.x + char.vel.y * char.vel.y);
+          const launchSpeed = Math.max(incomingSpeed * bumper.restitution, 8); // Minimum launch kick
+
+          char.vel.x = nx * launchSpeed;
+          char.vel.y = ny * launchSpeed;
+
+          bumper.pulseTimer = 15; // Set pulse feedback frames
+          result.bumperHits.push({
+            playerId: char.id,
+            bumperIdx: bIdx
+          });
+        }
+      }
+    }
+  }
+
+  // 3.5 Process Temporary Obstacles (Speed boosts, slimes)
+  if (obstacles && obstacles.length > 0) {
+    for (const obs of obstacles) {
+      for (const char of characters) {
+        if (!char.alive) continue;
+
+        const dx = char.pos.x - obs.pos.x;
+        const dy = char.pos.y - obs.pos.y;
+        const distSq = dx * dx + dy * dy;
+        const overlapLimit = char.radius + obs.radius;
+
+        if (distSq < overlapLimit * overlapLimit) {
+          if (obs.type === 'speed_boost') {
+            const pushForce = 0.55;
+            char.vel.x += Math.cos(obs.angle) * pushForce;
+            char.vel.y += Math.sin(obs.angle) * pushForce;
+          } else if (obs.type === 'slime') {
+            char.vel.x *= 0.8;
+            char.vel.y *= 0.8;
+          }
+        }
       }
     }
   }

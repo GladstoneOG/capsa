@@ -37,6 +37,7 @@ function setupSpawns(room) {
   const centerY = 400;
   const spawnRadius = 180;
   const numPlayers = room.players.length;
+  const sumoColors = ['#C53030', '#3182CE', '#2F855A', '#D69E2E', '#6B46C1', '#ED8936', '#38B2AC', '#E2E8F0'];
 
   room.players.forEach((p, i) => {
     const angle = i * (2 * Math.PI / numPlayers) - Math.PI / 2;
@@ -48,6 +49,16 @@ function setupSpawns(room) {
     p.mass = 1;
     p.alive = true;
     p.team = p.id; // Assign unique team for Free-for-all
+
+    if (!p.avatar) {
+      p.avatar = {
+        skinColor: '#F5CBA7',
+        hairStyle: 'short',
+        hairColor: '#1A1A1A',
+        expression: 'smile',
+      };
+    }
+    p.avatar.clothesColor = sumoColors[i % sumoColors.length];
   });
 }
 
@@ -57,22 +68,73 @@ function generateBumpers(room) {
   const bumpers = [];
   const centerX = 400;
   const centerY = 400;
+  const startAngle = Math.random() * Math.PI * 2;
+  const shapes = ['circle', 'triangle', 'square', 'line'];
 
   for (let i = 0; i < count; i++) {
-    // Distribute bumpers around the middle-inner section
-    const angle = (i * (2 * Math.PI / count)) + (Math.random() * 0.5);
-    const dist = 100 + Math.random() * 50;
+    // Distribute bumpers around the middle-inner section with random layout rotation
+    const angle = startAngle + (i * (2 * Math.PI / count)) + (Math.random() * 0.4 - 0.2);
+    const dist = 100 + Math.random() * 60;
+
+    const type = shapes[Math.floor(Math.random() * shapes.length)];
+    const shapeAngle = Math.random() * Math.PI * 2;
+
+    let size = 20;
+    let radius = 20; // bounding radius for broad phase
+    if (type === 'square') {
+      size = 30 + Math.random() * 10;
+      radius = size * 0.707;
+    } else if (type === 'triangle') {
+      size = 25 + Math.random() * 10;
+      radius = size;
+    } else if (type === 'line') {
+      size = 50 + Math.random() * 20;
+      radius = size / 2;
+    } else { // circle
+      size = 18 + Math.random() * 8;
+      radius = size;
+    }
+
     bumpers.push({
       pos: {
         x: centerX + Math.cos(angle) * dist,
         y: centerY + Math.sin(angle) * dist
       },
-      radius: 20,
+      type,
+      size,
+      angle: shapeAngle,
+      radius, // bounding radius
       restitution: 1.6,
       pulseTimer: 0
     });
   }
   room.sumoBumpers = bumpers;
+}
+
+// Generate temporary round obstacles
+function generateObstacles(room) {
+  const count = 2 + Math.floor(Math.random() * 3); // 2 to 4 obstacles
+  const obstacles = [];
+  const centerX = 400;
+  const centerY = 400;
+
+  for (let i = 0; i < count; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    const dist = 60 + Math.random() * 140;
+    const type = Math.random() < 0.5 ? 'speed_boost' : 'slime';
+    const obstacleAngle = Math.random() * Math.PI * 2;
+
+    obstacles.push({
+      pos: {
+        x: centerX + Math.cos(angle) * dist,
+        y: centerY + Math.sin(angle) * dist
+      },
+      type,
+      radius: 26 + Math.random() * 8, // influence radius
+      angle: obstacleAngle // boost direction for speed pads
+    });
+  }
+  room.sumoObstacles = obstacles;
 }
 
 export function startRound(room, io) {
@@ -88,6 +150,7 @@ export function startRound(room, io) {
 
   setupSpawns(room);
   generateBumpers(room);
+  generateObstacles(room);
 
   io.to(room.code).emit('chat-message', {
     id: `sys_${Math.random()}`,
@@ -261,12 +324,12 @@ export function handleAction(room, socket, action, payload, io) {
     const alivePlayers = room.players.filter(p => p.alive);
 
     if (alivePlayers.length <= 1) {
-      room.gameState = 'gameover';
+      room.gameState = 'roundover';
       room.sumoPhase = 'gameover';
 
       if (alivePlayers.length === 1) {
         const winner = alivePlayers[0];
-        winner.score += 100;
+        winner.score = (winner.score || 0) + 1;
         io.to(room.code).emit('chat-message', {
           id: `sys_${Math.random()}`,
           senderName: 'System',
@@ -290,6 +353,7 @@ export function handleAction(room, socket, action, payload, io) {
       // Continue next turn: reset moves, transition to aiming phase, restart timer
       room.sumoMoves = {};
       room.sumoPhase = 'aiming';
+      generateObstacles(room);
       startAimingTimer(room, io);
       broadcastGameUpdate(room, io);
     }

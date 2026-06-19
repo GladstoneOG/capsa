@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import type { Vec2, SumoCharacter, SumoBumper } from '../utils/sumoPhysics';
+import type { Vec2, SumoCharacter, SumoBumper, SumoObstacle } from '../utils/sumoPhysics';
 import { simulatePhysicsStep } from '../utils/sumoPhysics';
 import { sfx } from '../utils/audio';
 import { AvatarSVG } from './AvatarCreator';
@@ -15,6 +15,7 @@ interface SumoTableProps {
   sumoPhase: string;       // 'aiming' | 'animating' | 'gameover'
   sumoArenaRadius: number;
   sumoBumpers: SumoBumper[];
+  sumoObstacles: SumoObstacle[];
   sumoMoves: Record<string, { angle: number; power: number; locked?: boolean }>;
   sumoTurnTimer: number;
   sumoRoundCount: number;
@@ -42,6 +43,7 @@ export const SumoTable: React.FC<SumoTableProps> = ({
   sumoPhase,
   sumoArenaRadius,
   sumoBumpers,
+  sumoObstacles,
   sumoMoves,
   sumoTurnTimer,
   sumoRoundCount,
@@ -70,6 +72,7 @@ export const SumoTable: React.FC<SumoTableProps> = ({
   // Local physics copy of players for the animation loop
   const localCharactersRef = useRef<SumoCharacter[]>([]);
   const localBumpersRef = useRef<SumoBumper[]>([]);
+  const localObstaclesRef = useRef<SumoObstacle[]>([]);
   const [isAnimatingLocal, setIsAnimatingLocal] = useState(false);
 
   const resolveEmittedRef = useRef(false);
@@ -111,8 +114,13 @@ export const SumoTable: React.FC<SumoTableProps> = ({
         ...b,
         pos: { ...b.pos }
       }));
+
+      localObstaclesRef.current = (sumoObstacles || []).map(o => ({
+        ...o,
+        pos: { ...o.pos }
+      }));
     }
-  }, [players, sumoPhase, sumoBumpers, sumoMoves, playerId, isAiming]);
+  }, [players, sumoPhase, sumoBumpers, sumoObstacles, sumoMoves, playerId, isAiming]);
 
   // Listen to window pointer events when aiming to prevent premature release when hovering outside canvas/other elements
   useEffect(() => {
@@ -222,7 +230,8 @@ export const SumoTable: React.FC<SumoTableProps> = ({
           sumoArenaRadius,
           0.035, // Ground friction
           400,
-          400
+          400,
+          localObstaclesRef.current
         );
 
         // 2. Play sound effects and apply visual feedback
@@ -352,6 +361,9 @@ export const SumoTable: React.FC<SumoTableProps> = ({
 
       // 3. Draw Arena Platform with deep 3D drop shadow
       drawArenaPlatform(ctx, sumoArenaRadius);
+
+      // 3.5 Draw Obstacles
+      drawObstacles(ctx, localObstaclesRef.current);
 
       // 4. Draw Bumpers
       drawBumpers(ctx, localBumpersRef.current);
@@ -507,25 +519,162 @@ export const SumoTable: React.FC<SumoTableProps> = ({
     ctx.stroke();
   };
 
+  const drawObstacles = (ctx: CanvasRenderingContext2D, obstacles: SumoObstacle[]) => {
+    obstacles.forEach(obs => {
+      ctx.save();
+      ctx.translate(obs.pos.x, obs.pos.y);
+
+      if (obs.type === 'slime') {
+        // Draw organic green slime puddle
+        ctx.fillStyle = 'rgba(34, 197, 94, 0.45)'; // Semi-transparent slime green
+        ctx.strokeStyle = 'rgba(22, 163, 74, 0.7)';
+        ctx.lineWidth = 3;
+
+        // Draw an organic blobby shape
+        ctx.beginPath();
+        const numPoints = 8;
+        for (let i = 0; i < numPoints; i++) {
+          const angle = (i * Math.PI * 2) / numPoints;
+          // Vary the radius to make it blobby and wavey
+          const blobRadius = obs.radius + Math.sin(angle * 3 + waveOffsetRef.current * 2) * 4;
+          const px = Math.cos(angle) * blobRadius;
+          const py = Math.sin(angle) * blobRadius;
+          if (i === 0) ctx.moveTo(px, py);
+          else ctx.lineTo(px, py);
+        }
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+
+        // Draw some little bubbles inside the slime
+        ctx.fillStyle = 'rgba(240, 253, 244, 0.6)';
+        for (let j = 0; j < 3; j++) {
+          const bubbleAngle = j * 2 + waveOffsetRef.current * 0.5;
+          const bubbleDist = obs.radius * 0.4;
+          const bx = Math.cos(bubbleAngle) * bubbleDist;
+          const by = Math.sin(bubbleAngle) * bubbleDist;
+          ctx.beginPath();
+          ctx.arc(bx, by, 3, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      } 
+      else if (obs.type === 'speed_boost') {
+        // Draw speed boost chevron pad
+        ctx.rotate(obs.angle);
+
+        // Circular background glow
+        const glowGrad = ctx.createRadialGradient(0, 0, obs.radius * 0.2, 0, 0, obs.radius);
+        glowGrad.addColorStop(0, 'rgba(249, 115, 22, 0.5)'); // orange glow
+        glowGrad.addColorStop(1, 'rgba(249, 115, 22, 0.0)');
+        ctx.fillStyle = glowGrad;
+        ctx.beginPath();
+        ctx.arc(0, 0, obs.radius, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Draw scrolling chevrons/arrows
+        ctx.strokeStyle = '#f97316';
+        ctx.lineWidth = 4;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+
+        // Animated offset for arrow movements
+        const arrowOffset = (waveOffsetRef.current * 25) % 18;
+
+        for (let d = -16; d <= 16; d += 14) {
+          const xPos = d + arrowOffset - 8;
+          // Check if arrow is within bounds
+          if (Math.abs(xPos) < obs.radius - 6) {
+            ctx.beginPath();
+            ctx.moveTo(xPos - 4, -8);
+            ctx.lineTo(xPos + 2, 0);
+            ctx.lineTo(xPos - 4, 8);
+            ctx.stroke();
+          }
+        }
+
+        // Draw glowing outer dashed rim
+        ctx.strokeStyle = 'rgba(251, 146, 60, 0.6)';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([4, 4]);
+        ctx.beginPath();
+        ctx.arc(0, 0, obs.radius * 0.8, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+
+      ctx.restore();
+    });
+  };
+
   const drawBumpers = (ctx: CanvasRenderingContext2D, bumpers: SumoBumper[]) => {
     bumpers.forEach(bump => {
-      const pulseRadius = bump.radius + (bump.pulseTimer > 0 ? Math.sin(bump.pulseTimer * 0.3) * 6 : 0);
+      const bType = bump.type || 'circle';
+      const bAngle = bump.angle || 0;
+      const bSize = bump.size || bump.radius * 2;
+      const pulseSize = bSize + (bump.pulseTimer > 0 ? Math.sin(bump.pulseTimer * 0.3) * 6 : 0);
+      const pulseRadius = bump.radius + (bump.pulseTimer > 0 ? Math.sin(bump.pulseTimer * 0.3) * 3 : 0);
 
-      // Bottom Shadow
+      ctx.save();
+      ctx.translate(bump.pos.x, bump.pos.y);
+
+      // Bottom Shadow (all shapes get a corresponding shadow)
       ctx.fillStyle = 'rgba(15, 23, 42, 0.4)';
+      ctx.save();
+      ctx.translate(0, 4); // shadow offset
+      ctx.rotate(bAngle);
+      
       ctx.beginPath();
-      ctx.arc(bump.pos.x, bump.pos.y + 4, pulseRadius, 0, Math.PI * 2);
+      if (bType === 'circle') {
+        ctx.arc(0, 0, pulseRadius, 0, Math.PI * 2);
+      } else if (bType === 'line') {
+        ctx.rect(-pulseSize / 2, -4, pulseSize, 8);
+      } else if (bType === 'square') {
+        ctx.rect(-pulseSize / 2, -pulseSize / 2, pulseSize, pulseSize);
+      } else if (bType === 'triangle') {
+        // Draw equilateral triangle shadow
+        const r = pulseSize;
+        const vAngle0 = -Math.PI / 2;
+        const vAngle1 = 5 * Math.PI / 6;
+        const vAngle2 = Math.PI / 6;
+        ctx.moveTo(Math.cos(vAngle0) * r, Math.sin(vAngle0) * r);
+        ctx.lineTo(Math.cos(vAngle1) * r, Math.sin(vAngle1) * r);
+        ctx.lineTo(Math.cos(vAngle2) * r, Math.sin(vAngle2) * r);
+      }
+      ctx.closePath();
       ctx.fill();
+      ctx.restore();
 
-      // Bumper body
-      const grad = ctx.createRadialGradient(bump.pos.x - 4, bump.pos.y - 4, 2, bump.pos.x, bump.pos.y, pulseRadius);
+      // Bumper body with gradient and outline
+      ctx.rotate(bAngle);
+      ctx.beginPath();
+      if (bType === 'circle') {
+        ctx.arc(0, 0, pulseRadius, 0, Math.PI * 2);
+      } else if (bType === 'line') {
+        ctx.rect(-pulseSize / 2, -4, pulseSize, 8);
+      } else if (bType === 'square') {
+        ctx.rect(-pulseSize / 2, -pulseSize / 2, pulseSize, pulseSize);
+      } else if (bType === 'triangle') {
+        const r = pulseSize;
+        const vAngle0 = -Math.PI / 2;
+        const vAngle1 = 5 * Math.PI / 6;
+        const vAngle2 = Math.PI / 6;
+        ctx.moveTo(Math.cos(vAngle0) * r, Math.sin(vAngle0) * r);
+        ctx.lineTo(Math.cos(vAngle1) * r, Math.sin(vAngle1) * r);
+        ctx.lineTo(Math.cos(vAngle2) * r, Math.sin(vAngle2) * r);
+      }
+      ctx.closePath();
+
+      // Fill with radial or linear gradient depending on shape
+      let grad;
+      if (bType === 'circle') {
+        grad = ctx.createRadialGradient(-4, -4, 2, 0, 0, pulseRadius);
+      } else {
+        grad = ctx.createRadialGradient(-4, -4, 2, 0, 0, pulseSize / 2);
+      }
       grad.addColorStop(0, '#38bdf8'); // Glowing electric cyan
       grad.addColorStop(0.65, '#0284c7');
       grad.addColorStop(1, '#0369a1');
-
       ctx.fillStyle = grad;
-      ctx.beginPath();
-      ctx.arc(bump.pos.x, bump.pos.y, pulseRadius, 0, Math.PI * 2);
       ctx.fill();
 
       // Glowing outer rim stroke
@@ -533,11 +682,21 @@ export const SumoTable: React.FC<SumoTableProps> = ({
       ctx.lineWidth = bump.pulseTimer > 0 ? 4 : 2;
       ctx.stroke();
 
-      // Inner details
+      // Highlight/reflection dot/line
       ctx.fillStyle = 'rgba(255, 255, 255, 0.25)';
       ctx.beginPath();
-      ctx.arc(bump.pos.x - 5, bump.pos.y - 5, 4, 0, Math.PI * 2);
+      if (bType === 'circle') {
+        ctx.arc(-pulseRadius * 0.35, -pulseRadius * 0.35, pulseRadius * 0.2, 0, Math.PI * 2);
+      } else if (bType === 'line') {
+        ctx.rect(-pulseSize / 2 + 4, -2, pulseSize - 8, 2);
+      } else if (bType === 'square') {
+        ctx.rect(-pulseSize / 2 + 4, -pulseSize / 2 + 4, pulseSize * 0.3, 4);
+      } else if (bType === 'triangle') {
+        ctx.arc(0, -pulseSize * 0.3, 3, 0, Math.PI * 2);
+      }
       ctx.fill();
+
+      ctx.restore();
     });
   };
 
@@ -863,7 +1022,12 @@ export const SumoTable: React.FC<SumoTableProps> = ({
               />
             </div>
             <div className="sumo-player-info">
-              <div className="sumo-player-name">{p.name}</div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', gap: '0.5rem' }}>
+                <div className="sumo-player-name" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flexGrow: 1 }}>{p.name}</div>
+                <div className="sumo-player-score" style={{ fontSize: '0.8rem', fontWeight: 700, color: '#f1f5f9', background: 'rgba(255, 122, 0, 0.2)', padding: '1px 6px', borderRadius: '4px', border: '1px solid rgba(255, 122, 0, 0.4)', flexShrink: 0 }}>
+                  {p.score || 0} pts
+                </div>
+              </div>
               <div className="sumo-player-status">
                 {!p.alive ? (
                   <span className="sumo-status-dead">ELIMINATED</span>
