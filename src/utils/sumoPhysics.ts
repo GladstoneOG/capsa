@@ -20,6 +20,7 @@ export interface SumoCharacter {
   squishY?: number;
   squishRotation?: number;
   trail?: Vec2[];
+  hasGrace?: boolean;
 }
 
 export interface SumoBumper {
@@ -386,8 +387,19 @@ export function simulatePhysicsStep(
 
     // Check if character is completely off the edge (center of player is outside)
     if (distFromCenter > arenaRadius) {
-      char.alive = false;
-      result.eliminatedIds.push(char.id);
+      if (char.hasGrace) {
+        // If they have stopped moving, eliminate them
+        if (char.vel.x === 0 && char.vel.y === 0) {
+          char.alive = false;
+          result.eliminatedIds.push(char.id);
+        }
+      } else {
+        char.alive = false;
+        result.eliminatedIds.push(char.id);
+      }
+    } else {
+      // They are inside the arena, so grace is no longer active
+      char.hasGrace = false;
     }
   }
 

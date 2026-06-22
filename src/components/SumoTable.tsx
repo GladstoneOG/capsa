@@ -80,9 +80,22 @@ export const SumoTable: React.FC<SumoTableProps> = ({
   // Water background waves variables
   const waveOffsetRef = useRef(0);
 
+  const [visualPhase, setVisualPhase] = useState(sumoPhase);
+
+  // Synchronize visualPhase with sumoPhase when appropriate
+  useEffect(() => {
+    if (sumoPhase === 'animating') {
+      setVisualPhase('animating');
+    } else {
+      if (!isAnimatingLocal) {
+        setVisualPhase(sumoPhase);
+      }
+    }
+  }, [sumoPhase, isAnimatingLocal]);
+
   // Synchronize local physics bodies when turn or players list changes
   useEffect(() => {
-    if (sumoPhase === 'aiming') {
+    if (visualPhase === 'aiming') {
       resolveEmittedRef.current = false;
       const myMove = sumoMoves[playerId];
       setHasLockedIn(!!myMove?.locked);
@@ -120,7 +133,7 @@ export const SumoTable: React.FC<SumoTableProps> = ({
         pos: { ...o.pos }
       }));
     }
-  }, [players, sumoPhase, sumoBumpers, sumoObstacles, sumoMoves, playerId, isAiming]);
+  }, [players, visualPhase, sumoBumpers, sumoObstacles, sumoMoves, playerId, isAiming]);
 
   // Listen to window pointer events when aiming to prevent premature release when hovering outside canvas/other elements
   useEffect(() => {
@@ -178,22 +191,30 @@ export const SumoTable: React.FC<SumoTableProps> = ({
 
   // Handle launch and simulation loop when phase shifts to animating
   useEffect(() => {
-    if (sumoPhase === 'animating' && !isAnimatingLocal) {
+    if (visualPhase === 'animating' && !isAnimatingLocal) {
       setIsAnimatingLocal(true);
       
       // Initialize local characters with fresh copies
-      const chars = players.map(p => ({
-        id: p.id,
-        name: p.name,
-        pos: { x: p.positionX || 400, y: p.positionY || 400 },
-        vel: { x: p.velocityX || 0, y: p.velocityY || 0 },
-        radius: p.radius || 18,
-        mass: p.mass || 1,
-        alive: p.alive !== false,
-        isBot: p.isBot || false,
-        avatar: p.avatar,
-        team: p.team
-      }));
+      const chars = players.map(p => {
+        const posX = p.positionX || 400;
+        const posY = p.positionY || 400;
+        const dx = posX - 400;
+        const dy = posY - 400;
+        const distFromCenter = Math.sqrt(dx * dx + dy * dy);
+        return {
+          id: p.id,
+          name: p.name,
+          pos: { x: posX, y: posY },
+          vel: { x: p.velocityX || 0, y: p.velocityY || 0 },
+          radius: p.radius || 18,
+          mass: p.mass || 1,
+          alive: p.alive !== false,
+          isBot: p.isBot || false,
+          avatar: p.avatar,
+          team: p.team,
+          hasGrace: distFromCenter > sumoArenaRadius
+        };
+      });
 
       // Apply launch velocity to characters based on submitted moves
       chars.forEach(char => {
@@ -213,73 +234,108 @@ export const SumoTable: React.FC<SumoTableProps> = ({
       // Trigger animation frame loop
       let animFrameId: number;
       let frameCount = 0;
-      const maxFrames = 240; // Max 4 seconds simulation backup
+      const maxFrames = 240; // Max 240 physics steps
+      const turnEliminations: string[] = [];
 
-      const stepSim = () => {
-        if (sumoPhase !== 'animating') {
+      let lastTime: number | null = null;
+      let accumulator = 0;
+      const stepTime = 1000 / 60; // 16.67ms per physics step
+
+      const stepSim = (timestamp: number) => {
+        if (visualPhase !== 'animating') {
           setIsAnimatingLocal(false);
           return;
         }
 
-        frameCount++;
+        if (lastTime === null) {
+          lastTime = timestamp;
+        }
+        let dt = timestamp - lastTime;
+        if (dt > 100) dt = 100; // Cap dt to avoid spiral of death
+        lastTime = timestamp;
 
-        // 1. Run physics step
-        const result = simulatePhysicsStep(
-          localCharactersRef.current,
-          localBumpersRef.current,
-          sumoArenaRadius,
-          0.035, // Ground friction
-          400,
-          400,
-          localObstaclesRef.current
-        );
+        accumulator += dt;
 
-        // 2. Play sound effects and apply visual feedback
-        if (result.collisions.length > 0) {
-          sfx.playSumoClash();
-          // Spawn collision sparks
-          result.collisions.forEach(col => {
-            const c1 = localCharactersRef.current.find(c => c.id === col.p1Id);
-            const c2 = localCharactersRef.current.find(c => c.id === col.p2Id);
-            if (c1 && c2) {
-              const spawnX = (c1.pos.x + c2.pos.x) / 2;
-              const spawnY = (c1.pos.y + c2.pos.y) / 2;
-              spawnParticles(spawnX, spawnY, 'clash', col.intensity * 2);
-              
-              // Trigger squish
-              const angle = Math.atan2(c2.pos.y - c1.pos.y, c2.pos.x - c1.pos.x);
-              c1.squishX = 0.7; c1.squishY = 1.3; c1.squishRotation = angle;
-              c2.squishX = 0.7; c2.squishY = 1.3; c2.squishRotation = angle + Math.PI;
-            }
-          });
-          shakeIntensityRef.current = Math.min(15, result.collisions[0].intensity * 1.5);
-          shakeTimerRef.current = 10;
+        let reachedEnd = false;
+
+        while (accumulator >= stepTime) {
+          accumulator -= stepTime;
+          frameCount++;
+
+          // 1. Run physics step
+          const result = simulatePhysicsStep(
+            localCharactersRef.current,
+            localBumpersRef.current,
+            sumoArenaRadius,
+            0.035, // Ground friction
+            400,
+            400,
+            localObstaclesRef.current
+          );
+
+          // 2. Play sound effects and apply visual feedback
+          if (result.collisions.length > 0) {
+            sfx.playSumoClash();
+            // Spawn collision sparks
+            result.collisions.forEach(col => {
+              const c1 = localCharactersRef.current.find(c => c.id === col.p1Id);
+              const c2 = localCharactersRef.current.find(c => c.id === col.p2Id);
+              if (c1 && c2) {
+                const spawnX = (c1.pos.x + c2.pos.x) / 2;
+                const spawnY = (c1.pos.y + c2.pos.y) / 2;
+                spawnParticles(spawnX, spawnY, 'clash', col.intensity * 2);
+                
+                // Trigger squish
+                const angle = Math.atan2(c2.pos.y - c1.pos.y, c2.pos.x - c1.pos.x);
+                c1.squishX = 0.7; c1.squishY = 1.3; c1.squishRotation = angle;
+                c2.squishX = 0.7; c2.squishY = 1.3; c2.squishRotation = angle + Math.PI;
+              }
+            });
+            shakeIntensityRef.current = Math.min(15, result.collisions[0].intensity * 1.5);
+            shakeTimerRef.current = 10;
+          }
+
+          if (result.bumperHits.length > 0) {
+            sfx.playSumoClash();
+            result.bumperHits.forEach(hit => {
+              const char = localCharactersRef.current.find(c => c.id === hit.playerId);
+              const bump = localBumpersRef.current[hit.bumperIdx];
+              if (char && bump) {
+                spawnParticles(char.pos.x, char.pos.y, 'clash', 15);
+              }
+            });
+            shakeIntensityRef.current = 14;
+            shakeTimerRef.current = 12;
+          }
+
+          if (result.eliminatedIds.length > 0) {
+            sfx.playSumoSplash();
+            result.eliminatedIds.forEach(id => {
+              const char = localCharactersRef.current.find(c => c.id === id);
+              if (char) {
+                spawnParticles(char.pos.x, char.pos.y, 'splash', 25);
+              }
+              if (!turnEliminations.includes(id)) {
+                turnEliminations.push(id);
+              }
+            });
+          }
+
+          // 3. Check if movement finished
+          const totalSpeed = localCharactersRef.current.reduce((sum, c) => {
+            if (!c.alive) return sum;
+            return sum + Math.sqrt(c.vel.x * c.vel.x + c.vel.y * c.vel.y);
+          }, 0);
+
+          const motionStopped = totalSpeed < 0.15;
+
+          if (motionStopped || frameCount >= maxFrames) {
+            reachedEnd = true;
+            break;
+          }
         }
 
-        if (result.bumperHits.length > 0) {
-          sfx.playSumoClash();
-          result.bumperHits.forEach(hit => {
-            const char = localCharactersRef.current.find(c => c.id === hit.playerId);
-            const bump = localBumpersRef.current[hit.bumperIdx];
-            if (char && bump) {
-              spawnParticles(char.pos.x, char.pos.y, 'clash', 15);
-            }
-          });
-          shakeIntensityRef.current = 14;
-          shakeTimerRef.current = 12;
-        }
-
-        if (result.eliminatedIds.length > 0) {
-          sfx.playSumoSplash();
-          result.eliminatedIds.forEach(id => {
-            const char = localCharactersRef.current.find(c => c.id === id);
-            if (char) {
-              spawnParticles(char.pos.x, char.pos.y, 'splash', 25);
-            }
-          });
-        }
-
-        // Apply decay to squish effects
+        // Apply decay to squish effects (run once per frame)
         localCharactersRef.current.forEach(c => {
           if (c.squishX !== undefined && c.squishY !== undefined) {
             c.squishX += (1 - c.squishX) * 0.15;
@@ -292,34 +348,24 @@ export const SumoTable: React.FC<SumoTableProps> = ({
           }
         });
 
-        // 3. Check if movement finished
-        const totalSpeed = localCharactersRef.current.reduce((sum, c) => {
-          if (!c.alive) return sum;
-          return sum + Math.sqrt(c.vel.x * c.vel.x + c.vel.y * c.vel.y);
-        }, 0);
+        if (reachedEnd) {
+          if (!resolveEmittedRef.current) {
+            resolveEmittedRef.current = true;
+            setIsAnimatingLocal(false);
 
-        const motionStopped = totalSpeed < 0.15;
+            // Report authoritative final positions if host/singleplayer
+            if (isHost || isSinglePlayer) {
+              const playerStates = localCharactersRef.current.map(c => ({
+                id: c.id,
+                x: c.pos.x,
+                y: c.pos.y,
+                vx: 0,
+                vy: 0,
+                alive: c.alive
+              }));
 
-        if ((motionStopped || frameCount >= maxFrames) && !resolveEmittedRef.current) {
-          resolveEmittedRef.current = true;
-          setIsAnimatingLocal(false);
-
-          // Report authoritative final positions if host/singleplayer
-          if (isHost || isSinglePlayer) {
-            const playerStates = localCharactersRef.current.map(c => ({
-              id: c.id,
-              x: c.pos.x,
-              y: c.pos.y,
-              vx: 0,
-              vy: 0,
-              alive: c.alive
-            }));
-
-            const preAliveIds = players.filter(p => p.alive).map(p => p.id);
-            const postAliveIds = localCharactersRef.current.filter(c => c.alive).map(c => c.id);
-            const eliminations = preAliveIds.filter(id => !postAliveIds.includes(id));
-
-            onSumoAction('resolve-turn', { playerStates, eliminations });
+              onSumoAction('resolve-turn', { playerStates, eliminations: turnEliminations });
+            }
           }
           return;
         }
@@ -330,7 +376,7 @@ export const SumoTable: React.FC<SumoTableProps> = ({
       animFrameId = requestAnimationFrame(stepSim);
       return () => cancelAnimationFrame(animFrameId);
     }
-  }, [sumoPhase]);
+  }, [visualPhase]);
 
   // Handle drawing Loop
   useEffect(() => {
@@ -383,11 +429,11 @@ export const SumoTable: React.FC<SumoTableProps> = ({
 
     drawFrameId = requestAnimationFrame(render);
     return () => cancelAnimationFrame(drawFrameId);
-  }, [playerId, sumoPhase, isAiming, dragStart, dragCurrent, aimAngle, aimPower, sumoArenaRadius]);
+  }, [playerId, visualPhase, isAiming, dragStart, dragCurrent, aimAngle, aimPower, sumoArenaRadius]);
 
   // Aim Drag Handlers (Angry birds inverse drag math using Pointer Events)
   const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    if (sumoPhase !== 'aiming' || hasLockedIn) return;
+    if (visualPhase !== 'aiming' || hasLockedIn) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
 
@@ -730,7 +776,7 @@ export const SumoTable: React.FC<SumoTableProps> = ({
   };
 
   const drawCharacters = (ctx: CanvasRenderingContext2D) => {
-    const activeList = sumoPhase === 'animating' ? localCharactersRef.current : players;
+    const activeList = visualPhase === 'animating' ? localCharactersRef.current : players;
 
     activeList.forEach(p => {
       if (!p.alive) return;
@@ -740,7 +786,7 @@ export const SumoTable: React.FC<SumoTableProps> = ({
       const radius = p.radius ?? 18;
 
       // Draw local movement dust trail if fast
-      if (sumoPhase === 'animating' && p.vel) {
+      if (visualPhase === 'animating' && p.vel) {
         const speed = Math.sqrt(p.vel.x * p.vel.x + p.vel.y * p.vel.y);
         if (speed > 1.8 && Math.random() < 0.4) {
           // Add dust particles behind character
@@ -901,7 +947,7 @@ export const SumoTable: React.FC<SumoTableProps> = ({
       ctx.fillText(p.name, px, py - radius - 8);
 
       // Indicator for locked state
-      if (sumoPhase === 'aiming' && sumoMoves[p.id]?.locked) {
+      if (visualPhase === 'aiming' && sumoMoves[p.id]?.locked) {
         ctx.fillStyle = '#10b981';
         ctx.font = 'bold 9px sans-serif';
         ctx.fillText('LOCKED IN', px, py - radius - 21);
@@ -910,7 +956,7 @@ export const SumoTable: React.FC<SumoTableProps> = ({
   };
 
   const drawAimControls = (ctx: CanvasRenderingContext2D) => {
-    if (sumoPhase !== 'aiming') return;
+    if (visualPhase !== 'aiming') return;
 
     const localChar = players.find(p => p.id === playerId);
     if (!localChar || !localChar.alive) return;
@@ -990,16 +1036,16 @@ export const SumoTable: React.FC<SumoTableProps> = ({
     <div className="sumo-table-container">
       {/* HUD Bar */}
       <div className="sumo-hud-container">
-        {sumoPhase === 'aiming' && (
+        {visualPhase === 'aiming' && (
           <>
             <div className="sumo-phase-text">Aiming Phase</div>
             <div className="sumo-timer">{sumoTurnTimer}s</div>
           </>
         )}
-        {sumoPhase === 'animating' && (
+        {visualPhase === 'animating' && (
           <div className="sumo-phase-text" style={{ color: '#0ea5e9' }}>Executing Moves...</div>
         )}
-        {sumoPhase === 'gameover' && (
+        {visualPhase === 'gameover' && (
           <div className="sumo-phase-text" style={{ color: '#ef4444' }}>Match Ended</div>
         )}
         <div className="sumo-turn-counter">Round {sumoRoundCount + 1}</div>
@@ -1054,7 +1100,7 @@ export const SumoTable: React.FC<SumoTableProps> = ({
             aspectRatio: '1 / 1',
             borderRadius: '16px',
             boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.55)',
-            cursor: sumoPhase === 'aiming' && !hasLockedIn ? 'crosshair' : 'default',
+            cursor: visualPhase === 'aiming' && !hasLockedIn ? 'crosshair' : 'default',
             touchAction: 'none'
           }}
           onPointerDown={handlePointerDown}
@@ -1062,7 +1108,7 @@ export const SumoTable: React.FC<SumoTableProps> = ({
       </div>
 
       {/* Locking controls overlay */}
-      {sumoPhase === 'aiming' && (
+      {visualPhase === 'aiming' && (
         <div className="sumo-controls-overlay">
           {isAiming && (
             <div className="sumo-drag-hint" style={{ color: '#ff7a00', fontSize: '1rem', fontWeight: 'bold' }}>
@@ -1090,7 +1136,7 @@ export const SumoTable: React.FC<SumoTableProps> = ({
 
       {/* Leave table controls */}
       <div style={{ position: 'absolute', bottom: '1rem', right: '1rem', display: 'flex', gap: '0.75rem', zIndex: 10 }}>
-        {sumoPhase === 'gameover' && (isHost || isSinglePlayer) && (
+        {visualPhase === 'gameover' && (isHost || isSinglePlayer) && (
           <button 
             className="sumo-lock-btn"
             style={{ padding: '0.5rem 1.5rem', fontSize: '0.9rem' }}

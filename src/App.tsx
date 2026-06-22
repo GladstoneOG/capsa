@@ -4672,9 +4672,6 @@ export default function App() {
     const shapes = ['circle', 'triangle', 'square', 'line'];
 
     for (let i = 0; i < bumpersCount; i++) {
-      const angle = startAngle + (i * (2 * Math.PI / bumpersCount)) + (Math.random() * 0.4 - 0.2);
-      const dist = 100 + Math.random() * 60;
-      
       const type = shapes[Math.floor(Math.random() * shapes.length)] as 'circle' | 'triangle' | 'square' | 'line';
       const shapeAngle = Math.random() * Math.PI * 2;
       
@@ -4694,11 +4691,44 @@ export default function App() {
         radius = size;
       }
 
-      bumpers.push({
-        pos: {
+      let pos = null;
+      for (let attempts = 0; attempts < 50; attempts++) {
+        const angle = startAngle + (i * (2 * Math.PI / bumpersCount)) + (Math.random() * 0.6 - 0.3) + (attempts * 0.1);
+        const dist = 90 + Math.random() * 70;
+        const x = centerX + Math.cos(angle) * dist;
+        const y = centerY + Math.sin(angle) * dist;
+
+        let collides = false;
+        for (const p of updatedPlayers) {
+          const px = p.positionX ?? 400;
+          const py = p.positionY ?? 400;
+          const pr = p.radius ?? 18;
+          const dx = x - px;
+          const dy = y - py;
+          const d = Math.sqrt(dx * dx + dy * dy);
+          if (d < pr + radius + 15) { // 15px safety buffer
+            collides = true;
+            break;
+          }
+        }
+
+        if (!collides) {
+          pos = { x, y };
+          break;
+        }
+      }
+
+      if (!pos) {
+        const angle = startAngle + (i * (2 * Math.PI / bumpersCount)) + (Math.random() * 0.4 - 0.2);
+        const dist = 100 + Math.random() * 60;
+        pos = {
           x: centerX + Math.cos(angle) * dist,
           y: centerY + Math.sin(angle) * dist
-        },
+        };
+      }
+
+      bumpers.push({
+        pos,
         type,
         size,
         angle: shapeAngle,
@@ -5191,17 +5221,41 @@ export default function App() {
               }
             ]);
           } else {
-            setChatMessages(m => [
-              ...m,
-              {
-                id: `sys_${Math.random()}`,
-                senderName: 'System',
-                senderId: 'system',
-                text: "🤝 It's a draw! Everyone fell off.",
-                timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-                system: true
-              }
-            ]);
+            const lastSurvivorId = eliminations && eliminations.length > 0 ? eliminations[eliminations.length - 1] : null;
+            const winner = lastSurvivorId ? next.find(p => p.id === lastSurvivorId) : null;
+
+            if (winner) {
+              finalPlayers = next.map(p => {
+                if (p.id === winner.id) {
+                  return { ...p, score: (p.score || 0) + 1 };
+                }
+                return p;
+              });
+
+              setChatMessages(m => [
+                ...m,
+                {
+                  id: `sys_${Math.random()}`,
+                  senderName: 'System',
+                  senderId: 'system',
+                  text: `👑 ${winner.name} is the last survivor and wins the match!`,
+                  timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                  system: true
+                }
+              ]);
+            } else {
+              setChatMessages(m => [
+                ...m,
+                {
+                  id: `sys_${Math.random()}`,
+                  senderName: 'System',
+                  senderId: 'system',
+                  text: "🤝 It's a draw! Everyone fell off.",
+                  timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                  system: true
+                }
+              ]);
+            }
           }
         } else {
           setSumoPhase('aiming');

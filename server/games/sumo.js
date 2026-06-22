@@ -70,12 +70,9 @@ function generateBumpers(room) {
   const centerY = 400;
   const startAngle = Math.random() * Math.PI * 2;
   const shapes = ['circle', 'triangle', 'square', 'line'];
+  const alivePlayers = room.players.filter(p => p.alive);
 
   for (let i = 0; i < count; i++) {
-    // Distribute bumpers around the middle-inner section with random layout rotation
-    const angle = startAngle + (i * (2 * Math.PI / count)) + (Math.random() * 0.4 - 0.2);
-    const dist = 100 + Math.random() * 60;
-
     const type = shapes[Math.floor(Math.random() * shapes.length)];
     const shapeAngle = Math.random() * Math.PI * 2;
 
@@ -95,11 +92,45 @@ function generateBumpers(room) {
       radius = size;
     }
 
-    bumpers.push({
-      pos: {
+    let pos = null;
+    for (let attempts = 0; attempts < 50; attempts++) {
+      const angle = startAngle + (i * (2 * Math.PI / count)) + (Math.random() * 0.6 - 0.3) + (attempts * 0.1);
+      const dist = 90 + Math.random() * 70;
+      const x = centerX + Math.cos(angle) * dist;
+      const y = centerY + Math.sin(angle) * dist;
+
+      // Check collision with alive players
+      let collides = false;
+      for (const p of alivePlayers) {
+        const px = p.positionX ?? 400;
+        const py = p.positionY ?? 400;
+        const pr = p.radius ?? 18;
+        const dx = x - px;
+        const dy = y - py;
+        const d = Math.sqrt(dx * dx + dy * dy);
+        if (d < pr + radius + 15) { // 15px safety buffer
+          collides = true;
+          break;
+        }
+      }
+
+      if (!collides) {
+        pos = { x, y };
+        break;
+      }
+    }
+
+    if (!pos) {
+      const angle = startAngle + (i * (2 * Math.PI / count)) + (Math.random() * 0.4 - 0.2);
+      const dist = 100 + Math.random() * 60;
+      pos = {
         x: centerX + Math.cos(angle) * dist,
         y: centerY + Math.sin(angle) * dist
-      },
+      };
+    }
+
+    bumpers.push({
+      pos,
       type,
       size,
       angle: shapeAngle,
@@ -373,14 +404,29 @@ export function handleAction(room, socket, action, payload, io) {
           system: true,
         });
       } else {
-        io.to(room.code).emit('chat-message', {
-          id: `sys_${Math.random()}`,
-          senderName: 'System',
-          senderId: 'system',
-          text: '🤝 It\'s a draw! Everyone fell off.',
-          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          system: true,
-        });
+        const lastSurvivorId = eliminations && eliminations.length > 0 ? eliminations[eliminations.length - 1] : null;
+        const winner = lastSurvivorId ? room.players.find(p => p.id === lastSurvivorId) : null;
+
+        if (winner) {
+          winner.score = (winner.score || 0) + 1;
+          io.to(room.code).emit('chat-message', {
+            id: `sys_${Math.random()}`,
+            senderName: 'System',
+            senderId: 'system',
+            text: `👑 ${winner.name} is the last survivor and wins the match!`,
+            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            system: true,
+          });
+        } else {
+          io.to(room.code).emit('chat-message', {
+            id: `sys_${Math.random()}`,
+            senderName: 'System',
+            senderId: 'system',
+            text: '🤝 It\'s a draw! Everyone fell off.',
+            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            system: true,
+          });
+        }
       }
       broadcastGameUpdate(room, io);
     } else {
