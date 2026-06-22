@@ -117,20 +117,54 @@ function generateObstacles(room) {
   const obstacles = [];
   const centerX = 400;
   const centerY = 400;
+  const alivePlayers = room.players.filter(p => p.alive);
 
   for (let i = 0; i < count; i++) {
-    const angle = Math.random() * Math.PI * 2;
-    const dist = 60 + Math.random() * 140;
     const type = Math.random() < 0.5 ? 'speed_boost' : 'slime';
     const obstacleAngle = Math.random() * Math.PI * 2;
+    const radius = 26 + Math.random() * 8; // influence radius
+    let pos = null;
 
-    obstacles.push({
-      pos: {
+    for (let attempts = 0; attempts < 50; attempts++) {
+      const angle = Math.random() * Math.PI * 2;
+      const dist = 60 + Math.random() * 140;
+      const x = centerX + Math.cos(angle) * dist;
+      const y = centerY + Math.sin(angle) * dist;
+
+      // Check collision with alive players
+      let collides = false;
+      for (const p of alivePlayers) {
+        const px = p.positionX ?? 400;
+        const py = p.positionY ?? 400;
+        const pr = p.radius ?? 18;
+        const dx = x - px;
+        const dy = y - py;
+        const d = Math.sqrt(dx * dx + dy * dy);
+        if (d < pr + radius + 15) { // 15px safety buffer
+          collides = true;
+          break;
+        }
+      }
+
+      if (!collides) {
+        pos = { x, y };
+        break;
+      }
+    }
+
+    if (!pos) {
+      const angle = Math.random() * Math.PI * 2;
+      const dist = 60 + Math.random() * 140;
+      pos = {
         x: centerX + Math.cos(angle) * dist,
         y: centerY + Math.sin(angle) * dist
-      },
+      };
+    }
+
+    obstacles.push({
+      pos,
       type,
-      radius: 26 + Math.random() * 8, // influence radius
+      radius,
       angle: obstacleAngle // boost direction for speed pads
     });
   }
