@@ -5162,7 +5162,7 @@ export default function App() {
 
         // Apply kills to scores (+1 point per kill) in single-player
         if (kills) {
-          Object.entries(kills).forEach(([elimId, killerId]) => {
+          Object.values(kills).forEach((killerId) => {
             const killer = next.find(pl => pl.id === killerId);
             if (killer) {
               killer.score = (killer.score || 0) + 1;
