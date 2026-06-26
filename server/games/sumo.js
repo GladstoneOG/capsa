@@ -336,7 +336,7 @@ export function handleAction(room, socket, action, payload, io) {
     if (!isHost) return;
     if (room.sumoPhase !== 'animating') return;
 
-    const { playerStates, eliminations } = payload;
+    const { playerStates, eliminations, kills } = payload;
 
     // Apply resolved player positions, velocities, and alive statuses
     playerStates.forEach(state => {
@@ -353,16 +353,32 @@ export function handleAction(room, socket, action, payload, io) {
       }
     });
 
+    // Apply kills to scores (+1 point per kill)
+    if (kills) {
+      Object.entries(kills).forEach(([elimId, killerId]) => {
+        const killer = room.players.find(pl => pl.id === killerId);
+        if (killer) {
+          killer.score = (killer.score || 0) + 1;
+        }
+      });
+    }
+
     // Chat announcement for eliminations
     if (eliminations && eliminations.length > 0) {
       eliminations.forEach(elimId => {
         const p = room.players.find(pl => pl.id === elimId);
         if (p) {
+          const killerId = kills ? kills[elimId] : null;
+          const killer = killerId ? room.players.find(pl => pl.id === killerId) : null;
+          const text = killer
+            ? `💥 ${p.name} was pushed off the arena by ${killer.name}! (+1 Kill Point)`
+            : `💥 ${p.name} fell off the arena!`;
+
           io.to(room.code).emit('chat-message', {
             id: `sys_${Math.random()}`,
             senderName: 'System',
             senderId: 'system',
-            text: `💥 ${p.name} fell off the arena!`,
+            text: text,
             timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
             system: true,
           });

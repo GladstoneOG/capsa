@@ -364,7 +364,16 @@ export const SumoTable: React.FC<SumoTableProps> = ({
                 alive: c.alive
               }));
 
-              onSumoAction('resolve-turn', { playerStates, eliminations: turnEliminations });
+              // Build kills mapping of { [eliminatedPlayerId]: killerPlayerId }
+              const kills: Record<string, string> = {};
+              turnEliminations.forEach(elimId => {
+                const char = localCharactersRef.current.find(c => c.id === elimId);
+                if (char && char.lastHitBy) {
+                  kills[elimId] = char.lastHitBy;
+                }
+              });
+
+              onSumoAction('resolve-turn', { playerStates, eliminations: turnEliminations, kills });
             }
           }
           return;

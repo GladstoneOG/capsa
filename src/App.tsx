@@ -1293,7 +1293,10 @@ export default function App() {
                 sumoChars,
                 bumpers,
                 roomState.sumoArenaRadius,
-                'medium'
+                'medium',
+                400,
+                400,
+                roomState.sumoObstacles || []
               );
               socketRef.current?.emit('sumo-action', {
                 roomCode: roomState.code,
@@ -5104,7 +5107,10 @@ export default function App() {
               sumoChars,
               bumpers,
               sumoArenaRadius,
-              'medium'
+              'medium',
+              400,
+              400,
+              sumoObstacles
             );
             moves[p.id] = { ...move, locked: true };
           }
@@ -5136,7 +5142,7 @@ export default function App() {
     }
 
     else if (action === 'resolve-turn') {
-      const { playerStates, eliminations = [] } = payload;
+      const { playerStates, eliminations = [], kills } = payload;
       
       setPlayers(prev => {
         const next = prev.map(p => {
@@ -5154,6 +5160,16 @@ export default function App() {
           return p;
         });
 
+        // Apply kills to scores (+1 point per kill) in single-player
+        if (kills) {
+          Object.entries(kills).forEach(([elimId, killerId]) => {
+            const killer = next.find(pl => pl.id === killerId);
+            if (killer) {
+              killer.score = (killer.score || 0) + 1;
+            }
+          });
+        }
+
         const nextRadius = rules.shrinkingArena !== false ? Math.max(100, sumoArenaRadius - 15) : sumoArenaRadius;
         setSumoArenaRadius(nextRadius);
         setSumoRoundCount(prev => prev + 1);
@@ -5164,13 +5180,19 @@ export default function App() {
           eliminations.forEach((elimId: string) => {
             const el = next.find(pl => pl.id === elimId);
             if (el) {
+              const killerId = kills ? kills[elimId] : null;
+              const killer = killerId ? next.find(pl => pl.id === killerId) : null;
+              const text = killer
+                ? `💥 ${el.name} was pushed off the arena by ${killer.name}! (+1 Kill Point)`
+                : `💥 ${el.name} fell off the arena!`;
+
               setChatMessages(m => [
                 ...m,
                 {
                   id: `sys_${Math.random()}`,
                   senderName: 'System',
                   senderId: 'system',
-                  text: `💥 ${el.name} fell off the arena!`,
+                  text: text,
                   timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
                   system: true
                 }

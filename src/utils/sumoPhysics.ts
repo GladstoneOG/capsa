@@ -21,6 +21,7 @@ export interface SumoCharacter {
   squishRotation?: number;
   trail?: Vec2[];
   hasGrace?: boolean;
+  lastHitBy?: string;
 }
 
 export interface SumoBumper {
@@ -169,6 +170,10 @@ export function simulatePhysicsStep(
             p2Id: c2.id,
             intensity: impulseScalar
           });
+
+          // Track last hit for scoring kills
+          c1.lastHitBy = c2.id;
+          c2.lastHitBy = c1.id;
         }
       }
     }

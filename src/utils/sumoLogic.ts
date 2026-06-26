@@ -1,4 +1,5 @@
-import type { SumoCharacter, SumoBumper } from './sumoPhysics';
+import { simulatePhysicsStep } from './sumoPhysics';
+import type { SumoCharacter, SumoBumper, SumoObstacle } from './sumoPhysics';
 
 export interface SumoRules {
   turnDuration: number; // 5, 10, or 15 seconds
@@ -14,15 +15,76 @@ export const DEFAULT_SUMO_RULES: SumoRules = {
   bumpersCount: 2
 };
 
+// Helper function to check if a candidate move is safe (lookahead simulation)
+function isMoveSafe(
+  bot: SumoCharacter,
+  angle: number,
+  power: number,
+  bumpers: SumoBumper[],
+  obstacles: SumoObstacle[],
+  arenaRadius: number,
+  centerX: number,
+  centerY: number
+): boolean {
+  // Create a deep copy of the bot character for simulation
+  const testBot: SumoCharacter = {
+    ...bot,
+    pos: { x: bot.pos.x, y: bot.pos.y },
+    vel: {
+      x: Math.cos((angle * Math.PI) / 180) * (power * 0.14),
+      y: Math.sin((angle * Math.PI) / 180) * (power * 0.14)
+    },
+    alive: true,
+    hasGrace: bot.hasGrace
+  };
+
+  // Create deep copies of bumpers and obstacles so their states don't leak
+  const testBumpers = bumpers.map(b => ({
+    ...b,
+    pos: { ...b.pos }
+  }));
+  const testObstacles = obstacles.map(o => ({
+    ...o,
+    pos: { ...o.pos }
+  }));
+
+  // Simulate up to 45 steps (approx 0.75 seconds of movement)
+  const steps = 45;
+  for (let i = 0; i < steps; i++) {
+    simulatePhysicsStep(
+      [testBot],
+      testBumpers,
+      arenaRadius,
+      0.035, // Ground friction
+      centerX,
+      centerY,
+      testObstacles
+    );
+
+    if (!testBot.alive) {
+      return false; // Fell off or died!
+    }
+
+    // Speed cutoff to stop early if bot has stopped moving
+    const speed = Math.sqrt(testBot.vel.x * testBot.vel.x + testBot.vel.y * testBot.vel.y);
+    if (speed < 0.15) {
+      break;
+    }
+  }
+
+  return true;
+}
+
 // Calculate the bot's move using prediction and boundary checking
 export function calculateSumoBotMove(
   bot: SumoCharacter,
   allCharacters: SumoCharacter[],
-  _bumpers: SumoBumper[],
+  bumpers: SumoBumper[],
   currentRadius: number,
   difficulty: 'easy' | 'medium' | 'hard' = 'medium',
   centerX = 400,
-  centerY = 400
+  centerY = 400,
+  obstacles: SumoObstacle[] = []
 ): { angle: number; power: number } {
   // 1. Check if the bot is close to the edge (danger zone)
   const dx = bot.pos.x - centerX;
@@ -81,7 +143,7 @@ export function calculateSumoBotMove(
         (predictedY - bot.pos.y) * (predictedY - bot.pos.y)
       );
 
-      // Scale power between 40 and 100
+      // Scale power between 35 and 100
       chosenPower = Math.max(35, Math.min(100, distance * 0.25));
     } else {
       // No targets left: wander/stay near center
@@ -108,6 +170,85 @@ export function calculateSumoBotMove(
   // Clamps
   angleDeg = (angleDeg + 360) % 360;
   chosenPower = Math.max(20, Math.min(100, chosenPower));
+
+  // Run safety check and find safe adjustment if needed for medium/hard difficulty
+  if (difficulty !== 'easy') {
+    const isBaseSafe = isMoveSafe(
+      bot,
+      angleDeg,
+      chosenPower,
+      bumpers,
+      obstacles,
+      currentRadius,
+      centerX,
+      centerY
+    );
+
+    if (!isBaseSafe) {
+      let foundSafe = false;
+
+      // 1. Try reducing power first (aiming too hard might cause bounce off)
+      const powerFactors = [0.7, 0.4];
+      for (const factor of powerFactors) {
+        const testPower = Math.max(20, Math.round(chosenPower * factor));
+        if (isMoveSafe(bot, angleDeg, testPower, bumpers, obstacles, currentRadius, centerX, centerY)) {
+          chosenPower = testPower;
+          foundSafe = true;
+          break;
+        }
+      }
+
+      // 2. Try adjusting angle (look for safe paths near the target direction)
+      if (!foundSafe) {
+        const angleOffsets = [15, -15, 30, -30, 45, -45, 60, -60, 75, -75, 90, -90];
+        for (const offset of angleOffsets) {
+          const testAngle = (angleDeg + offset + 360) % 360;
+          // Try with base power and also reduced power
+          for (const powerFactor of [1.0, 0.7, 0.4]) {
+            const testPower = Math.max(20, Math.round(chosenPower * powerFactor));
+            if (isMoveSafe(bot, testAngle, testPower, bumpers, obstacles, currentRadius, centerX, centerY)) {
+              angleDeg = testAngle;
+              chosenPower = testPower;
+              foundSafe = true;
+              break;
+            }
+          }
+          if (foundSafe) break;
+        }
+      }
+
+      // 3. Fallback: Search all 24 directions to find ANY safe move that points generally towards safety
+      if (!foundSafe) {
+        let bestAngle = angleDeg;
+        let bestPower = 30; // low power fallback
+        let closestAngleDiff = Infinity;
+
+        // Try 24 directions with different powers
+        for (let a = 0; a < 360; a += 15) {
+          for (const p of [60, 40, 20]) {
+            if (isMoveSafe(bot, a, p, bumpers, obstacles, currentRadius, centerX, centerY)) {
+              // Calculate difference from our original target angle
+              const diff1 = Math.abs(a - angleDeg);
+              const diff2 = 360 - diff1;
+              const diff = Math.min(diff1, diff2);
+
+              if (diff < closestAngleDiff) {
+                closestAngleDiff = diff;
+                bestAngle = a;
+                bestPower = p;
+                foundSafe = true;
+              }
+            }
+          }
+        }
+
+        if (foundSafe) {
+          angleDeg = bestAngle;
+          chosenPower = bestPower;
+        }
+      }
+    }
+  }
 
   return { angle: angleDeg, power: chosenPower };
 }
