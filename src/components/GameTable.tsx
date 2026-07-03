@@ -194,19 +194,22 @@ export const GameTable: React.FC<GameTableProps> = ({
   const [displayedActivePlay, setDisplayedActivePlay] = useState<Combination | null>(null);
   const [isTransitioningTrick, setIsTransitioningTrick] = useState<boolean>(false);
   const [transitionWinnerName, setTransitionWinnerName] = useState<string | null>(null);
-  const [transitionNextPlayerName, setTransitionNextPlayerName] = useState<string | null>(null);
 
   const prevActivePlayRef = useRef<Combination | null>(null);
   const prevLastPlayerPlayedIdRef = useRef<string | null>(null);
   const prevGameStateRef = useRef<string>('lobby');
 
   useEffect(() => {
+    // If activePlay is non-null (someone played cards)
     if (activePlay) {
       setIsTransitioningTrick(false);
       setDisplayedActivePlay(activePlay);
       setTransitionWinnerName(null);
-      setTransitionNextPlayerName(null);
+      
+      prevActivePlayRef.current = activePlay;
+      prevLastPlayerPlayedIdRef.current = lastPlayerPlayedId;
     } else {
+      // activePlay is null. Did it transition from non-null to null?
       if (gameState === 'playing' && prevGameStateRef.current === 'playing' && prevActivePlayRef.current) {
         setIsTransitioningTrick(true);
         setDisplayedActivePlay(prevActivePlayRef.current);
@@ -215,29 +218,26 @@ export const GameTable: React.FC<GameTableProps> = ({
         const winnerName = winningPlayer ? winningPlayer.name : 'Unknown';
         setTransitionWinnerName(winnerName);
 
-        const nextPlayer = players[turnIndex];
-        const nextPlayerName = nextPlayer ? (nextPlayer.id === playerId ? 'Your' : `${nextPlayer.name}'s`) : 'Unknown';
-        setTransitionNextPlayerName(nextPlayerName);
-
         const timer = setTimeout(() => {
           setIsTransitioningTrick(false);
           setDisplayedActivePlay(null);
           setTransitionWinnerName(null);
-          setTransitionNextPlayerName(null);
-        }, 1000);
+        }, 500); // 500ms (half a second)
+
+        // Clear refs immediately so subsequent renders during the transition do not trigger this again
+        prevActivePlayRef.current = null;
+        prevLastPlayerPlayedIdRef.current = null;
 
         return () => clearTimeout(timer);
       } else if (!isTransitioningTrick) {
         setDisplayedActivePlay(null);
+        prevActivePlayRef.current = null;
+        prevLastPlayerPlayedIdRef.current = null;
       }
     }
-  }, [activePlay, lastPlayerPlayedId, turnIndex, players, gameState, playerId, isTransitioningTrick]);
 
-  useEffect(() => {
-    prevActivePlayRef.current = activePlay;
-    prevLastPlayerPlayedIdRef.current = lastPlayerPlayedId;
     prevGameStateRef.current = gameState;
-  }, [activePlay, lastPlayerPlayedId, gameState]);
+  }, [activePlay, lastPlayerPlayedId, gameState, players]);
 
   // Refs to capture freshest hand/selected states without re-binding event listeners
   const localHandRef = useRef<Card[]>(localHand);
@@ -895,6 +895,11 @@ export const GameTable: React.FC<GameTableProps> = ({
           {/* Cards Played in the Center */}
           <div className="table-center">
             <div className={`table-cards-pool ${!displayedActivePlay ? 'empty' : ''}`}>
+              {isTransitioningTrick && (
+                <div className="trick-transition-small-popup">
+                  🏆 {transitionWinnerName} won the trick!
+                </div>
+              )}
               {!displayedActivePlay && isFirstPlayOfRound && (
                 <div className="first-play-instruction">Play cards containing 3♦ to start</div>
               )}
@@ -942,17 +947,6 @@ export const GameTable: React.FC<GameTableProps> = ({
                 });
               })()}
             </div>
-
-            {isTransitioningTrick && (
-              <div className="trick-transition-popup">
-                <div className="trick-transition-winner">
-                  🏆 {transitionWinnerName} won the trick!
-                </div>
-                <div className="trick-transition-next">
-                  {transitionNextPlayerName === 'Your' ? 'Your Turn' : `${transitionNextPlayerName} Turn`}
-                </div>
-              </div>
-            )}
           </div>
 
           {/* Previous Plays Panel (Left Side of Table) */}
