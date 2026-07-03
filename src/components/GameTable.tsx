@@ -610,7 +610,6 @@ export const GameTable: React.FC<GameTableProps> = ({
 
   const handlePointerDown = (e: React.PointerEvent, index: number) => {
     if (e.button !== 0) return; // Left click / touch only
-    if (isTransitioningTrick) return; // Disable card selection during trick transition
     
     dragStartIndexRef.current = index;
     dragCurrentIndexRef.current = index;
@@ -719,12 +718,8 @@ export const GameTable: React.FC<GameTableProps> = ({
     }
   }
 
-  if (isTransitioningTrick) {
-    canPlaySelected = false;
-  }
-
   const handlePlayClick = () => {
-    if (canPlaySelected && !hasActionedThisTurn && !isTransitioningTrick) {
+    if (canPlaySelected && !hasActionedThisTurn) {
       setHasActionedThisTurn(true);
       onPlayCards(selectedCards);
       setSelectedCardIds([]);
@@ -732,7 +727,7 @@ export const GameTable: React.FC<GameTableProps> = ({
   };
 
   const handlePassClick = () => {
-    if (isMyTurn && !isFirstPlayOfRound && activePlay && !hasActionedThisTurn && !isTransitioningTrick) {
+    if (isMyTurn && !isFirstPlayOfRound && activePlay && !hasActionedThisTurn) {
       setHasActionedThisTurn(true);
       onPass();
       setSelectedCardIds([]);
