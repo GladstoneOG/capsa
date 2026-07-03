@@ -222,7 +222,7 @@ export const GameTable: React.FC<GameTableProps> = ({
           setIsTransitioningTrick(false);
           setDisplayedActivePlay(null);
           setTransitionWinnerName(null);
-        }, 500); // 500ms (half a second)
+        }, 2000); // 2000ms (2 seconds)
 
         // Clear refs immediately so subsequent renders during the transition do not trigger this again
         prevActivePlayRef.current = null;
