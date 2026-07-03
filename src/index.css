@@ -3558,5 +3558,53 @@ input:checked + .slider:before {
   color: #ff7a00;
 }
 
+/* ==================== Capsa Banting Trick Transition Popup ==================== */
+.trick-transition-popup {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: rgba(15, 23, 42, 0.92);
+  backdrop-filter: blur(8px);
+  border: 2px solid var(--accent-gold, #fbbf24);
+  border-radius: 16px;
+  padding: 1.5rem 2.5rem;
+  z-index: 50;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.6), 0 10px 10px -5px rgba(0, 0, 0, 0.6);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  animation: trick-pop-in 0.3s cubic-bezier(0.18, 0.89, 0.32, 1.28) both;
+  pointer-events: none;
+}
+
+@keyframes trick-pop-in {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -30%) scale(0.8);
+  }
+  100% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+.trick-transition-winner {
+  font-size: 0.9rem;
+  color: var(--text-muted, #94a3b8);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 600;
+}
+
+.trick-transition-next {
+  font-size: 1.5rem;
+  color: var(--accent-gold, #fbbf24);
+  font-weight: 800;
+  text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+  white-space: nowrap;
+}
+
 
 

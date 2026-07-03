@@ -190,6 +190,55 @@ export const GameTable: React.FC<GameTableProps> = ({
     setHasActionedThisTurn(false);
   }, [turnIndex, activePlay, gameState]);
 
+  // Trick transition states
+  const [displayedActivePlay, setDisplayedActivePlay] = useState<Combination | null>(null);
+  const [isTransitioningTrick, setIsTransitioningTrick] = useState<boolean>(false);
+  const [transitionWinnerName, setTransitionWinnerName] = useState<string | null>(null);
+  const [transitionNextPlayerName, setTransitionNextPlayerName] = useState<string | null>(null);
+
+  const prevActivePlayRef = useRef<Combination | null>(null);
+  const prevLastPlayerPlayedIdRef = useRef<string | null>(null);
+  const prevGameStateRef = useRef<string>('lobby');
+
+  useEffect(() => {
+    if (activePlay) {
+      setIsTransitioningTrick(false);
+      setDisplayedActivePlay(activePlay);
+      setTransitionWinnerName(null);
+      setTransitionNextPlayerName(null);
+    } else {
+      if (gameState === 'playing' && prevGameStateRef.current === 'playing' && prevActivePlayRef.current) {
+        setIsTransitioningTrick(true);
+        setDisplayedActivePlay(prevActivePlayRef.current);
+
+        const winningPlayer = players.find(p => p.id === prevLastPlayerPlayedIdRef.current);
+        const winnerName = winningPlayer ? winningPlayer.name : 'Unknown';
+        setTransitionWinnerName(winnerName);
+
+        const nextPlayer = players[turnIndex];
+        const nextPlayerName = nextPlayer ? (nextPlayer.id === playerId ? 'Your' : `${nextPlayer.name}'s`) : 'Unknown';
+        setTransitionNextPlayerName(nextPlayerName);
+
+        const timer = setTimeout(() => {
+          setIsTransitioningTrick(false);
+          setDisplayedActivePlay(null);
+          setTransitionWinnerName(null);
+          setTransitionNextPlayerName(null);
+        }, 1000);
+
+        return () => clearTimeout(timer);
+      } else if (!isTransitioningTrick) {
+        setDisplayedActivePlay(null);
+      }
+    }
+  }, [activePlay, lastPlayerPlayedId, turnIndex, players, gameState, playerId, isTransitioningTrick]);
+
+  useEffect(() => {
+    prevActivePlayRef.current = activePlay;
+    prevLastPlayerPlayedIdRef.current = lastPlayerPlayedId;
+    prevGameStateRef.current = gameState;
+  }, [activePlay, lastPlayerPlayedId, gameState]);
+
   // Refs to capture freshest hand/selected states without re-binding event listeners
   const localHandRef = useRef<Card[]>(localHand);
   const selectedCardIdsRef = useRef<string[]>(selectedCardIds);
@@ -244,9 +293,9 @@ export const GameTable: React.FC<GameTableProps> = ({
 
   // Scattered card count excludes the active play in the middle
   const scatteredCardCount = useMemo(() => {
-    const activeCardsCount = activePlay?.cards?.length || 0;
+    const activeCardsCount = displayedActivePlay?.cards?.length || 0;
     return Math.max(0, totalPlayedCards - activeCardsCount);
-  }, [totalPlayedCards, activePlay]);
+  }, [totalPlayedCards, displayedActivePlay]);
 
   // Play history for displaying previous plays
   const [playHistory, setPlayHistory] = useState<{ playerName: string; cards: Card[] }[]>([]);
@@ -385,7 +434,7 @@ export const GameTable: React.FC<GameTableProps> = ({
   useEffect(() => {
     if (timerRef.current) clearInterval(timerRef.current);
 
-    if (gameState !== 'playing' || rules.turnDuration === 0) {
+    if (gameState !== 'playing' || rules.turnDuration === 0 || isTransitioningTrick) {
       setTimeLeft(rules.turnDuration);
       return;
     }
@@ -423,7 +472,7 @@ export const GameTable: React.FC<GameTableProps> = ({
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, [turnIndex, gameState, isMyTurn, isFirstPlayOfRound, rules.turnDuration]);
+  }, [turnIndex, gameState, isMyTurn, isFirstPlayOfRound, rules.turnDuration, isTransitioningTrick]);
 
   // Toggle sound
   const toggleSound = () => {
@@ -561,6 +610,7 @@ export const GameTable: React.FC<GameTableProps> = ({
 
   const handlePointerDown = (e: React.PointerEvent, index: number) => {
     if (e.button !== 0) return; // Left click / touch only
+    if (isTransitioningTrick) return; // Disable card selection during trick transition
     
     dragStartIndexRef.current = index;
     dragCurrentIndexRef.current = index;
@@ -669,8 +719,12 @@ export const GameTable: React.FC<GameTableProps> = ({
     }
   }
 
+  if (isTransitioningTrick) {
+    canPlaySelected = false;
+  }
+
   const handlePlayClick = () => {
-    if (canPlaySelected && !hasActionedThisTurn) {
+    if (canPlaySelected && !hasActionedThisTurn && !isTransitioningTrick) {
       setHasActionedThisTurn(true);
       onPlayCards(selectedCards);
       setSelectedCardIds([]);
@@ -678,7 +732,7 @@ export const GameTable: React.FC<GameTableProps> = ({
   };
 
   const handlePassClick = () => {
-    if (isMyTurn && !isFirstPlayOfRound && activePlay && !hasActionedThisTurn) {
+    if (isMyTurn && !isFirstPlayOfRound && activePlay && !hasActionedThisTurn && !isTransitioningTrick) {
       setHasActionedThisTurn(true);
       onPass();
       setSelectedCardIds([]);
@@ -840,14 +894,15 @@ export const GameTable: React.FC<GameTableProps> = ({
 
           {/* Cards Played in the Center */}
           <div className="table-center">
-            <div className={`table-cards-pool ${!activePlay ? 'empty' : ''}`}>
-              {!activePlay && isFirstPlayOfRound && (
+            <div className={`table-cards-pool ${!displayedActivePlay ? 'empty' : ''}`}>
+              {!displayedActivePlay && isFirstPlayOfRound && (
                 <div className="first-play-instruction">Play cards containing 3♦ to start</div>
               )}
               {(() => {
-                if (!activePlay) return null;
+                if (!displayedActivePlay) return null;
                 const seatedPlayers = getSeatedPlayers();
-                const seatedPlay = seatedPlayers.find(sp => sp.player.id === lastPlayerPlayedId);
+                const lastPlayedId = isTransitioningTrick ? prevLastPlayerPlayedIdRef.current : lastPlayerPlayedId;
+                const seatedPlay = seatedPlayers.find(sp => sp.player.id === lastPlayedId);
                 const relativeSeat = seatedPlay ? seatedPlay.seat : 0;
 
                 const throwOffsets: Record<number, { x: string; y: string }> = {
@@ -858,8 +913,8 @@ export const GameTable: React.FC<GameTableProps> = ({
                 };
                 const throwOffset = throwOffsets[relativeSeat] || { x: '0px', y: '250px' };
 
-                return activePlay.cards.map((c, i) => {
-                  const cardsCount = activePlay.cards.length;
+                return displayedActivePlay.cards.map((c, i) => {
+                  const cardsCount = displayedActivePlay.cards.length;
                   const mid = (cardsCount - 1) / 2;
                   const rotation = cardsCount > 1 ? (i - mid) * 8 : 0;
                   const xOffset = cardsCount > 1 ? (i - mid) * 15 : 0;
@@ -887,6 +942,17 @@ export const GameTable: React.FC<GameTableProps> = ({
                 });
               })()}
             </div>
+
+            {isTransitioningTrick && (
+              <div className="trick-transition-popup">
+                <div className="trick-transition-winner">
+                  🏆 {transitionWinnerName} won the trick!
+                </div>
+                <div className="trick-transition-next">
+                  {transitionNextPlayerName === 'Your' ? 'Your Turn' : `${transitionNextPlayerName} Turn`}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Previous Plays Panel (Left Side of Table) */}
@@ -916,7 +982,7 @@ export const GameTable: React.FC<GameTableProps> = ({
           )}
 
           {/* Last Play Panel (Right Side of Table) */}
-          {activePlay && (
+          {displayedActivePlay && (
             <div className={`last-play-panel ${isLastPlayMinimized ? 'minimized' : ''}`}>
               <div className="last-play-title" onClick={() => isMobile && setIsLastPlayMinimized(!isLastPlayMinimized)} style={isMobile ? { cursor: 'pointer' } : undefined}>
                 Last Play
@@ -925,10 +991,10 @@ export const GameTable: React.FC<GameTableProps> = ({
               {!isLastPlayMinimized && (
                 <>
                   <div className="last-play-player">
-                    By: <span>{players.find((p) => p.id === lastPlayerPlayedId)?.name || 'Unknown'}</span>
+                    By: <span>{players.find((p) => p.id === (isTransitioningTrick ? prevLastPlayerPlayedIdRef.current : lastPlayerPlayedId))?.name || 'Unknown'}</span>
                   </div>
                   <div className="last-play-combo">
-                    {getComboDescription(activePlay)}
+                    {getComboDescription(displayedActivePlay)}
                   </div>
                 </>
               )}
