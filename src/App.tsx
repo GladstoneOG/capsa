@@ -221,6 +221,7 @@ export default function App() {
   const [turnIndex, setTurnIndex] = useState<number>(0);
   const [activePlay, setActivePlay] = useState<Combination | null>(null);
   const [lastPlayerPlayedId, setLastPlayerPlayedId] = useState<string | null>(null);
+  const [lastTrick, setLastTrick] = useState<{ winnerId: string; cards: Card[]; timestamp: number } | null>(null);
   const [gameState, setGameState] = useState<'lobby' | 'playing' | 'roundover' | 'gameover'>('lobby');
   const [rules, setRules] = useState<RoomRules>({
     pointsToWin: 15,
@@ -308,6 +309,8 @@ export default function App() {
   const [isChatOpen, setIsChatOpen] = useState<boolean>(false);
   const [unreadChatCount, setUnreadChatCount] = useState<number>(0);
   const [socketId, setSocketId] = useState<string>('');
+  const [isConnected, setIsConnected] = useState<boolean>(true);
+  const [localPlayerId, setLocalPlayerId] = useState<string>('');
   const isChatOpenRef = useRef<boolean>(false);
   const chatMessagesContainerRef = useRef<HTMLDivElement | null>(null);
 
@@ -716,7 +719,7 @@ export default function App() {
         e.preventDefault();
 
         // Host verification for dev console toggle
-        const localPlayer = (players || []).find((p: any) => p.id === socketId || p.id === socketRef.current?.id);
+        const localPlayer = (players || []).find((p: any) => p.id === localPlayerId || p.id === socketRef.current?.id);
         const isHost = localPlayer?.isHost;
         const canUseConsole = isSinglePlayer || isHost;
 
@@ -727,7 +730,7 @@ export default function App() {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [screen, gameType, gameState, isSinglePlayer, players, socketId]);
+  }, [screen, gameType, gameState, isSinglePlayer, players, localPlayerId]);
 
   // ==================== Socket.io Handlers ====================
   const applyRoomStateFromServer = (room: any, nextScreen?: Screen) => {
@@ -736,6 +739,7 @@ export default function App() {
     setTurnIndex(room.turnIndex || 0);
     setActivePlay(room.activePlay || null);
     setLastPlayerPlayedId(room.lastPlayerPlayedId || null);
+    setLastTrick(room.lastTrick || null);
     setRules(room.rules);
     setGameState(room.gameState);
     setGameType(room.gameType || 'capsa');
@@ -802,17 +806,24 @@ export default function App() {
     const socket = io(finalUrl, {
       transports: ['websocket'],
       reconnection: true,
-      reconnectionDelay: 1000,
-      reconnectionDelayMax: 5000,
+      reconnectionDelay: 500,
+      reconnectionDelayMax: 3000,
       timeout: 20000,
     });
 
     socketRef.current = socket;
 
     socket.on('connect', () => {
-      setSocketId(socket.id || '');
+      setIsConnected(true);
       const wasReconnect = hasConnectedRef.current;
       hasConnectedRef.current = true;
+
+      // Only update socketId and localPlayerId immediately if not reconnecting.
+      // If reconnecting, we wait for room-resumed to update them together so we don't blink/mismatch.
+      if (!wasReconnect) {
+        setSocketId(socket.id || '');
+        setLocalPlayerId(socket.id || '');
+      }
 
       if (wasReconnect && !isSinglePlayerRef.current && roomCodeRef.current && screenRef.current !== 'menu') {
         socket.emit('resume-room', {
@@ -825,11 +836,15 @@ export default function App() {
     });
 
     socket.on('disconnect', () => {
+      setIsConnected(false);
       setSocketId('');
+      // Intentionally do NOT clear localPlayerId to avoid table blinking blank during reconnecting
     });
 
     if (socket.connected) {
+      setIsConnected(true);
       setSocketId(socket.id || '');
+      setLocalPlayerId(socket.id || '');
     }
 
     socket.on('connect_error', () => {
@@ -837,6 +852,8 @@ export default function App() {
     });
 
     socket.on('room-created', ({ roomCode, room }) => {
+      setSocketId(socket.id || '');
+      setLocalPlayerId(socket.id || '');
       setRoomCode(roomCode);
       setPlayers(room.players);
       setRules(room.rules);
@@ -871,6 +888,8 @@ export default function App() {
     });
 
     socket.on('room-joined', ({ room }) => {
+      setSocketId(socket.id || '');
+      setLocalPlayerId(socket.id || '');
       applyRoomStateFromServer(room, 'lobby');
       setErrorMsg('');
     });
@@ -903,6 +922,8 @@ export default function App() {
     });
 
     socket.on('room-resumed', (room) => {
+      setSocketId(socket.id || '');
+      setLocalPlayerId(socket.id || '');
       applyRoomStateFromServer(room, room.gameState === 'lobby' ? 'lobby' : 'table');
       setErrorMsg('');
     });
@@ -910,6 +931,7 @@ export default function App() {
     socket.on('join-error', (msg) => {
       setErrorMsg(msg);
       socket.disconnect();
+      setScreen('menu');
     });
 
     socket.on('start-error', (msg) => {
@@ -922,6 +944,7 @@ export default function App() {
       setTurnIndex(room.turnIndex);
       setActivePlay(room.activePlay);
       setLastPlayerPlayedId(room.lastPlayerPlayedId);
+      setLastTrick(room.lastTrick || null);
       setRules(room.rules);
       setGameState(room.gameState);
       setGameType(room.gameType || 'capsa');
@@ -981,6 +1004,7 @@ export default function App() {
       setTurnIndex(room.turnIndex);
       setActivePlay(room.activePlay);
       setLastPlayerPlayedId(room.lastPlayerPlayedId);
+      setLastTrick(room.lastTrick || null);
       setGameState(room.gameState);
       setGameType(room.gameType || 'capsa');
       if (room.gameType === 'uno') {
@@ -1259,9 +1283,9 @@ export default function App() {
       return;
     }
     // Only host client coordinates bot logic for multiplayer
-    const localPlayer = (stateRef.current.players || []).find((p: any) => p.id === socketId || p.id === socketRef.current?.id);
+    const localPlayer = (stateRef.current.players || []).find((p: any) => p.id === localPlayerId || p.id === socketRef.current?.id);
     const isHost = localPlayer?.isHost;
-    console.log('[BOT COORD] localPlayer:', localPlayer?.name, 'isHost:', isHost, 'socketId:', socketId, 'socketRef ID:', socketRef.current?.id);
+    console.log('[BOT COORD] localPlayer:', localPlayer?.name, 'isHost:', isHost, 'localPlayerId:', localPlayerId, 'socketId:', socketId, 'socketRef ID:', socketRef.current?.id);
     if (!isHost) return;
 
     if (roomState.gameType === 'sumo') {
@@ -5384,6 +5408,7 @@ export default function App() {
     setTurnIndex(startIdx);
     setActivePlay(null);
     setLastPlayerPlayedId(null);
+    setLastTrick(null);
     setGameState('playing');
     setScreen('table');
 
@@ -5836,6 +5861,7 @@ export default function App() {
       if (allOthersPassed) {
         if (p.cards.length === 0) {
           // Hibah / Gift: Clear active play and pass lead clockwise to next player with cards
+          setLastTrick({ winnerId: pId, cards: resolvedCards, timestamp: Date.now() });
           setActivePlay(null);
           setLastPlayerPlayedId(null);
 
@@ -5873,6 +5899,7 @@ export default function App() {
           setChatMessages((prevMsgs) => [...prevMsgs, trickSysMsg]);
         } else {
           // Trick won by the current player (who still has cards)
+          setLastTrick({ winnerId: pId, cards: resolvedCards, timestamp: Date.now() });
           setActivePlay(null);
           setLastPlayerPlayedId(null);
 
@@ -5947,6 +5974,11 @@ export default function App() {
       const lastPlayWinnerIdx = updated.findIndex((player) => player.id === currentLastPlayerPlayedId);
       const lastPlayWinnerName = lastPlayWinnerIdx !== -1 ? updated[lastPlayWinnerIdx].name : 'Unknown';
 
+      setLastTrick({
+        winnerId: currentLastPlayerPlayedId || '',
+        cards: currentActivePlay ? currentActivePlay.cards : [],
+        timestamp: Date.now()
+      });
       setActivePlay(null);
       setLastPlayerPlayedId(null);
 
@@ -6074,6 +6106,7 @@ export default function App() {
       socketRef.current = null;
     }
     setSocketId('');
+    setLocalPlayerId('');
     setIsSinglePlayer(false);
     setRoomCode('');
     setGameState('lobby');
@@ -6104,6 +6137,39 @@ export default function App() {
         overflowY: (screen === 'menu' || screen === 'lobby') ? 'auto' : 'hidden',
       }}
     >
+      {/* Reconnection status banner */}
+      {screen !== 'menu' && !isConnected && !isSinglePlayer && (
+        <div style={{
+          position: 'fixed',
+          top: '12px',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          zIndex: 99999,
+          background: 'rgba(239, 68, 68, 0.95)',
+          border: '1px solid rgba(255, 255, 255, 0.2)',
+          color: '#ffffff',
+          padding: '8px 16px',
+          borderRadius: '20px',
+          boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          fontSize: '0.85rem',
+          fontWeight: 'bold',
+          backdropFilter: 'blur(4px)',
+          fontFamily: "'Outfit', sans-serif",
+        }}>
+          <span style={{ fontSize: '1rem', display: 'inline-block', animation: 'spin 2s linear infinite' }}>⏳</span>
+          <span>Connection lost. Reconnecting...</span>
+          <style>{`
+            @keyframes spin {
+              from { transform: rotate(0deg); }
+              to { transform: rotate(360deg); }
+            }
+          `}</style>
+        </div>
+      )}
+
       {/* Portrait Orientation Lock Overlay */}
       {isPortrait && (
         <div className="portrait-lock-overlay">
@@ -6861,7 +6927,7 @@ export default function App() {
 
             <div className="lobby-players-grid">
               {players.map((p) => {
-                const isLocal = p.id === 'local_user' || p.id === socketId;
+                const isLocal = p.id === 'local_user' || p.id === localPlayerId;
                 const isHostPlayer = p.isHost;
 
                 return (
@@ -6880,7 +6946,7 @@ export default function App() {
                     </div>
 
                     {/* Allow host to kick other players / bots */}
-                    {players.find(pl => isSinglePlayer ? pl.id === 'local_user' : pl.id === socketId)?.isHost && !isLocal && (
+                    {players.find(pl => isSinglePlayer ? pl.id === 'local_user' : pl.id === localPlayerId)?.isHost && !isLocal && (
                       <button
                         className="kick-btn"
                         onClick={() => {
@@ -6919,7 +6985,7 @@ export default function App() {
               </button>
 
               {/* Ready / Start Actions */}
-              {players.find(pl => isSinglePlayer ? pl.id === 'local_user' : pl.id === socketId)?.isHost ? (
+              {players.find(pl => isSinglePlayer ? pl.id === 'local_user' : pl.id === localPlayerId)?.isHost ? (
                 <button
                   className="btn-gold"
                   style={{ flexGrow: 1 }}
@@ -6934,7 +7000,7 @@ export default function App() {
                   style={{ flexGrow: 1 }}
                   onClick={toggleReadyOnline}
                 >
-                  {players.find(p => p.id === socketId)?.isReady ? 'Cancel Ready' : 'Ready Up'}
+                  {players.find(p => p.id === localPlayerId)?.isReady ? 'Cancel Ready' : 'Ready Up'}
                 </button>
               )}
             </div>
@@ -6950,7 +7016,7 @@ export default function App() {
             {gameType !== 'bowmasters' && (
               <div className="settings-row">
                 <label>{gameType === 'monopoly' ? 'Ruleset' : 'Target Points to Win'}</label>
-                {players.find(pl => isSinglePlayer ? pl.id === 'local_user' : pl.id === socketId)?.isHost ? (
+                {players.find(pl => isSinglePlayer ? pl.id === 'local_user' : pl.id === localPlayerId)?.isHost ? (
                   gameType === 'monopoly' ? (
                     <select
                       value={rules.ruleset || 'Default'}
@@ -7002,7 +7068,7 @@ export default function App() {
               <>
                 <div className="settings-row">
                   <label>Battle Mode</label>
-                  {players.find(pl => isSinglePlayer ? pl.id === 'local_user' : pl.id === socketId)?.isHost ? (
+                  {players.find(pl => isSinglePlayer ? pl.id === 'local_user' : pl.id === localPlayerId)?.isHost ? (
                     <select
                       value={rules.mode || '1v1'}
                       onChange={(e) => {
@@ -7022,7 +7088,7 @@ export default function App() {
 
                 <div className="settings-row">
                   <label>Wind Influence</label>
-                  {players.find(pl => isSinglePlayer ? pl.id === 'local_user' : pl.id === socketId)?.isHost ? (
+                  {players.find(pl => isSinglePlayer ? pl.id === 'local_user' : pl.id === localPlayerId)?.isHost ? (
                     <select
                       value={rules.windEnabled === false ? 'false' : 'true'}
                       onChange={(e) => {
@@ -7047,7 +7113,7 @@ export default function App() {
                 {/* Starting Cash */}
                 <div className="settings-row">
                   <label>Starting Cash</label>
-                  {players.find(pl => isSinglePlayer ? pl.id === 'local_user' : pl.id === socketId)?.isHost ? (
+                  {players.find(pl => isSinglePlayer ? pl.id === 'local_user' : pl.id === localPlayerId)?.isHost ? (
                     <select
                       value={rules.startingCash !== undefined ? rules.startingCash : 1500}
                       onChange={(e) => {
@@ -7074,7 +7140,7 @@ export default function App() {
                 {/* Turn Limit */}
                 <div className="settings-row">
                   <label>Turn Limit</label>
-                  {players.find(pl => isSinglePlayer ? pl.id === 'local_user' : pl.id === socketId)?.isHost ? (
+                  {players.find(pl => isSinglePlayer ? pl.id === 'local_user' : pl.id === localPlayerId)?.isHost ? (
                     <select
                       value={rules.turnLimit !== undefined ? rules.turnLimit : 0}
                       onChange={(e) => {
@@ -7103,7 +7169,7 @@ export default function App() {
             {gameType !== 'monopoly' && (
               <div className="settings-row">
                 <label>Turn Limit Duration</label>
-                {players.find(pl => isSinglePlayer ? pl.id === 'local_user' : pl.id === socketId)?.isHost ? (
+                {players.find(pl => isSinglePlayer ? pl.id === 'local_user' : pl.id === localPlayerId)?.isHost ? (
                   <select
                     value={rules.turnDuration}
                     onChange={(e) => {
@@ -7130,7 +7196,7 @@ export default function App() {
                 {/* Bombing Single 2 Toggle */}
                 <div className="settings-row">
                   <label>Slam Single 2 with Bombs</label>
-                  {players.find(pl => isSinglePlayer ? pl.id === 'local_user' : pl.id === socketId)?.isHost ? (
+                  {players.find(pl => isSinglePlayer ? pl.id === 'local_user' : pl.id === localPlayerId)?.isHost ? (
                     <label className="switch">
                       <input
                         type="checkbox"
@@ -7151,7 +7217,7 @@ export default function App() {
                 {/* Bombing Pair of 2s Toggle */}
                 <div className="settings-row">
                   <label>Slam Pair 2s with Bombs</label>
-                  {players.find(pl => isSinglePlayer ? pl.id === 'local_user' : pl.id === socketId)?.isHost ? (
+                  {players.find(pl => isSinglePlayer ? pl.id === 'local_user' : pl.id === localPlayerId)?.isHost ? (
                     <label className="switch">
                       <input
                         type="checkbox"
@@ -7176,7 +7242,7 @@ export default function App() {
                 {/* Uno Stacking Toggle */}
                 <div className="settings-row">
                   <label>+2 and +4 Stacking</label>
-                  {players.find(pl => isSinglePlayer ? pl.id === 'local_user' : pl.id === socketId)?.isHost ? (
+                  {players.find(pl => isSinglePlayer ? pl.id === 'local_user' : pl.id === localPlayerId)?.isHost ? (
                     <label className="switch">
                       <input
                         type="checkbox"
@@ -7197,7 +7263,7 @@ export default function App() {
                 {/* Uno Jump-In Toggle */}
                 <div className="settings-row">
                   <label>Jump-In Rules</label>
-                  {players.find(pl => isSinglePlayer ? pl.id === 'local_user' : pl.id === socketId)?.isHost ? (
+                  {players.find(pl => isSinglePlayer ? pl.id === 'local_user' : pl.id === localPlayerId)?.isHost ? (
                     <label className="switch">
                       <input
                         type="checkbox"
@@ -7218,7 +7284,7 @@ export default function App() {
                 {/* Uno 7-Swap Toggle */}
                 <div className="settings-row">
                   <label>7-Swap Rules</label>
-                  {players.find(pl => isSinglePlayer ? pl.id === 'local_user' : pl.id === socketId)?.isHost ? (
+                  {players.find(pl => isSinglePlayer ? pl.id === 'local_user' : pl.id === localPlayerId)?.isHost ? (
                     <label className="switch">
                       <input
                         type="checkbox"
@@ -7239,7 +7305,7 @@ export default function App() {
                 {/* Uno 0-Rotate Toggle */}
                 <div className="settings-row">
                   <label>0-Rotate Rules</label>
-                  {players.find(pl => isSinglePlayer ? pl.id === 'local_user' : pl.id === socketId)?.isHost ? (
+                  {players.find(pl => isSinglePlayer ? pl.id === 'local_user' : pl.id === localPlayerId)?.isHost ? (
                     <label className="switch">
                       <input
                         type="checkbox"
@@ -7260,7 +7326,7 @@ export default function App() {
                 {/* Uno Draw Till Play Toggle */}
                 <div className="settings-row">
                   <label>Draw Till Play Rules</label>
-                  {players.find(pl => isSinglePlayer ? pl.id === 'local_user' : pl.id === socketId)?.isHost ? (
+                  {players.find(pl => isSinglePlayer ? pl.id === 'local_user' : pl.id === localPlayerId)?.isHost ? (
                     <label className="switch">
                       <input
                         type="checkbox"
@@ -7290,7 +7356,7 @@ export default function App() {
               <>
                 <div className="settings-row">
                   <label>Roll 6 Extra Turn</label>
-                  {players.find(pl => isSinglePlayer ? pl.id === 'local_user' : pl.id === socketId)?.isHost ? (
+                  {players.find(pl => isSinglePlayer ? pl.id === 'local_user' : pl.id === localPlayerId)?.isHost ? (
                     <label className="switch">
                       <input
                         type="checkbox"
@@ -7311,7 +7377,7 @@ export default function App() {
             )}
 
             {/* Seat fill with bot buttons (only for host) */}
-            {players.find(pl => isSinglePlayer ? pl.id === 'local_user' : pl.id === socketId)?.isHost && players.length < (gameType === 'uno' ? 8 : 4) && (
+            {players.find(pl => isSinglePlayer ? pl.id === 'local_user' : pl.id === localPlayerId)?.isHost && players.length < (gameType === 'uno' ? 8 : 4) && (
               <div style={{ marginTop: 'auto', paddingTop: '1rem', display: 'flex', flexDirection: 'column' }}>
                 <button
                   className="btn-primary btn-add-bot"
@@ -7361,11 +7427,12 @@ export default function App() {
 
       {screen === 'table' && gameType === 'capsa' && (
         <GameTable
-          playerId={isSinglePlayer ? 'local_user' : socketId}
+          playerId={isSinglePlayer ? 'local_user' : localPlayerId}
           players={players}
           turnIndex={turnIndex}
           activePlay={activePlay}
           lastPlayerPlayedId={lastPlayerPlayedId}
+          lastTrick={lastTrick}
           gameState={gameState}
           rules={rules}
           onPlayCards={isSinglePlayer ? (cards) => playCardsSingle('local_user', cards) : playCardsOnline}
@@ -7374,14 +7441,14 @@ export default function App() {
           onLeaveRoom={leaveRoom}
           isSinglePlayer={isSinglePlayer}
           roomCode={roomCode}
-          isHost={players.find(pl => isSinglePlayer ? pl.id === 'local_user' : pl.id === socketId)?.isHost || false}
+          isHost={players.find(pl => isSinglePlayer ? pl.id === 'local_user' : pl.id === localPlayerId)?.isHost || false}
           isMobile={isMobileLandscape}
         />
       )}
 
       {screen === 'table' && gameType === 'uno' && (
         <UnoTable
-          playerId={isSinglePlayer ? 'local_user' : socketId}
+          playerId={isSinglePlayer ? 'local_user' : localPlayerId}
           players={players}
           turnIndex={turnIndex}
           currentColor={unoCurrentColor}
@@ -7405,7 +7472,7 @@ export default function App() {
             drawTillPlay: !!rules.drawTillPlay,
           }}
           roomCode={roomCode}
-          isHost={players.find(pl => isSinglePlayer ? pl.id === 'local_user' : pl.id === socketId)?.isHost || false}
+          isHost={players.find(pl => isSinglePlayer ? pl.id === 'local_user' : pl.id === localPlayerId)?.isHost || false}
           isSinglePlayer={isSinglePlayer}
           onPlayCard={isSinglePlayer ? (card, chosenColor, isJumpIn) => playCardUnoSingle(card, chosenColor, isJumpIn) : (card, chosenColor, isJumpIn) => socketRef.current?.emit('play-card', { roomCode, cards: [card], chosenColor, isJumpIn })}
           onDrawCard={isSinglePlayer ? drawCardUnoSingle : () => socketRef.current?.emit('draw-card', { roomCode })}
@@ -7420,7 +7487,7 @@ export default function App() {
 
       {screen === 'table' && gameType === 'snakes_ladders' && (
         <SnakesLaddersTable
-          playerId={isSinglePlayer ? 'local_user' : socketId}
+          playerId={isSinglePlayer ? 'local_user' : localPlayerId}
           players={players}
           turnIndex={turnIndex}
           dice={snakesLaddersDice}
@@ -7429,7 +7496,7 @@ export default function App() {
           lastAction={snakesLaddersLastAction}
           gameState={gameState}
           roomCode={roomCode}
-          isHost={players.find(pl => isSinglePlayer ? pl.id === 'local_user' : pl.id === socketId)?.isHost || false}
+          isHost={players.find(pl => isSinglePlayer ? pl.id === 'local_user' : pl.id === localPlayerId)?.isHost || false}
           isSinglePlayer={isSinglePlayer}
           rules={rules}
           onRollDice={isSinglePlayer ? rollDiceSnakesLaddersSingle : () => socketRef.current?.emit('snakes-ladders-action', { roomCode, action: 'roll-dice' })}
@@ -7441,7 +7508,7 @@ export default function App() {
 
       {screen === 'table' && gameType === 'bowmasters' && (
         <BowmastersTable
-          playerId={isSinglePlayer ? 'local_user' : socketId}
+          playerId={isSinglePlayer ? 'local_user' : localPlayerId}
           players={players}
           turnOrder={bowmastersTurnOrder}
           turnIndex={bowmastersTurnIdx}
@@ -7451,7 +7518,7 @@ export default function App() {
           phase={bowmastersPhase}
           gameState={gameState}
           roomCode={roomCode}
-          isHost={players.find(pl => isSinglePlayer ? pl.id === 'local_user' : pl.id === socketId)?.isHost || false}
+          isHost={players.find(pl => isSinglePlayer ? pl.id === 'local_user' : pl.id === localPlayerId)?.isHost || false}
           isSinglePlayer={isSinglePlayer}
           rules={rules}
           onBowmastersAction={isSinglePlayer ? handleBowmastersActionSingle : handleBowmastersActionMultiplayer}
@@ -7462,10 +7529,10 @@ export default function App() {
 
       {screen === 'table' && gameType === 'sumo' && (
         <SumoTable
-          playerId={isSinglePlayer ? 'local_user' : socketId}
+          playerId={isSinglePlayer ? 'local_user' : localPlayerId}
           players={players}
           roomCode={roomCode}
-          isHost={players.find(pl => isSinglePlayer ? pl.id === 'local_user' : pl.id === socketId)?.isHost || false}
+          isHost={players.find(pl => isSinglePlayer ? pl.id === 'local_user' : pl.id === localPlayerId)?.isHost || false}
           isSinglePlayer={isSinglePlayer}
           rules={rules}
           gameState={gameState}
@@ -7485,7 +7552,7 @@ export default function App() {
       {screen === 'table' && gameType === 'monopoly' && (
         <>
           <MonopolyTable
-            playerId={isSinglePlayer ? 'local_user' : socketId}
+            playerId={isSinglePlayer ? 'local_user' : localPlayerId}
             players={players as any}
             turnIndex={turnIndex}
             monopolyBoard={monopolyBoard}
@@ -7500,7 +7567,7 @@ export default function App() {
             tradeRejectedName={monopolyTradeRejectedName}
             gameState={gameState}
             roomCode={roomCode}
-            isHost={players.find(pl => isSinglePlayer ? pl.id === 'local_user' : pl.id === socketId)?.isHost || false}
+            isHost={players.find(pl => isSinglePlayer ? pl.id === 'local_user' : pl.id === localPlayerId)?.isHost || false}
             isSinglePlayer={isSinglePlayer}
             rules={rules}
             monopolyTurnCount={monopolyTurnCount}
@@ -7585,7 +7652,7 @@ export default function App() {
                   );
                 }
 
-                const isMe = msg.senderId === 'local_user' || msg.senderId === socketId;
+                const isMe = msg.senderId === 'local_user' || msg.senderId === localPlayerId;
                 return (
                   <div key={msg.id} className={`chat-message-row ${isMe ? 'me' : 'other'}`}>
                     <div className="chat-message-bubble">

@@ -2,6 +2,7 @@ import express from 'express';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 import cors from 'cors';
+import os from 'os';
 import * as capsaEngine from './games/capsa.js';
 import * as unoEngine from './games/uno.js';
 import * as monopolyEngine from './games/monopoly.js';
@@ -391,11 +392,16 @@ io.on('connection', (socket) => {
   socket.on('resume-room', ({ roomCode, playerName, avatar, sessionId }) => {
     const code = roomCode?.toUpperCase();
     const room = rooms.get(code);
-    if (!room) return;
+    if (!room) {
+      socket.emit('join-error', 'Room not found.');
+      return;
+    }
 
     const disconnectedPlayer = findDisconnectedPlayer(room, sessionId);
     if (disconnectedPlayer) {
       restoreDisconnectedPlayer(room, code, disconnectedPlayer, socket, { sessionId, playerName, avatar });
+    } else {
+      socket.emit('join-error', 'Session not found in room.');
     }
   });
 
@@ -870,7 +876,28 @@ io.on('connection', (socket) => {
   });
 });
 
+function getLocalIpAddresses() {
+  const addresses = [];
+  const interfaces = os.networkInterfaces();
+  for (const name of Object.keys(interfaces)) {
+    for (const net of interfaces[name]) {
+      if (net.family === 'IPv4' && !net.internal) {
+        addresses.push({ interface: name, address: net.address });
+      }
+    }
+  }
+  return addresses;
+}
+
 const PORT = process.env.PORT || 3001;
-httpServer.listen(PORT, () => {
-  console.log(`Capsa Banting Server running on port ${PORT}`);
+httpServer.listen(PORT, '0.0.0.0', () => {
+  const ips = getLocalIpAddresses();
+  console.log(`Capsa Banting Server running on:`);
+  console.log(`  - Local:   http://localhost:${PORT}`);
+  if (ips.length > 0) {
+    console.log(`  - Network (Active IPs):`);
+    ips.forEach(ip => {
+      console.log(`    * [${ip.interface}] http://${ip.address}:${PORT}`);
+    });
+  }
 });

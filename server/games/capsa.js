@@ -113,6 +113,7 @@ export function startRound(room, io) {
   room.roundNumber += 1;
   room.activePlay = null;
   room.lastPlayerPlayedId = null;
+  room.lastTrick = null;
 
   const deck = shuffle(createDeck());
   room.players.forEach((p, idx) => {
@@ -245,6 +246,11 @@ export function playCards(room, socket, { cards, comboType }, io) {
 
   if (allOthersPassed) {
     if (remainingCards.length === 0) {
+      room.lastTrick = {
+        winnerId: currentPlayer.id,
+        cards: cards,
+        timestamp: Date.now()
+      };
       room.activePlay = null;
       room.lastPlayerPlayedId = null;
 
@@ -277,6 +283,11 @@ export function playCards(room, socket, { cards, comboType }, io) {
         system: true,
       });
     } else {
+      room.lastTrick = {
+        winnerId: currentPlayer.id,
+        cards: cards,
+        timestamp: Date.now()
+      };
       room.activePlay = null;
       room.lastPlayerPlayedId = null;
 
@@ -334,6 +345,11 @@ export function passTurn(room, socket, io) {
     const lastPlayer = room.players[lastPlayerIdx];
     const lastPlayerName = lastPlayer ? lastPlayer.name : 'Unknown';
 
+    room.lastTrick = {
+      winnerId: room.lastPlayerPlayedId,
+      cards: room.activePlay ? room.activePlay.cards : [],
+      timestamp: Date.now()
+    };
     room.activePlay = null;
     room.lastPlayerPlayedId = null;
 

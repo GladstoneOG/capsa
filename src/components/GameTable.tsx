@@ -24,6 +24,7 @@ interface GameTableProps {
   turnIndex: number;
   activePlay: Combination | null;
   lastPlayerPlayedId: string | null;
+  lastTrick: { winnerId: string; cards: Card[]; timestamp: number } | null;
   gameState: 'lobby' | 'playing' | 'roundover' | 'gameover';
   rules: {
     pointsToWin: number;
@@ -156,6 +157,7 @@ export const GameTable: React.FC<GameTableProps> = ({
   turnIndex,
   activePlay,
   lastPlayerPlayedId,
+  lastTrick,
   gameState,
   rules,
   onPlayCards,
@@ -195,49 +197,57 @@ export const GameTable: React.FC<GameTableProps> = ({
   const [isTransitioningTrick, setIsTransitioningTrick] = useState<boolean>(false);
   const [transitionWinnerName, setTransitionWinnerName] = useState<string | null>(null);
 
-  const prevActivePlayRef = useRef<Combination | null>(null);
-  const prevLastPlayerPlayedIdRef = useRef<string | null>(null);
   const prevGameStateRef = useRef<string>('lobby');
+  const prevLastTrickTimestampRef = useRef<number>(0);
 
   useEffect(() => {
+    // If we are not actively playing, immediately clear/reset any trick transitions
+    if (gameState !== 'playing') {
+      setIsTransitioningTrick(false);
+      setDisplayedActivePlay(null);
+      setTransitionWinnerName(null);
+      prevGameStateRef.current = gameState;
+      return;
+    }
+
+    // Check for a new trick win broadcast from the engine
+    if (lastTrick && lastTrick.timestamp !== prevLastTrickTimestampRef.current) {
+      prevLastTrickTimestampRef.current = lastTrick.timestamp;
+
+      setIsTransitioningTrick(true);
+      
+      const winningPlayer = players.find(p => p.id === lastTrick.winnerId);
+      const winnerName = winningPlayer ? winningPlayer.name : 'Unknown';
+      setTransitionWinnerName(winnerName);
+
+      setDisplayedActivePlay({
+        type: lastTrick.cards.length === 1 ? 'single' : lastTrick.cards.length === 2 ? 'pair' : lastTrick.cards.length === 3 ? 'tris' : 'unknown',
+        cards: lastTrick.cards
+      } as Combination);
+
+      const timer = setTimeout(() => {
+        setIsTransitioningTrick(false);
+        setDisplayedActivePlay(null);
+        setTransitionWinnerName(null);
+      }, 2000); // 2000ms (2 seconds)
+
+      return () => clearTimeout(timer);
+    }
+
     // If activePlay is non-null (someone played cards)
     if (activePlay) {
       setIsTransitioningTrick(false);
       setDisplayedActivePlay(activePlay);
       setTransitionWinnerName(null);
-      
-      prevActivePlayRef.current = activePlay;
-      prevLastPlayerPlayedIdRef.current = lastPlayerPlayedId;
     } else {
-      // activePlay is null. Did it transition from non-null to null?
-      if (gameState === 'playing' && prevGameStateRef.current === 'playing' && prevActivePlayRef.current) {
-        setIsTransitioningTrick(true);
-        setDisplayedActivePlay(prevActivePlayRef.current);
-
-        const winningPlayer = players.find(p => p.id === prevLastPlayerPlayedIdRef.current);
-        const winnerName = winningPlayer ? winningPlayer.name : 'Unknown';
-        setTransitionWinnerName(winnerName);
-
-        const timer = setTimeout(() => {
-          setIsTransitioningTrick(false);
-          setDisplayedActivePlay(null);
-          setTransitionWinnerName(null);
-        }, 2000); // 2000ms (2 seconds)
-
-        // Clear refs immediately so subsequent renders during the transition do not trigger this again
-        prevActivePlayRef.current = null;
-        prevLastPlayerPlayedIdRef.current = null;
-
-        return () => clearTimeout(timer);
-      } else if (!isTransitioningTrick) {
+      // activePlay is null. If we are not currently transitioning, clear display
+      if (!isTransitioningTrick) {
         setDisplayedActivePlay(null);
-        prevActivePlayRef.current = null;
-        prevLastPlayerPlayedIdRef.current = null;
       }
     }
 
     prevGameStateRef.current = gameState;
-  }, [activePlay, lastPlayerPlayedId, gameState, players]);
+  }, [activePlay, lastTrick, gameState, players, isTransitioningTrick]);
 
   // Refs to capture freshest hand/selected states without re-binding event listeners
   const localHandRef = useRef<Card[]>(localHand);
@@ -901,7 +911,7 @@ export const GameTable: React.FC<GameTableProps> = ({
               {(() => {
                 if (!displayedActivePlay) return null;
                 const seatedPlayers = getSeatedPlayers();
-                const lastPlayedId = isTransitioningTrick ? prevLastPlayerPlayedIdRef.current : lastPlayerPlayedId;
+                const lastPlayedId = isTransitioningTrick ? (lastTrick ? lastTrick.winnerId : null) : lastPlayerPlayedId;
                 const seatedPlay = seatedPlayers.find(sp => sp.player.id === lastPlayedId);
                 const relativeSeat = seatedPlay ? seatedPlay.seat : 0;
 
@@ -980,7 +990,7 @@ export const GameTable: React.FC<GameTableProps> = ({
               {!isLastPlayMinimized && (
                 <>
                   <div className="last-play-player">
-                    By: <span>{players.find((p) => p.id === (isTransitioningTrick ? prevLastPlayerPlayedIdRef.current : lastPlayerPlayedId))?.name || 'Unknown'}</span>
+                    By: <span>{players.find((p) => p.id === (isTransitioningTrick ? (lastTrick ? lastTrick.winnerId : null) : lastPlayerPlayedId))?.name || 'Unknown'}</span>
                   </div>
                   <div className="last-play-combo">
                     {getComboDescription(displayedActivePlay)}
