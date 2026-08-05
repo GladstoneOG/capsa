@@ -76,6 +76,9 @@ interface ChatMessage {
   text: string;
   timestamp: string;
   system: boolean;
+  type?: 'text' | 'sticker';
+  stickerUrl?: string;
+  isAuto?: boolean;
 }
 
 interface RoomRules {
@@ -308,16 +311,52 @@ export default function App() {
   const [chatInput, setChatInput] = useState<string>('');
   const [isChatOpen, setIsChatOpen] = useState<boolean>(false);
   const [unreadChatCount, setUnreadChatCount] = useState<number>(0);
+  const [stickers, setStickers] = useState<string[]>([]);
+  const [isStickerPickerOpen, setIsStickerPickerOpen] = useState<boolean>(false);
   const [socketId, setSocketId] = useState<string>('');
   const [isConnected, setIsConnected] = useState<boolean>(true);
   const [localPlayerId, setLocalPlayerId] = useState<string>('');
   const isChatOpenRef = useRef<boolean>(false);
   const chatMessagesContainerRef = useRef<HTMLDivElement | null>(null);
+  const chatInputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    // Fetch available stickers from API / stickers folder
+    fetch('/api/stickers')
+      .then(res => res.json())
+      .then(data => {
+        if (Array.isArray(data) && data.length > 0) {
+          setStickers(data);
+        } else {
+          setStickers([
+            '/stickers/cool_sunglasses.svg',
+            '/stickers/thumbs_up.svg',
+            '/stickers/card_bomb.svg',
+            '/stickers/crying_laughing.svg',
+            '/stickers/victory_crown.svg',
+            '/stickers/angry_rage.svg'
+          ]);
+        }
+      })
+      .catch(() => {
+        setStickers([
+          '/stickers/cool_sunglasses.svg',
+          '/stickers/thumbs_up.svg',
+          '/stickers/card_bomb.svg',
+          '/stickers/crying_laughing.svg',
+          '/stickers/victory_crown.svg',
+          '/stickers/angry_rage.svg'
+        ]);
+      });
+  }, []);
 
   useEffect(() => {
     isChatOpenRef.current = isChatOpen;
     if (isChatOpen) {
       setUnreadChatCount(0);
+      setTimeout(() => {
+        chatInputRef.current?.focus();
+      }, 50);
     }
   }, [isChatOpen]);
 
@@ -1602,20 +1641,23 @@ export default function App() {
     }
   }, [isMonopolyAnimating, players, monopolyBoard]);
 
-  const sendChatMessage = (text: string) => {
-    if (!text.trim()) return;
+  const sendChatMessage = (text: string, type: 'text' | 'sticker' = 'text', stickerUrl?: string) => {
+    if (type === 'text' && !text.trim()) return;
     if (isSinglePlayer) {
       const newMsg: ChatMessage = {
         id: `msg_${Math.random().toString(36).substr(2, 9)}`,
         senderName: playerName || 'Player',
         senderId: 'local_user',
         text: text,
+        type: type,
+        stickerUrl: stickerUrl,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         system: false,
+        isAuto: false,
       };
       setChatMessages(prev => [...prev, newMsg]);
     } else {
-      socketRef.current?.emit('send-chat', { roomCode, message: text });
+      socketRef.current?.emit('send-chat', { roomCode, message: text, type, stickerUrl });
     }
   };
 
@@ -1667,6 +1709,7 @@ export default function App() {
           text: text,
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
           system: false,
+          isAuto: true,
         };
         setChatMessages(prev => [...prev, newMsg]);
         if (!isChatOpenRef.current) {
@@ -7420,6 +7463,9 @@ export default function App() {
           roomCode={roomCode}
           isHost={players.find(pl => isSinglePlayer ? pl.id === 'local_user' : pl.id === localPlayerId)?.isHost || false}
           isMobile={isMobileLandscape}
+          chatMessages={chatMessages}
+          onSendChat={sendChatMessage}
+          availableStickers={stickers}
         />
       )}
 
@@ -7600,17 +7646,60 @@ export default function App() {
 
       {screen !== 'menu' && (
         <>
-          {/* Floating Chat Button */}
-          <button
-            className={`floating-chat-btn ${isChatOpen || gameType === 'monopoly' ? 'hidden' : ''}`}
-            onClick={() => setIsChatOpen(true)}
-            title="Open Chat"
-          >
-            💬
-            {unreadChatCount > 0 && (
-              <span className="chat-badge">{unreadChatCount}</span>
-            )}
-          </button>
+          {/* Floating Actions Container (Bottom Right) */}
+          <div className={`floating-actions-container ${isChatOpen || gameType === 'monopoly' ? 'hidden' : ''}`}>
+            {/* Dedicated Floating Sticker Button */}
+            <button
+              className="floating-sticker-btn"
+              onClick={() => setIsStickerPickerOpen(!isStickerPickerOpen)}
+              title="Stickers"
+            >
+              😊
+            </button>
+
+            {/* Floating Chat Button */}
+            <button
+              className="floating-chat-btn"
+              onClick={() => setIsChatOpen(true)}
+              title="Open Chat"
+            >
+              💬
+              {unreadChatCount > 0 && (
+                <span className="chat-badge">{unreadChatCount}</span>
+              )}
+            </button>
+          </div>
+
+          {/* Dedicated Bottom-Right Sticker Pop-Up Window */}
+          {isStickerPickerOpen && (
+            <div className="bottom-right-sticker-popup">
+              <div className="sticker-popup-header">
+                <span>🎭 Stickers Menu</span>
+                <button
+                  type="button"
+                  className="sticker-popup-close"
+                  onClick={() => setIsStickerPickerOpen(false)}
+                >
+                  ✕
+                </button>
+              </div>
+              <div className="sticker-popup-grid">
+                {stickers.map((st, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    className="sticker-popup-item-btn"
+                    onClick={() => {
+                      sendChatMessage('', 'sticker', st);
+                      setIsStickerPickerOpen(false);
+                    }}
+                  >
+                    <img src={st} alt={`Sticker ${idx}`} />
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Chat Sidebar Drawer */}
           <div className={`chat-drawer ${isChatOpen ? 'open' : ''}`}>
@@ -7634,7 +7723,13 @@ export default function App() {
                   <div key={msg.id} className={`chat-message-row ${isMe ? 'me' : 'other'}`}>
                     <div className="chat-message-bubble">
                       <span className="chat-sender">{msg.senderName}</span>
-                      <p className="chat-text">{msg.text}</p>
+                      {msg.type === 'sticker' && msg.stickerUrl ? (
+                        <div className="chat-sticker-container">
+                          <img src={msg.stickerUrl} alt="Sticker" className="chat-drawer-sticker" />
+                        </div>
+                      ) : (
+                        <p className="chat-text">{msg.text}</p>
+                      )}
                       <span className="chat-timestamp">{msg.timestamp}</span>
                     </div>
                   </div>
@@ -7644,6 +7739,7 @@ export default function App() {
 
             <form onSubmit={handleChatSubmit} className="chat-input-form">
               <input
+                ref={chatInputRef}
                 type="text"
                 value={chatInput}
                 onChange={(e) => setChatInput(e.target.value)}

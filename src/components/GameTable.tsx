@@ -41,6 +41,9 @@ interface GameTableProps {
   roomCode?: string;
   isHost: boolean;
   isMobile?: boolean;
+  chatMessages?: any[];
+  onSendChat?: (text: string, type?: 'text' | 'sticker', stickerUrl?: string) => void;
+  availableStickers?: string[];
 }
 
 function triggerConfetti(playerId: string) {
@@ -181,6 +184,9 @@ export const GameTable: React.FC<GameTableProps> = ({
   roomCode,
   isHost,
   isMobile = false,
+  chatMessages,
+  onSendChat,
+  availableStickers,
 }) => {
   const [selectedCardIds, setSelectedCardIds] = useState<string[]>([]);
   const [localHand, setLocalHand] = useState<Card[]>([]);
@@ -189,6 +195,47 @@ export const GameTable: React.FC<GameTableProps> = ({
   const [handKey, setHandKey] = useState<number>(0);
   const [isPrevPlaysMinimized, setIsPrevPlaysMinimized] = useState<boolean>(false);
   const [isLastPlayMinimized, setIsLastPlayMinimized] = useState<boolean>(false);
+
+  // In-Game Chat Bubbles & Sticker Picker state
+  const [activeBubbles, setActiveBubbles] = useState<Record<string, { id: string; text: string; type?: 'text' | 'sticker'; stickerUrl?: string; timestamp: number }>>({});
+  const [showTableStickerPicker, setShowTableStickerPicker] = useState<boolean>(false);
+
+  // Update chat bubbles when a manual message arrives
+  useEffect(() => {
+    if (!chatMessages || chatMessages.length === 0) return;
+    const latest = chatMessages[chatMessages.length - 1];
+    if (!latest || latest.system || latest.isAuto) return;
+
+    setActiveBubbles((prev) => ({
+      ...prev,
+      [latest.senderId]: {
+        id: latest.id,
+        text: latest.text,
+        type: latest.type || 'text',
+        stickerUrl: latest.stickerUrl,
+        timestamp: Date.now(),
+      },
+    }));
+  }, [chatMessages]);
+
+  // Clean up expired chat bubbles after 5 seconds
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const now = Date.now();
+      setActiveBubbles((prev) => {
+        let changed = false;
+        const next = { ...prev };
+        Object.keys(next).forEach((key) => {
+          if (now - next[key].timestamp > 5000) {
+            delete next[key];
+            changed = true;
+          }
+        });
+        return changed ? next : prev;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Drag and drop states & refs
   const [isDragging, setIsDragging] = useState<boolean>(false);
@@ -887,6 +934,61 @@ export const GameTable: React.FC<GameTableProps> = ({
                   id={`avatar-seat-${player.id}`}
                   className={`player-game-avatar ${isPlayerTurn ? 'active-turn' : ''} ${player.passed ? 'has-passed' : ''}`}
                 >
+                  {/* Player Chat Bubble */}
+                  {activeBubbles[player.id] && (
+                    <div className={`chat-bubble-container seat-bubble-${seat} ${activeBubbles[player.id].type === 'sticker' ? 'is-sticker' : 'is-text'}`}>
+                      {seat === 0 ? (
+                        /* Seat 0 (Bottom / Yourself): Bubble to the RIGHT, tail pointing LEFT */
+                        <>
+                          <div className="chat-bubble-tail tail-left" />
+                          <div className="chat-bubble-content">
+                            {activeBubbles[player.id].type === 'sticker' && activeBubbles[player.id].stickerUrl ? (
+                              <img
+                                src={activeBubbles[player.id].stickerUrl}
+                                alt="Sticker"
+                                className="chat-bubble-sticker"
+                              />
+                            ) : (
+                              <span className="chat-bubble-text">{activeBubbles[player.id].text}</span>
+                            )}
+                          </div>
+                        </>
+                      ) : seat === 2 ? (
+                        /* Seat 2 (Top / North): Bubble to the LEFT, tail pointing RIGHT */
+                        <>
+                          <div className="chat-bubble-content">
+                            {activeBubbles[player.id].type === 'sticker' && activeBubbles[player.id].stickerUrl ? (
+                              <img
+                                src={activeBubbles[player.id].stickerUrl}
+                                alt="Sticker"
+                                className="chat-bubble-sticker"
+                              />
+                            ) : (
+                              <span className="chat-bubble-text">{activeBubbles[player.id].text}</span>
+                            )}
+                          </div>
+                          <div className="chat-bubble-tail tail-right" />
+                        </>
+                      ) : (
+                        /* Seat 1 (West) & Seat 3 (East): Bubble ABOVE avatar, tail pointing DOWN */
+                        <>
+                          <div className="chat-bubble-content">
+                            {activeBubbles[player.id].type === 'sticker' && activeBubbles[player.id].stickerUrl ? (
+                              <img
+                                src={activeBubbles[player.id].stickerUrl}
+                                alt="Sticker"
+                                className="chat-bubble-sticker"
+                              />
+                            ) : (
+                              <span className="chat-bubble-text">{activeBubbles[player.id].text}</span>
+                            )}
+                          </div>
+                          <div className="chat-bubble-tail tail-down" />
+                        </>
+                      )}
+                    </div>
+                  )}
+
                   <AvatarSVG config={player.avatar} size={75} />
 
                   {/* Medal Overlay */}

@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="120" height="120">
+  <defs>
+    <linearGradient id="crownGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fbbf24" />
+      <stop offset="100%" stop-color="#d97706" />
+    </linearGradient>
+  </defs>
+  <circle cx="60" cy="60" r="52" fill="#312e81" stroke="#fbbf24" stroke-width="4"/>
+  <!-- Crown -->
+  <polygon points="25,78 30,42 48,60 60,32 72,60 90,42 95,78" fill="url(#crownGrad)" stroke="#78350f" stroke-width="3" stroke-linejoin="round"/>
+  <!-- Crown Jewels -->
+  <circle cx="30" cy="40" r="4" fill="#ef4444"/>
+  <circle cx="60" cy="30" r="5" fill="#3b82f6"/>
+  <circle cx="90" cy="40" r="4" fill="#ef4444"/>
+  <rect x="30" y="74" width="60" height="8" rx="2" fill="#f59e0b" stroke="#78350f" stroke-width="2"/>
+  <text x="60" y="102" font-family="sans-serif" font-weight="900" font-size="14" fill="#fbbf24" text-anchor="middle">WINNER!</text>
+</svg>

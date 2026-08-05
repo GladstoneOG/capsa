@@ -3,6 +3,8 @@ import { createServer } from 'http';
 import { Server } from 'socket.io';
 import cors from 'cors';
 import os from 'os';
+import fs from 'fs';
+import path from 'path';
 import * as capsaEngine from './games/capsa.js';
 import * as unoEngine from './games/uno.js';
 import * as monopolyEngine from './games/monopoly.js';
@@ -30,6 +32,28 @@ const BOT_NAMES = [
 
 const app = express();
 app.use(cors());
+
+// Serve static stickers from project root stickers/ folder
+const stickersPath = path.join(process.cwd(), 'stickers');
+if (!fs.existsSync(stickersPath)) {
+  fs.mkdirSync(stickersPath, { recursive: true });
+}
+app.use('/stickers', express.static(stickersPath));
+
+// API endpoint to list available stickers
+app.get('/api/stickers', (req, res) => {
+  fs.readdir(stickersPath, (err, files) => {
+    if (err) {
+      console.error('Error reading stickers directory:', err);
+      return res.json([]);
+    }
+    const validExtensions = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg'];
+    const stickerUrls = files
+      .filter(file => validExtensions.includes(path.extname(file).toLowerCase()))
+      .map(file => `/stickers/${file}`);
+    res.json(stickerUrls);
+  });
+});
 
 // Health check endpoint
 app.get('/health', (req, res) => {
@@ -775,7 +799,7 @@ io.on('connection', (socket) => {
   });
 
   // 10.5 Send Chat Message
-  socket.on('send-chat', ({ roomCode, message }) => {
+  socket.on('send-chat', ({ roomCode, message, type, stickerUrl }) => {
     const room = rooms.get(roomCode);
     if (!room) return;
 
@@ -786,9 +810,12 @@ io.on('connection', (socket) => {
       id: `msg_${Math.random().toString(36).substr(2, 9)}`,
       senderName: player.name,
       senderId: player.id,
-      text: message,
+      text: message || '',
+      type: type || 'text',
+      stickerUrl: stickerUrl || null,
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       system: false,
+      isAuto: false,
     });
   });
 

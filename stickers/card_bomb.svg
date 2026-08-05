@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="120" height="120">
+  <defs>
+    <radialGradient id="fireBg" cx="50%" cy="80%" r="80%">
+      <stop offset="0%" stop-color="#fef08a" />
+      <stop offset="40%" stop-color="#f97316" />
+      <stop offset="100%" stop-color="#dc2626" />
+    </radialGradient>
+  </defs>
+  <circle cx="60" cy="60" r="52" fill="#1e1b4b" stroke="#f97316" stroke-width="4"/>
+  <!-- Bomb -->
+  <circle cx="55" cy="68" r="30" fill="#0f172a" stroke="#475569" stroke-width="3"/>
+  <rect x="50" y="32" width="10" height="8" rx="2" fill="#64748b"/>
+  <!-- Fuse -->
+  <path d="M 55 32 Q 55 18 72 20" fill="none" stroke="#fbbf24" stroke-width="4" stroke-linecap="round"/>
+  <!-- Spark -->
+  <polygon points="75,12 80,18 87,15 82,22 88,27 80,26 77,33 74,26 67,26 73,21" fill="#ef4444"/>
+  <polygon points="75,15 78,19 83,17 79,22 83,25 78,24 76,29 74,24 70,24 74,20" fill="#fef08a"/>
+  <!-- Boom Text -->
+  <text x="60" y="112" font-family="impact, sans-serif" font-weight="900" font-size="16" fill="#fef08a" text-anchor="middle" stroke="#dc2626" stroke-width="1.5">BOOM!</text>
+</svg>

@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="120" height="120">
+  <defs>
+    <radialGradient id="angryGrad" cx="30%" cy="30%" r="70%">
+      <stop offset="0%" stop-color="#f87171" />
+      <stop offset="100%" stop-color="#dc2626" />
+    </radialGradient>
+  </defs>
+  <circle cx="60" cy="60" r="50" fill="url(#angryGrad)" stroke="#991b1b" stroke-width="4"/>
+  <!-- Eyebrows -->
+  <path d="M 25 40 L 52 52" stroke="#0f172a" stroke-width="6" stroke-linecap="round"/>
+  <path d="M 95 40 L 68 52" stroke="#0f172a" stroke-width="6" stroke-linecap="round"/>
+  <!-- Eyes -->
+  <circle cx="40" cy="56" r="6" fill="#0f172a"/>
+  <circle cx="80" cy="56" r="6" fill="#0f172a"/>
+  <!-- Angry Mouth -->
+  <path d="M 35 85 Q 60 65 85 85 Z" fill="#0f172a"/>
+  <!-- Fumes -->
+  <path d="M 15 25 Q 25 20 20 10" fill="none" stroke="#e2e8f0" stroke-width="3" stroke-linecap="round" opacity="0.7"/>
+  <path d="M 105 25 Q 95 20 100 10" fill="none" stroke="#e2e8f0" stroke-width="3" stroke-linecap="round" opacity="0.7"/>
+</svg>

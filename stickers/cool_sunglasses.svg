@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="120" height="120">
+  <defs>
+    <radialGradient id="grad1" cx="30%" cy="30%" r="70%">
+      <stop offset="0%" stop-color="#fde047" />
+      <stop offset="100%" stop-color="#eab308" />
+    </radialGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="130%" height="130%">
+      <feDropShadow dx="2" dy="4" stdDeviation="3" flood-opacity="0.3"/>
+    </filter>
+  </defs>
+  <circle cx="60" cy="60" r="50" fill="url(#grad1)" stroke="#ca8a04" stroke-width="4" filter="url(#shadow)" />
+  <!-- Glasses -->
+  <path d="M 25 45 Q 40 40 58 45 L 58 55 Q 40 60 25 55 Z" fill="#0f172a" />
+  <path d="M 62 45 Q 80 40 95 45 L 95 55 Q 80 60 62 55 Z" fill="#0f172a" />
+  <line x1="58" y1="48" x2="62" y2="48" stroke="#0f172a" stroke-width="4" />
+  <!-- Glasses reflection -->
+  <line x1="30" y1="47" x2="45" y2="47" stroke="#ffffff" stroke-width="2" opacity="0.6" />
+  <line x1="67" y1="47" x2="82" y2="47" stroke="#ffffff" stroke-width="2" opacity="0.6" />
+  <!-- Cool Smirk -->
+  <path d="M 38 75 Q 60 90 82 72" fill="none" stroke="#0f172a" stroke-width="5" stroke-linecap="round" />
+  <!-- Sparkles -->
+  <polygon points="100,20 103,28 111,31 103,34 100,42 97,34 89,31 97,28" fill="#fbbf24" />
+</svg>
