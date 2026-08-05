@@ -5859,20 +5859,15 @@ export default function App() {
       const allOthersPassed = otherPlayersWithCards.every(player => player.passed);
 
       if (allOthersPassed) {
+        const resetPlayers = updated.map((player) => ({
+          ...player,
+          passed: false,
+          lastPlay: null,
+        }));
+        setPlayers(resetPlayers);
+
+        let nextIdx = idx;
         if (p.cards.length === 0) {
-          // Hibah / Gift: Clear active play and pass lead clockwise to next player with cards
-          setLastTrick({ winnerId: pId, cards: resolvedCards, timestamp: Date.now() });
-          setActivePlay(null);
-          setLastPlayerPlayedId(null);
-
-          const resetPlayers = updated.map((player) => ({
-            ...player,
-            passed: false,
-            lastPlay: null,
-          }));
-          setPlayers(resetPlayers);
-
-          let nextIdx = idx;
           let found = false;
           for (let i = 0; i < resetPlayers.length; i++) {
             nextIdx = (nextIdx + 1) % resetPlayers.length;
@@ -5884,44 +5879,25 @@ export default function App() {
           if (!found) {
             nextIdx = idx;
           }
-
-          setTurnIndex(nextIdx);
-
-          const leadPlayerName = resetPlayers[nextIdx].name;
-          const trickSysMsg: ChatMessage = {
-            id: `sys_${Math.random()}`,
-            senderName: 'System',
-            senderId: 'system',
-            text: `Trick finished. ${p.name} won the trick but has no cards left! Lead goes to ${leadPlayerName} (Hibah).`,
-            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-            system: true,
-          };
-          setChatMessages((prevMsgs) => [...prevMsgs, trickSysMsg]);
-        } else {
-          // Trick won by the current player (who still has cards)
-          setLastTrick({ winnerId: pId, cards: resolvedCards, timestamp: Date.now() });
-          setActivePlay(null);
-          setLastPlayerPlayedId(null);
-
-          const resetPlayers = updated.map((player) => ({
-            ...player,
-            passed: false,
-            lastPlay: null,
-          }));
-          setPlayers(resetPlayers);
-
-          setTurnIndex(idx);
-
-          const trickSysMsg: ChatMessage = {
-            id: `sys_${Math.random()}`,
-            senderName: 'System',
-            senderId: 'system',
-            text: `Trick finished. ${p.name} gets the lead!`,
-            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-            system: true,
-          };
-          setChatMessages((prevMsgs) => [...prevMsgs, trickSysMsg]);
         }
+
+        setLastTrick({ winnerId: resetPlayers[nextIdx]?.id || pId, cards: resolvedCards, timestamp: Date.now() });
+        setActivePlay(null);
+        setLastPlayerPlayedId(null);
+        setTurnIndex(nextIdx);
+
+        const leadPlayerName = resetPlayers[nextIdx].name;
+        const trickSysMsg: ChatMessage = {
+          id: `sys_${Math.random()}`,
+          senderName: 'System',
+          senderId: 'system',
+          text: p.cards.length === 0
+            ? `Trick finished. ${p.name} won the trick but has no cards left! Lead goes to ${leadPlayerName} (Hibah).`
+            : `Trick finished. ${p.name} gets the lead!`,
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          system: true,
+        };
+        setChatMessages((prevMsgs) => [...prevMsgs, trickSysMsg]);
       } else {
         const nextIdx = getNextTurnIndexLocal(currentTurnIndex, updated);
         setTurnIndex(nextIdx);
@@ -5973,14 +5949,7 @@ export default function App() {
       // Trick won by the last played player!
       const lastPlayWinnerIdx = updated.findIndex((player) => player.id === currentLastPlayerPlayedId);
       const lastPlayWinnerName = lastPlayWinnerIdx !== -1 ? updated[lastPlayWinnerIdx].name : 'Unknown';
-
-      setLastTrick({
-        winnerId: currentLastPlayerPlayedId || '',
-        cards: currentActivePlay ? currentActivePlay.cards : [],
-        timestamp: Date.now()
-      });
-      setActivePlay(null);
-      setLastPlayerPlayedId(null);
+      const trickCards = currentActivePlay ? currentActivePlay.cards : [];
 
       const resetPlayers = updated.map((player) => ({
         ...player,
@@ -6006,6 +5975,14 @@ export default function App() {
           nextIdx = currentTurnIndex;
         }
       }
+
+      setLastTrick({
+        winnerId: resetPlayers[nextIdx]?.id || '',
+        cards: trickCards,
+        timestamp: Date.now()
+      });
+      setActivePlay(null);
+      setLastPlayerPlayedId(null);
       setTurnIndex(nextIdx);
 
       const leadPlayerName = resetPlayers[nextIdx].name;

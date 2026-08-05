@@ -245,21 +245,8 @@ export function playCards(room, socket, { cards, comboType }, io) {
   const allOthersPassed = otherPlayersWithCards.every(p => p.passed);
 
   if (allOthersPassed) {
+    let nextIdx = room.turnIndex;
     if (remainingCards.length === 0) {
-      room.lastTrick = {
-        winnerId: currentPlayer.id,
-        cards: cards,
-        timestamp: Date.now()
-      };
-      room.activePlay = null;
-      room.lastPlayerPlayedId = null;
-
-      room.players.forEach(p => {
-        p.passed = false;
-        p.lastPlay = null;
-      });
-
-      let nextIdx = room.turnIndex;
       let found = false;
       for (let i = 0; i < room.players.length; i++) {
         nextIdx = (nextIdx + 1) % room.players.length;
@@ -271,8 +258,23 @@ export function playCards(room, socket, { cards, comboType }, io) {
       if (!found) {
         nextIdx = room.turnIndex;
       }
-      room.turnIndex = nextIdx;
+    }
+    room.turnIndex = nextIdx;
 
+    room.lastTrick = {
+      winnerId: room.players[nextIdx].id,
+      cards: cards,
+      timestamp: Date.now()
+    };
+    room.activePlay = null;
+    room.lastPlayerPlayedId = null;
+
+    room.players.forEach(p => {
+      p.passed = false;
+      p.lastPlay = null;
+    });
+
+    if (remainingCards.length === 0) {
       const leadPlayerName = room.players[nextIdx].name;
       io.to(room.code).emit('chat-message', {
         id: `sys_${Math.random().toString(36).substr(2, 9)}`,
@@ -283,19 +285,6 @@ export function playCards(room, socket, { cards, comboType }, io) {
         system: true,
       });
     } else {
-      room.lastTrick = {
-        winnerId: currentPlayer.id,
-        cards: cards,
-        timestamp: Date.now()
-      };
-      room.activePlay = null;
-      room.lastPlayerPlayedId = null;
-
-      room.players.forEach(p => {
-        p.passed = false;
-        p.lastPlay = null;
-      });
-
       io.to(room.code).emit('chat-message', {
         id: `sys_${Math.random().toString(36).substr(2, 9)}`,
         senderName: 'System',
@@ -344,12 +333,8 @@ export function passTurn(room, socket, io) {
   if (trickOver) {
     const lastPlayer = room.players[lastPlayerIdx];
     const lastPlayerName = lastPlayer ? lastPlayer.name : 'Unknown';
+    const trickCards = room.activePlay ? room.activePlay.cards : [];
 
-    room.lastTrick = {
-      winnerId: room.lastPlayerPlayedId,
-      cards: room.activePlay ? room.activePlay.cards : [],
-      timestamp: Date.now()
-    };
     room.activePlay = null;
     room.lastPlayerPlayedId = null;
 
@@ -375,6 +360,12 @@ export function passTurn(room, socket, io) {
       }
     }
     room.turnIndex = nextIdx;
+
+    room.lastTrick = {
+      winnerId: room.players[nextIdx].id,
+      cards: trickCards,
+      timestamp: Date.now()
+    };
 
     const leadPlayerName = room.players[nextIdx].name;
 

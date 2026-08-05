@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { AvatarSVG } from './AvatarCreator';
 import { getStartingHandName } from '../utils/pokerLogic';
+import { PlayingCard } from './PlayingCard';
 
 interface PokerTableProps {
   socket: any;
@@ -190,13 +191,7 @@ export const PokerTable: React.FC<PokerTableProps> = ({
               const card = gameState.communityCards?.[i];
               if (card) {
                 return (
-                  <div key={card.id || i} className={`poker-card poker-card-anim ${suitColors[card.suit]}`}>
-                    <div className="poker-card-top">
-                      <span className="poker-card-value">{card.rank}</span>
-                      <span className="poker-card-suit-small">{suitSymbols[card.suit]}</span>
-                    </div>
-                    <span className="poker-card-suit-large">{suitSymbols[card.suit]}</span>
-                  </div>
+                  <PlayingCard key={card.id || i} card={card} className="poker-card-anim" />
                 );
               }
               return <div key={i} className="poker-community-card-placeholder" />;
@@ -351,13 +346,7 @@ export const PokerTable: React.FC<PokerTableProps> = ({
           <div className="poker-my-hand-info">
             <div className="poker-my-cards">
               {myPlayer?.cards?.map((card: any, i: number) => (
-                <div key={card?.id || i} className={`poker-card ${suitColors[card?.suit]}`}>
-                  <div className="poker-card-top">
-                    <span className="poker-card-value">{card?.rank}</span>
-                    <span className="poker-card-suit-small">{suitSymbols[card?.suit]}</span>
-                  </div>
-                  <span className="poker-card-suit-large">{suitSymbols[card?.suit]}</span>
-                </div>
+                <PlayingCard key={card?.id || i} card={card} />
               ))}
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>

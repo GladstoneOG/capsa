@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { type Card, type Combination, checkCombination, canBeat, contains3Diamonds, sortCards, getValidPlays, RANK_ORDER, SUIT_ORDER, getStraightHighCard } from '../utils/gameLogic';
 import { AvatarSVG } from './AvatarCreator';
 import { sfx } from '../utils/audio';
+import { PlayingCard } from './PlayingCard';
 
 interface Player {
   id: string;
@@ -151,6 +152,18 @@ function getPlayerSeat(playerIdx: number, localIdx: number, numPlayers: number):
   return 0;
 }
 
+function getAngleForTurn(turnIdx: number, localIdx: number, numPlayers: number): number {
+  if (localIdx === -1) return 180;
+  const seat = getPlayerSeat(turnIdx, localIdx, numPlayers);
+  const seatAngles: Record<number, number> = {
+    0: 180,
+    1: 270,
+    2: 360,
+    3: 450,
+  };
+  return seatAngles[seat] ?? 180;
+}
+
 export const GameTable: React.FC<GameTableProps> = ({
   playerId,
   players,
@@ -260,7 +273,21 @@ export const GameTable: React.FC<GameTableProps> = ({
   }, [selectedCardIds]);
 
   const [animateDeal, setAnimateDeal] = useState<boolean>(false);
-  const [arrowRotation, setArrowRotation] = useState<number>(180);
+  const [isPassQueued, setIsPassQueued] = useState<boolean>(false);
+  const [arrowRotation, setArrowRotation] = useState<number>(() => {
+    const localIdx = players.findIndex((p) => p.id === playerId);
+    return getAngleForTurn(turnIndex, localIdx, players.length);
+  });
+  const isFirstTurnOfRound = useRef<boolean>(true);
+
+  useEffect(() => {
+    isFirstTurnOfRound.current = true;
+  }, [handKey, gameState]);
+
+  // Reset queued pass on new hand or game state change
+  useEffect(() => {
+    setIsPassQueued(false);
+  }, [handKey, gameState]);
 
   // Set animateDeal to true when handKey changes
   useEffect(() => {
@@ -648,22 +675,13 @@ export const GameTable: React.FC<GameTableProps> = ({
   useEffect(() => {
     if (gameState !== 'playing' || localPlayerIndex === -1) return;
     
-    const seat = getPlayerSeat(turnIndex, localPlayerIndex, players.length);
-    
-    // Seat angle mapping:
-    // Seat 0 (South): 180deg
-    // Seat 1 (West): 270deg
-    // Seat 2 (North): 360deg
-    // Seat 3 (East): 450deg
-    const seatAngles: Record<number, number> = {
-      0: 180,
-      1: 270,
-      2: 360,
-      3: 450,
-    };
-    
-    const targetAngle = seatAngles[seat];
-    if (targetAngle === undefined) return;
+    const targetAngle = getAngleForTurn(turnIndex, localPlayerIndex, players.length);
+
+    if (isFirstTurnOfRound.current) {
+      isFirstTurnOfRound.current = false;
+      setArrowRotation(targetAngle);
+      return;
+    }
     
     let diff = (targetAngle - arrowRotation) % 360;
     
@@ -674,7 +692,7 @@ export const GameTable: React.FC<GameTableProps> = ({
     }
     
     setArrowRotation(prev => prev + diff);
-  }, [turnIndex, gameState, players, localPlayerIndex]);
+  }, [turnIndex, gameState, players, localPlayerIndex, handKey]);
 
   // Sort local hand
   const handleSort = (method: 'rank' | 'suit') => {
@@ -733,16 +751,60 @@ export const GameTable: React.FC<GameTableProps> = ({
       setHasActionedThisTurn(true);
       onPlayCards(selectedCards);
       setSelectedCardIds([]);
+      setIsPassQueued(false);
     }
   };
 
-  const handlePassClick = () => {
+  const handlePassClick = useCallback(() => {
     if (isMyTurn && !isFirstPlayOfRound && activePlay && !hasActionedThisTurn) {
       setHasActionedThisTurn(true);
       onPass();
       setSelectedCardIds([]);
+      setIsPassQueued(false);
     }
-  };
+  }, [isMyTurn, isFirstPlayOfRound, activePlay, hasActionedThisTurn, onPass]);
+
+  // Auto-execute queued pass on turn start
+  useEffect(() => {
+    if (isMyTurn && isPassQueued) {
+      if (!isFirstPlayOfRound && activePlay && !hasActionedThisTurn && !isTransitioningTrick) {
+        handlePassClick();
+      }
+      setIsPassQueued(false);
+    }
+  }, [isMyTurn, isPassQueued, isFirstPlayOfRound, activePlay, hasActionedThisTurn, isTransitioningTrick, handlePassClick]);
+
+  // Keyboard shortcut listener (Backspace to Pass / Queue Pass)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Backspace') {
+        const target = e.target as HTMLElement;
+        if (
+          target &&
+          (target.tagName === 'INPUT' ||
+            target.tagName === 'TEXTAREA' ||
+            target.isContentEditable)
+        ) {
+          return;
+        }
+
+        e.preventDefault();
+
+        if (isMyTurn) {
+          if (!isFirstPlayOfRound && activePlay && !hasActionedThisTurn) {
+            handlePassClick();
+          }
+        } else {
+          setIsPassQueued(prev => !prev);
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isMyTurn, isFirstPlayOfRound, activePlay, hasActionedThisTurn, handlePassClick]);
 
   // Map players to seats around the table
   const getSeatedPlayers = () => {
@@ -931,9 +993,9 @@ export const GameTable: React.FC<GameTableProps> = ({
                   const yOffset = cardsCount > 1 ? Math.abs(i - mid) * 2 : 0;
 
                   return (
-                    <div
+                    <PlayingCard
                       key={c.id || i}
-                      className={`playing-card ${suitNames[c.suit]}`}
+                      card={c}
                       style={{
                         cursor: 'default',
                         transform: `translateX(${xOffset}px) translateY(${yOffset}px) rotate(${rotation}deg)`,
@@ -941,13 +1003,7 @@ export const GameTable: React.FC<GameTableProps> = ({
                         '--throw-x': throwOffset.x,
                         '--throw-y': throwOffset.y,
                       } as React.CSSProperties}
-                    >
-                      <div className="card-top-left">
-                        <span className="card-value">{c.rank}</span>
-                        <span className="card-suit-small">{suitSymbols[c.suit]}</span>
-                      </div>
-                      <div className="card-suit-large">{suitSymbols[c.suit]}</div>
-                    </div>
+                    />
                   );
                 });
               })()}
@@ -1042,15 +1098,13 @@ export const GameTable: React.FC<GameTableProps> = ({
                     animationDelay: `${index * 30}ms`
                   }}
                 >
-                  <div
-                    className={`playing-card ${suitNames[card.suit]} ${isSelected ? `selected ${isMyTurn ? (canPlaySelected ? 'playable' : 'unplayable') : 'not-turn'}` : ''} ${!isMyTurn ? 'unselectable' : ''}`}
-                  >
-                    <div className="card-top-left">
-                      <span className="card-value">{card.rank}</span>
-                      <span className="card-suit-small">{suitSymbols[card.suit]}</span>
-                    </div>
-                    <div className="card-suit-large">{suitSymbols[card.suit]}</div>
-                  </div>
+                  <PlayingCard
+                    card={card}
+                    isSelected={isSelected}
+                    isMyTurn={isMyTurn}
+                    canPlaySelected={canPlaySelected}
+                    isCardDragging={isCardDragging}
+                  />
                 </div>
               );
             })}
@@ -1083,8 +1137,12 @@ export const GameTable: React.FC<GameTableProps> = ({
                 <>
                   Selected ({selectedCards.length}): <span>{validationMessage}</span>
                 </>
+              ) : isMyTurn ? (
+                "Your turn! Select cards to play."
+              ) : isPassQueued ? (
+                <span style={{ color: '#fbbf24', fontWeight: 'bold' }}>⏱️ Auto-Pass queued for your turn (Backspace to cancel)</span>
               ) : (
-                isMyTurn ? "Your turn! Select cards to play." : "Waiting for other players..."
+                "Waiting for other players..."
               )}
             </div>
           </div>
@@ -1103,14 +1161,29 @@ export const GameTable: React.FC<GameTableProps> = ({
             >
               Play Hand
             </button>
-            <button
-              className="btn-danger"
-              style={{ minWidth: '120px' }}
-              disabled={!isMyTurn || isFirstPlayOfRound || !activePlay || hasActionedThisTurn}
-              onClick={handlePassClick}
-            >
-              Pass
-            </button>
+            <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+              <button
+                className="btn-danger"
+                style={{ minWidth: '120px' }}
+                disabled={!isMyTurn || isFirstPlayOfRound || !activePlay || hasActionedThisTurn}
+                onClick={handlePassClick}
+              >
+                Pass
+              </button>
+              <button
+                className={`btn-utility btn-queue-pass ${isPassQueued ? 'queued-active' : ''}`}
+                style={{
+                  padding: '0.55rem 0.8rem',
+                  fontSize: '0.8rem',
+                  fontWeight: 600,
+                  whiteSpace: 'nowrap',
+                }}
+                onClick={() => setIsPassQueued((prev) => !prev)}
+                title="Queue pass for your turn (Shortcut: Backspace)"
+              >
+                {isPassQueued ? '⏱️ Pass Queued' : '⏱️ Queue Pass'}
+              </button>
+            </div>
           </div>
         )}
       </div>
@@ -1150,6 +1223,13 @@ export const GameTable: React.FC<GameTableProps> = ({
               title="Pass"
             >
               Pass
+            </button>
+            <button
+              className={`mobile-action-btn queue-pass-btn ${isPassQueued ? 'queued-active' : ''}`}
+              onClick={() => setIsPassQueued((prev) => !prev)}
+              title="Queue Pass (Backspace)"
+            >
+              {isPassQueued ? '⏱️ ON' : '⏱️ Auto'}
             </button>
           </div>
         </>
